@@ -1,0 +1,186 @@
+package com.kinou.gameassist.engine
+
+import com.kinou.gameassist.data.model.JoystickConfig
+import com.kinou.gameassist.injector.ShizukuTouchInjector
+import java.util.Random
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
+
+class MovementProcessor(
+    private val injector: ShizukuTouchInjector,
+    var config: JoystickConfig = JoystickConfig()
+) {
+    companion object {
+        const val POINTER_JOYSTICK = 0
+        const val BASE_HALF_CYCLE_MS = 180L
+        const val BASE_AMPLITUDE_X = 0.75f
+    }
+
+    private var isActive = false
+    private var ditherPhase = 0f
+
+    // Organic humanization state
+    private var isJigglingActive = false
+    private var currentDirection = 1 // 1 = Right, -1 = Left
+    private var halfCycleStartTime = 0L
+    private var currentHalfCycleDuration = BASE_HALF_CYCLE_MS
+    private var currentTargetAmplitudeX = BASE_AMPLITUDE_X
+    private var currentTargetDriftY = 0f
+    private var startAmplitudeX = 0f
+    private var startDriftY = 0f
+    private val random = Random()
+
+    fun process(
+        lx: Float,
+        ly: Float,
+        isAimingOrCameraActive: Boolean = false,
+        isFiring: Boolean = false
+    ) {
+        if (!config.enabled) {
+            if (isActive) release()
+            return
+        }
+
+        val screenW = injector.screenWidth
+        val screenH = injector.screenHeight
+
+        val centerX = config.centerX * screenW
+        val centerY = config.centerY * screenH
+        val radiusPx = config.radius * screenH
+
+        val innerDeadzone = config.deadzone
+        val outerDeadzone = config.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
+
+        // 1. Calculate Jiggle Strafe modifier if enabled and firing
+        val isJiggling = config.jiggleStrafe && isFiring
+        var effectiveLx = lx
+        var effectiveLy = ly
+
+        if (isJiggling) {
+            val now = System.currentTimeMillis()
+            val speedFactor = config.jiggleSpeed.coerceIn(0.5f, 2.0f)
+            val baseDuration = (BASE_HALF_CYCLE_MS / speedFactor).toLong()
+
+            if (!isJigglingActive) {
+                // Initialize a new humanized jiggle burst
+                isJigglingActive = true
+                halfCycleStartTime = now
+                currentDirection = if (random.nextBoolean()) 1 else -1
+                startAmplitudeX = 0f
+                startDriftY = 0f
+                computeNextHalfCycle(baseDuration)
+            }
+
+            var elapsed = now - halfCycleStartTime
+            if (elapsed >= currentHalfCycleDuration) {
+                // Step transition to the opposite side
+                halfCycleStartTime = now
+                startAmplitudeX = currentTargetAmplitudeX
+                startDriftY = currentTargetDriftY
+                currentDirection = -currentDirection
+                computeNextHalfCycle(baseDuration)
+                elapsed = 0L
+            }
+
+            // Smooth cosine interpolation between previous point and target point
+            val progress = (elapsed.toFloat() / currentHalfCycleDuration.toFloat()).coerceIn(0f, 1f)
+            val smoothT = 0.5f * (1f - cos(progress * Math.PI.toFloat()))
+
+            val jiggleAmountX = startAmplitudeX + (currentTargetAmplitudeX - startAmplitudeX) * smoothT
+            val jiggleAmountY = startDriftY + (currentTargetDriftY - startDriftY) * smoothT
+
+            if (hypot(lx, ly) <= innerDeadzone) {
+                // Standing still: pure lateral strafe oscillation + subtle human Y-drift
+                effectiveLx = jiggleAmountX
+                effectiveLy = jiggleAmountY
+            } else {
+                // Moving: blend manual stick input with humanized lateral oscillation
+                effectiveLx = (lx + jiggleAmountX * 0.50f).coerceIn(-1f, 1f)
+                effectiveLy = (ly + jiggleAmountY * 0.50f).coerceIn(-1f, 1f)
+            }
+        } else {
+            if (isJigglingActive) {
+                isJigglingActive = false
+                startAmplitudeX = 0f
+                startDriftY = 0f
+            }
+        }
+
+        val mag = hypot(effectiveLx, effectiveLy)
+
+        if (mag > innerDeadzone) {
+            ditherPhase = 0f
+            val normalizedMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
+            val dirX = effectiveLx / mag
+            val dirY = effectiveLy / mag
+
+            // Sprint acceleration factor
+            val sprintFactor = if (mag >= config.sprintThreshold) 1.25f else 1.0f
+            val currentRadius = radiusPx * normalizedMag * sprintFactor
+
+            val targetX = centerX + (dirX * currentRadius)
+            val targetY = centerY + (dirY * currentRadius)
+
+            if (!isActive) {
+                injector.touchDown(POINTER_JOYSTICK, centerX, centerY)
+                isActive = true
+            }
+            injector.touchMove(POINTER_JOYSTICK, targetX, targetY)
+        } else if (config.raaKeepAlive && isAimingOrCameraActive) {
+            // Rotational Aim Assist (RAA) Keep-Alive:
+            // Injects sub-pixel micro-strafe oscillations (3.5% radius) to maintain active in-game tracking bubble
+            ditherPhase += 0.40f
+            val ditherOffset = sin(ditherPhase.toDouble()).toFloat() * (radiusPx * 0.035f)
+            val targetX = centerX + ditherOffset
+            val targetY = centerY
+
+            if (!isActive) {
+                injector.touchDown(POINTER_JOYSTICK, centerX, centerY)
+                isActive = true
+            }
+            injector.touchMove(POINTER_JOYSTICK, targetX, targetY)
+        } else {
+            if (isActive) {
+                release()
+            }
+        }
+    }
+
+    private fun computeNextHalfCycle(baseDuration: Long) {
+        if (config.jiggleHumanize) {
+            val rand = config.jiggleRandomness.coerceIn(0f, 1f)
+            // Duration jitter: +/- 40% of randomness (e.g. at 0.35 randomness -> +/- 14% timing jitter)
+            val durationNoise = (random.nextFloat() * 2f - 1f) * (0.40f * rand)
+            currentHalfCycleDuration = (baseDuration * (1.0f + durationNoise)).toLong().coerceIn(60L, 450L)
+
+            // Amplitude variance: +/- 25% of randomness
+            val ampNoise = (random.nextFloat() * 2f - 1f) * (0.25f * rand)
+            val amplitude = (BASE_AMPLITUDE_X * (1.0f + ampNoise)).coerceIn(0.40f, 0.95f)
+            currentTargetAmplitudeX = currentDirection * amplitude
+
+            // Micro Y-axis drift (subtle thumb tilt): up to +/- 10%
+            currentTargetDriftY = (random.nextFloat() * 2f - 1f) * (0.10f * rand)
+        } else {
+            currentHalfCycleDuration = baseDuration
+            currentTargetAmplitudeX = currentDirection * BASE_AMPLITUDE_X
+            currentTargetDriftY = 0f
+        }
+    }
+
+    fun release() {
+        if (isActive) {
+            val screenW = injector.screenWidth
+            val screenH = injector.screenHeight
+            val centerX = config.centerX * screenW
+            val centerY = config.centerY * screenH
+            injector.touchUp(POINTER_JOYSTICK, centerX, centerY)
+            isActive = false
+            ditherPhase = 0f
+            isJigglingActive = false
+            startAmplitudeX = 0f
+            startDriftY = 0f
+        }
+    }
+}
+
