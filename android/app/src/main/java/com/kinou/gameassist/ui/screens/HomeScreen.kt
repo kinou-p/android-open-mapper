@@ -37,6 +37,8 @@ import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.injector.ShizukuStatus
 import com.kinou.gameassist.service.OverlayService
 import com.kinou.gameassist.ui.theme.*
+import java.io.File
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -81,6 +83,15 @@ fun HomeScreen(
     var updateInfo by remember { mutableStateOf<AppReleaseInfo?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+
+    // In-App Updater Download & Install States
+    var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var downloadedBytes by remember { mutableLongStateOf(0L) }
+    var totalBytes by remember { mutableLongStateOf(0L) }
+    var downloadedApkFile by remember { mutableStateOf<File?>(null) }
+    var downloadError by remember { mutableStateOf<String?>(null) }
+    var downloadJob by remember { mutableStateOf<Job?>(null) }
 
     // Automatic silent check on launch
     LaunchedEffect(Unit) {
@@ -440,8 +451,15 @@ fun HomeScreen(
     // Update Dialog
     if (showUpdateDialog && updateInfo != null) {
         val release = updateInfo!!
+        val hasInstallPerm = AppUpdateManager.canInstallPackages(context)
+        val isApkDownloaded = downloadedApkFile?.exists() == true
+
         AlertDialog(
-            onDismissRequest = { showUpdateDialog = false },
+            onDismissRequest = {
+                if (!isDownloadingUpdate) {
+                    showUpdateDialog = false
+                }
+            },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = NeonCyan)
@@ -450,7 +468,6 @@ fun HomeScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(stringResource(R.string.update_dialog_notes), color = TextSecondary, fontSize = 13.sp)
                     Surface(
                         color = DarkSurface,
                         shape = RoundedCornerShape(8.dp),
@@ -468,25 +485,169 @@ fun HomeScreen(
                             }
                         }
                     }
+
                     Text("v$currentVersion ➔ ${release.tagName}", color = TextMuted, fontSize = 11.sp)
+
+                    // Download Progress Section
+                    if (isDownloadingUpdate) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                            LinearProgressIndicator(
+                                progress = { downloadProgress },
+                                color = NeonCyan,
+                                trackColor = DarkCardBorder,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val pct = (downloadProgress * 100).toInt().coerceIn(0, 100)
+                                Text(
+                                    stringResource(
+                                        R.string.update_dialog_downloading_progress,
+                                        pct,
+                                        AppUpdateManager.formatFileSize(downloadedBytes),
+                                        if (totalBytes > 0) AppUpdateManager.formatFileSize(totalBytes) else "-- MB"
+                                    ),
+                                    color = NeonCyan,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    } else if (isApkDownloaded) {
+                        Surface(
+                            color = if (hasInstallPerm) NeonGreen.copy(alpha = 0.12f) else NeonOrange.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (hasInstallPerm) NeonGreen else NeonOrange),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    if (hasInstallPerm) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = if (hasInstallPerm) NeonGreen else NeonOrange,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    if (hasInstallPerm) stringResource(R.string.update_dialog_ready_install) else stringResource(R.string.update_dialog_permission_needed),
+                                    color = TextPrimary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    } else if (downloadError != null) {
+                        Surface(
+                            color = NeonPink.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.Error, contentDescription = null, tint = NeonPink, modifier = Modifier.size(18.dp))
+                                Text(
+                                    stringResource(R.string.update_download_failed, downloadError!!),
+                                    color = TextPrimary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        AppUpdateManager.openUpdateLink(context, release.downloadUrl)
-                        showUpdateDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(stringResource(R.string.update_dialog_install), color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                if (isDownloadingUpdate) {
+                    // Downloading in progress - no confirm button
+                } else if (isApkDownloaded) {
+                    if (!hasInstallPerm) {
+                        Button(
+                            onClick = {
+                                AppUpdateManager.openInstallPermissionSettings(context)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonOrange)
+                        ) {
+                            Icon(Icons.Default.Security, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.update_dialog_grant_permission), color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    } else {
+                        Button(
+                            onClick = {
+                                val res = AppUpdateManager.installApk(context, downloadedApkFile!!)
+                                if (res.isFailure) {
+                                    Toast.makeText(context, "Erreur install: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.update_dialog_btn_install_now), color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            downloadJob = coroutineScope.launch {
+                                isDownloadingUpdate = true
+                                downloadProgress = 0f
+                                downloadedBytes = 0L
+                                totalBytes = release.apkFileSize
+                                downloadError = null
+
+                                val res = AppUpdateManager.downloadApk(
+                                    context = context,
+                                    downloadUrl = release.downloadUrl,
+                                    targetFileName = release.apkFileName
+                                ) { progress, dBytes, tBytes ->
+                                    downloadProgress = progress
+                                    downloadedBytes = dBytes
+                                    totalBytes = tBytes
+                                }
+                                isDownloadingUpdate = false
+
+                                res.onSuccess { apkFile ->
+                                    downloadedApkFile = apkFile
+                                    if (AppUpdateManager.canInstallPackages(context)) {
+                                        AppUpdateManager.installApk(context, apkFile)
+                                    }
+                                }.onFailure { err ->
+                                    downloadError = err.localizedMessage ?: err.message ?: "Erreur"
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.update_dialog_install), color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showUpdateDialog = false }) {
-                    Text(stringResource(R.string.update_dialog_later), color = TextSecondary)
+                if (isDownloadingUpdate) {
+                    TextButton(onClick = {
+                        downloadJob?.cancel()
+                        isDownloadingUpdate = false
+                    }) {
+                        Text(stringResource(R.string.update_dialog_cancel), color = NeonPink)
+                    }
+                } else {
+                    TextButton(onClick = { showUpdateDialog = false }) {
+                        Text(stringResource(R.string.update_dialog_later), color = TextSecondary)
+                    }
                 }
             },
             containerColor = DarkCard
