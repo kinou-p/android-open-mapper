@@ -48,8 +48,10 @@ class CameraProcessor(
 
         if (mag > innerDeadzone) {
             val normMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
-            val dirX = rx / mag
-            val dirY = ry / mag
+            val rawDirX = rx / mag
+            val rawDirY = ry / mag
+            val dirX = if (config.invertX) -rawDirX else rawDirX
+            val dirY = if (config.invertY) -rawDirY else rawDirY
 
             var curvedMagX: Float
             var curvedMagY: Float
@@ -92,8 +94,9 @@ class CameraProcessor(
             
             // Fine-grained dynamic resolution scaling: ~17.6px per frame at max tilt for 3200px screen
             val baseStep = screenW * 0.0055f
-            val targetDx = dirX * curvedMagX * config.sensitivityX * baseStep
-            val targetDy = dirY * curvedMagY * config.sensitivityY * baseStep
+            val adsFactor = if (config.adsSensitivityEnabled && isAiming) config.adsSensitivityMultiplier.coerceIn(0.05f, 3.0f) else 1.0f
+            val targetDx = dirX * curvedMagX * config.sensitivityX * adsFactor * baseStep
+            val targetDy = dirY * curvedMagY * config.sensitivityY * adsFactor * baseStep
 
             // Exponential moving average (EMA) smoothing
             val alpha = (1.0f - config.smoothing.coerceIn(0f, 0.8f))

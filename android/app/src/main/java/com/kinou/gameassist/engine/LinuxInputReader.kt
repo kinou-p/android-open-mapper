@@ -155,9 +155,9 @@ class LinuxInputReader(
             BinaryInputParser.EV_KEY -> {
                 val btnName = BinaryInputParser.evKeyToButtonName(event.code) ?: return
                 if (event.value == 1L) {
-                    engine.buttonProcessor.onButtonDown(btnName)
+                    engine.onRawButtonDown(btnName)
                 } else if (event.value == 0L) {
-                    engine.buttonProcessor.onButtonUp(btnName)
+                    engine.onRawButtonUp(btnName)
                 }
             }
 
@@ -192,8 +192,8 @@ class LinuxInputReader(
                 val isDown = rawValue > 30L
                 if (isDown != rtActive) {
                     rtActive = isDown
-                    if (rtActive) engine.buttonProcessor.onButtonDown("BUTTON_R2")
-                    else engine.buttonProcessor.onButtonUp("BUTTON_R2")
+                    if (rtActive) engine.onRawButtonDown("BUTTON_R2")
+                    else engine.onRawButtonUp("BUTTON_R2")
                 }
             }
 
@@ -202,8 +202,8 @@ class LinuxInputReader(
                 val isDown = rawValue > 30L
                 if (isDown != ltActive) {
                     ltActive = isDown
-                    if (ltActive) engine.buttonProcessor.onButtonDown("BUTTON_L2")
-                    else engine.buttonProcessor.onButtonUp("BUTTON_L2")
+                    if (ltActive) engine.onRawButtonDown("BUTTON_L2")
+                    else engine.onRawButtonUp("BUTTON_L2")
                 }
             }
 
@@ -214,13 +214,13 @@ class LinuxInputReader(
 
                 if (leftNow != hatLeft) {
                     hatLeft = leftNow
-                    if (hatLeft) engine.buttonProcessor.onButtonDown("DPAD_LEFT")
-                    else engine.buttonProcessor.onButtonUp("DPAD_LEFT")
+                    if (hatLeft) engine.onRawButtonDown("DPAD_LEFT")
+                    else engine.onRawButtonUp("DPAD_LEFT")
                 }
                 if (rightNow != hatRight) {
                     hatRight = rightNow
-                    if (hatRight) engine.buttonProcessor.onButtonDown("DPAD_RIGHT")
-                    else engine.buttonProcessor.onButtonUp("DPAD_RIGHT")
+                    if (hatRight) engine.onRawButtonDown("DPAD_RIGHT")
+                    else engine.onRawButtonUp("DPAD_RIGHT")
                 }
             }
 
@@ -231,13 +231,13 @@ class LinuxInputReader(
 
                 if (upNow != hatUp) {
                     hatUp = upNow
-                    if (hatUp) engine.buttonProcessor.onButtonDown("DPAD_UP")
-                    else engine.buttonProcessor.onButtonUp("DPAD_UP")
+                    if (hatUp) engine.onRawButtonDown("DPAD_UP")
+                    else engine.onRawButtonUp("DPAD_UP")
                 }
                 if (downNow != hatDown) {
                     hatDown = downNow
-                    if (hatDown) engine.buttonProcessor.onButtonDown("DPAD_DOWN")
-                    else engine.buttonProcessor.onButtonUp("DPAD_DOWN")
+                    if (hatDown) engine.onRawButtonDown("DPAD_DOWN")
+                    else engine.onRawButtonUp("DPAD_DOWN")
                 }
             }
         }

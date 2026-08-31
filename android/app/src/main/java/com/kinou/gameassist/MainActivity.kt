@@ -52,6 +52,48 @@ class MainActivity : AppCompatActivity() {
     private val liveRy = mutableFloatStateOf(0f)
     private val pressedButtons = mutableStateListOf<String>()
 
+    // Polling Rate & Latency Tracking States
+    private val livePollingHz = mutableFloatStateOf(0f)
+    private val livePeakHz = mutableFloatStateOf(0f)
+    private val liveLatencyMs = mutableFloatStateOf(0f)
+    private val liveJitterMs = mutableFloatStateOf(0f)
+    private val liveSampleCount = mutableIntStateOf(0)
+    private var lastEventNano: Long = 0L
+    private val recentIntervalsNs = ArrayDeque<Long>()
+
+    private fun recordEventTiming() {
+        val now = System.nanoTime()
+        if (lastEventNano > 0L) {
+            val deltaNs = now - lastEventNano
+            // Filter realistic active input intervals (0.5ms to 300ms)
+            if (deltaNs in 500_000L..300_000_000L) {
+                synchronized(recentIntervalsNs) {
+                    recentIntervalsNs.addLast(deltaNs)
+                    if (recentIntervalsNs.size > 50) recentIntervalsNs.removeFirst()
+
+                    liveSampleCount.intValue++
+                    val avgDeltaNs = recentIntervalsNs.average()
+                    if (avgDeltaNs > 0) {
+                        val hz = (1_000_000_000.0 / avgDeltaNs).toFloat()
+                        livePollingHz.floatValue = hz
+                        if (hz > livePeakHz.floatValue) {
+                            livePeakHz.floatValue = hz
+                        }
+                        liveLatencyMs.floatValue = (avgDeltaNs / 1_000_000.0).toFloat()
+
+                        var varianceSum = 0.0
+                        for (interval in recentIntervalsNs) {
+                            val diff = (interval - avgDeltaNs) / 1_000_000.0
+                            varianceSum += diff * diff
+                        }
+                        liveJitterMs.floatValue = kotlin.math.sqrt(varianceSum / recentIntervalsNs.size).toFloat()
+                    }
+                }
+            }
+        }
+        lastEventNano = now
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LanguageManager.init(this)
@@ -166,6 +208,11 @@ class MainActivity : AppCompatActivity() {
                                 rx = liveRx.floatValue,
                                 ry = liveRy.floatValue,
                                 pressedButtons = pressedButtons.toSet(),
+                                pollingHz = livePollingHz.floatValue,
+                                peakHz = livePeakHz.floatValue,
+                                latencyMs = liveLatencyMs.floatValue,
+                                jitterMs = liveJitterMs.floatValue,
+                                sampleCount = liveSampleCount.intValue,
                                 currentDeadzoneLS = selectedProfile?.joystick?.deadzone ?: 0.08f,
                                 currentDeadzoneRS = selectedProfile?.camera?.deadzone ?: 0.08f,
                                 currentOuterDeadzoneLS = selectedProfile?.joystick?.outerDeadzone ?: 0.95f,
@@ -280,6 +327,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (btnName != null) {
+            recordEventTiming()
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (!pressedButtons.contains(btnName)) pressedButtons.add(btnName)
             } else if (event.action == KeyEvent.ACTION_UP) {
@@ -294,6 +342,8 @@ class MainActivity : AppCompatActivity() {
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
         if ((event.source and InputDevice.SOURCE_JOYSTICK) != 0 ||
             (event.source and InputDevice.SOURCE_GAMEPAD) != 0) {
+
+            recordEventTiming()
 
             liveLx.floatValue = event.getAxisValue(MotionEvent.AXIS_X)
             liveLy.floatValue = event.getAxisValue(MotionEvent.AXIS_Y)

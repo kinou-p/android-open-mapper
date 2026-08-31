@@ -9,6 +9,12 @@ data class GameSettings(
     @SerializedName("haptic_feedback")
     var hapticFeedback: Boolean = true,
 
+    @SerializedName("haptic_device")
+    var hapticDevice: Boolean = true,
+
+    @SerializedName("haptic_controller")
+    var hapticController: Boolean = true,
+
     @SerializedName("haptic_fire")
     var hapticFire: Boolean = true,
 

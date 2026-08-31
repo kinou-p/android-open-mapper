@@ -55,6 +55,18 @@ data class CameraConfig(
     @SerializedName("response_curve")
     var responseCurve: ResponseCurve = ResponseCurve.DYNAMIC_BOOST,
 
+    @SerializedName("ads_sensitivity_multiplier")
+    var adsSensitivityMultiplier: Float = 0.75f,
+
+    @SerializedName("ads_sensitivity_enabled")
+    var adsSensitivityEnabled: Boolean = true,
+
+    @SerializedName("invert_x")
+    var invertX: Boolean = false,
+
+    @SerializedName("invert_y")
+    var invertY: Boolean = false,
+
     @SerializedName("max_step_pixels")
     var maxStepPixels: Float = 55.0f
 )

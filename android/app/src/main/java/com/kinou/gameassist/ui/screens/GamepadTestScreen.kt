@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
+import com.kinou.gameassist.engine.HapticManager
 import com.kinou.gameassist.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -41,7 +42,8 @@ import kotlin.math.max
 enum class TestTab {
     VISUALIZER,
     DRIFT_CALIBRATION,
-    CIRCULARITY
+    CIRCULARITY,
+    POLLING_RATE
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +55,11 @@ fun GamepadTestScreen(
     rx: Float,
     ry: Float,
     pressedButtons: Set<String>,
+    pollingHz: Float = 0f,
+    peakHz: Float = 0f,
+    latencyMs: Float = 0f,
+    jitterMs: Float = 0f,
+    sampleCount: Int = 0,
     currentDeadzoneLS: Float = 0.08f,
     currentDeadzoneRS: Float = 0.08f,
     currentOuterDeadzoneLS: Float = 0.95f,
@@ -61,6 +68,7 @@ fun GamepadTestScreen(
     onApplyOuterDeadzones: (outerLS: Float, outerRS: Float) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
+    val hapticManager = remember { HapticManager(context) }
     var selectedTab by remember { mutableStateOf(TestTab.VISUALIZER) }
 
     // Track the last pressed button for live feedback
@@ -120,10 +128,10 @@ fun GamepadTestScreen(
             maxReachLS = max(maxReachLS, magLS)
             maxReachRS = max(maxReachRS, magRS)
 
-            if (magLS > 0.35f && pointsLS.size < 500) {
+            if (magLS > 0.05f && pointsLS.size < 300) {
                 pointsLS.add(Offset(lx, ly))
             }
-            if (magRS > 0.35f && pointsRS.size < 500) {
+            if (magRS > 0.05f && pointsRS.size < 300) {
                 pointsRS.add(Offset(rx, ry))
             }
 
@@ -172,7 +180,8 @@ fun GamepadTestScreen(
                 listOf(
                     TestTab.VISUALIZER to stringResource(R.string.tab_visualizer),
                     TestTab.DRIFT_CALIBRATION to stringResource(R.string.tab_drift),
-                    TestTab.CIRCULARITY to stringResource(R.string.tab_circularity)
+                    TestTab.CIRCULARITY to stringResource(R.string.tab_circularity),
+                    TestTab.POLLING_RATE to stringResource(R.string.tab_polling_rate)
                 ).forEach { (tab, title) ->
                     val active = selectedTab == tab
                     Button(
@@ -417,6 +426,17 @@ fun GamepadTestScreen(
                             }
                         }
                     }
+                }
+
+                // TAB 4: Polling Rate (Hz) & Input Lag Diagnostic
+                TestTab.POLLING_RATE -> {
+                    PollingRateDiagnosticView(
+                        pollingHz = pollingHz,
+                        peakHz = peakHz,
+                        latencyMs = latencyMs,
+                        jitterMs = jitterMs,
+                        sampleCount = sampleCount
+                    )
                 }
             }
         }
@@ -1110,5 +1130,321 @@ fun StickVisualizer(title: String, x: Float, y: Float, deadzone: Float = 0.08f, 
         }
         val mag = hypot(x.toDouble(), y.toDouble()).toFloat()
         Text("Mag: ${(mag * 100).toInt()}%  (X: ${"%.2f".format(x)}, Y: ${"%.2f".format(y)})", color = TextSecondary, fontSize = 11.sp)
+    }
+}
+
+@Composable
+fun PollingRateDiagnosticView(
+    pollingHz: Float,
+    peakHz: Float,
+    latencyMs: Float,
+    jitterMs: Float,
+    sampleCount: Int
+) {
+    val hzHistory = remember { mutableStateListOf<Float>() }
+
+    LaunchedEffect(pollingHz) {
+        if (pollingHz > 10f) {
+            hzHistory.add(pollingHz)
+            if (hzHistory.size > 80) {
+                hzHistory.removeAt(0)
+            }
+        }
+    }
+
+    val connQualityText = when {
+        pollingHz >= 400f || peakHz >= 450f -> stringResource(R.string.conn_quality_usb)
+        pollingHz >= 200f || peakHz >= 220f -> stringResource(R.string.conn_quality_bt_fast)
+        pollingHz >= 90f || peakHz >= 100f -> stringResource(R.string.conn_quality_bt_std)
+        pollingHz > 0f -> stringResource(R.string.conn_quality_slow)
+        else -> "🕹️ Bougez les joysticks ou appuyez sur des touches..."
+    }
+
+    val connQualityColor = when {
+        pollingHz >= 400f || peakHz >= 450f -> NeonCyan
+        pollingHz >= 200f || peakHz >= 220f -> NeonGreen
+        pollingHz >= 90f || peakHz >= 100f -> Color(0xFFFFAA00)
+        pollingHz > 0f -> NeonPink
+        else -> TextSecondary
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // 1. Header Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkCard),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Bolt, contentDescription = null, tint = NeonCyan)
+                    Text(
+                        stringResource(R.string.polling_test_title),
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        fontSize = 16.sp
+                    )
+                }
+                Text(
+                    stringResource(R.string.polling_test_desc),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+
+                // Connection Quality Pill
+                Surface(
+                    color = connQualityColor.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, connQualityColor.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(connQualityColor)
+                        )
+                        Text(
+                            connQualityText,
+                            color = connQualityColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        // 2. Metrics 2x2 Grid Cards
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Polling Rate Card
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(stringResource(R.string.polling_live_rate), color = TextSecondary, fontSize = 11.sp)
+                    Text(
+                        "${pollingHz.toInt()} Hz",
+                        color = NeonCyan,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        "${(pollingHz / 1000f * 100f).coerceIn(0f, 100f).toInt()}% de 1000Hz",
+                        color = TextSecondary.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // Peak Frequency Card
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.4f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(stringResource(R.string.polling_peak_rate), color = TextSecondary, fontSize = 11.sp)
+                    Text(
+                        "${peakHz.toInt()} Hz",
+                        color = NeonPink,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        "Max enregistré",
+                        color = TextSecondary.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Latency Card
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(stringResource(R.string.polling_latency), color = TextSecondary, fontSize = 11.sp)
+                    val latText = if (latencyMs > 0f) "%.1f ms".format(latencyMs) else "-- ms"
+                    Text(
+                        latText,
+                        color = TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Intervalle moyen",
+                        color = TextSecondary.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+
+            // Jitter / Stability Card
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = DarkCard),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(stringResource(R.string.polling_jitter), color = TextSecondary, fontSize = 11.sp)
+                    val jitText = if (jitterMs > 0f) "±%.2f ms".format(jitterMs) else "±0.00 ms"
+                    Text(
+                        jitText,
+                        color = TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Écart-type deltas",
+                        color = TextSecondary.copy(alpha = 0.7f),
+                        fontSize = 10.sp
+                    )
+                }
+            }
+        }
+
+        // 3. Real-Time Oscilloscope Waveform Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = DarkCard),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("📊 Flux de Fréquence en Direct", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Paquets : $sampleCount", color = TextSecondary, fontSize = 11.sp)
+                }
+
+                Surface(
+                    color = DarkBackground,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                ) {
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(12.dp)
+                    ) {
+                        val w = size.width
+                        val h = size.height
+                        val maxDisplayHz = 600f
+
+                        // Draw Grid Lines (125Hz, 250Hz, 500Hz)
+                        val gridLevels = listOf(125f, 250f, 500f)
+                        for (lvl in gridLevels) {
+                            val y = h - (lvl / maxDisplayHz * h)
+                            drawLine(
+                                color = Color(0x22FFFFFF),
+                                start = Offset(0f, y),
+                                end = Offset(w, y),
+                                strokeWidth = 1f
+                            )
+                        }
+
+                        // Draw Waveform from hzHistory
+                        if (hzHistory.size >= 2) {
+                            val path = Path()
+                            val fillPath = Path()
+                            fillPath.moveTo(0f, h)
+
+                            val stepX = w / (hzHistory.size - 1).toFloat()
+                            for (i in hzHistory.indices) {
+                                val currentHz = hzHistory[i].coerceIn(0f, maxDisplayHz)
+                                val x = i * stepX
+                                val y = h - (currentHz / maxDisplayHz * h)
+
+                                if (i == 0) {
+                                    path.moveTo(x, y)
+                                    fillPath.lineTo(x, y)
+                                } else {
+                                    path.lineTo(x, y)
+                                    fillPath.lineTo(x, y)
+                                }
+                            }
+
+                            fillPath.lineTo(w, h)
+                            fillPath.close()
+
+                            // Gradient Fill
+                            drawPath(
+                                path = fillPath,
+                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                                    colors = listOf(NeonCyan.copy(alpha = 0.35f), NeonCyan.copy(alpha = 0.02f))
+                                )
+                            )
+
+                            // Waveform Stroke Line
+                            drawPath(
+                                path = path,
+                                color = NeonCyan,
+                                style = Stroke(width = 2.5f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("0 Hz", fontSize = 10.sp, color = TextSecondary)
+                    Text("125 Hz (BT Standard)", fontSize = 10.sp, color = TextSecondary)
+                    Text("250 Hz (BT Pro)", fontSize = 10.sp, color = TextSecondary)
+                    Text("500 Hz (USB)", fontSize = 10.sp, color = TextSecondary)
+                }
+            }
+        }
     }
 }

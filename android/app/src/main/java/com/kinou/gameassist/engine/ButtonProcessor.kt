@@ -45,17 +45,21 @@ class ButtonProcessor(
         for (btn in matchedButtons) {
             // Trigger haptic feedback for Fire and Reload actions
             if (settings.hapticFeedback) {
-                val isFire = btn.id.contains("fire", ignoreCase = true) ||
-                             btn.label.contains("tir", ignoreCase = true) ||
-                             btn.gamepadButton.equals("BUTTON_R2", ignoreCase = true)
-                val isReload = btn.id.contains("reload", ignoreCase = true) ||
-                               btn.label.contains("recharg", ignoreCase = true) ||
-                               btn.gamepadButton.equals("BUTTON_X", ignoreCase = true)
+                val isFire = isFireButton(btn)
+                val isReload = isReloadButton(btn)
 
                 if (isFire && settings.hapticFire) {
-                    hapticManager?.playFireHaptic(settings.hapticIntensity)
+                    hapticManager?.playFireHaptic(
+                        intensity = settings.hapticIntensity,
+                        targetDevice = settings.hapticDevice,
+                        targetController = settings.hapticController
+                    )
                 } else if (isReload && settings.hapticReload) {
-                    hapticManager?.playReloadHaptic(settings.hapticIntensity)
+                    hapticManager?.playReloadHaptic(
+                        intensity = settings.hapticIntensity,
+                        targetDevice = settings.hapticDevice,
+                        targetController = settings.hapticController
+                    )
                 }
             }
 
@@ -192,11 +196,26 @@ class ButtonProcessor(
         }
     }
 
+    fun isFireButton(btn: ButtonConfig): Boolean {
+        val fireKeywords = arrayOf("fire", "tir", "shoot", "shot", "dispar", "tiro", "schuss", "fuego", "attak", "attack")
+        val matchId = fireKeywords.any { btn.id.contains(it, ignoreCase = true) }
+        val matchLabel = fireKeywords.any { btn.label.contains(it, ignoreCase = true) }
+        val matchGamepad = btn.gamepadButton.equals("BUTTON_R2", ignoreCase = true) ||
+                           btn.gamepadButton.equals("TRIGGER_R2", ignoreCase = true) ||
+                           btn.gamepadButton.equals("AXIS_GAS", ignoreCase = true) ||
+                           btn.gamepadButton.equals("AXIS_RTRIGGER", ignoreCase = true)
+        return matchId || matchLabel || matchGamepad
+    }
+
+    fun isReloadButton(btn: ButtonConfig): Boolean {
+        val reloadKeywords = arrayOf("reload", "recharg", "recarg", "recarreg", "nachlad", "ricarica", "charger")
+        val matchId = reloadKeywords.any { btn.id.contains(it, ignoreCase = true) }
+        val matchLabel = reloadKeywords.any { btn.label.contains(it, ignoreCase = true) }
+        val matchGamepad = btn.gamepadButton.equals("BUTTON_X", ignoreCase = true) && (matchId || matchLabel)
+        return matchId || matchLabel || matchGamepad
+    }
+
     fun isFireActive(): Boolean {
-        return isButtonActive {
-            it.id.contains("fire", ignoreCase = true) ||
-            it.label.contains("tir", ignoreCase = true) ||
-            it.gamepadButton.equals("BUTTON_R2", ignoreCase = true)
-        }
+        return isButtonActive { isFireButton(it) }
     }
 }

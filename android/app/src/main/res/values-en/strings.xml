@@ -116,11 +116,18 @@
     <string name="btn_mode_label">Mode: %1$s</string>
     <string name="haptic_title">Global Haptic Feedback</string>
     <string name="haptic_desc">Enables vibration pulses on gamepad actions.</string>
+    <string name="haptic_target_phone">📱 Phone Vibration</string>
+    <string name="haptic_target_phone_desc">Vibrate the smartphone\'s internal motor.</string>
+    <string name="haptic_target_controller">🎮 Gamepad Vibration (Rumble)</string>
+    <string name="haptic_target_controller_desc">Send rumble pulses to connected controllers.</string>
     <string name="haptic_fire_title">🔥 Fire Vibration (Recoil)</string>
     <string name="haptic_fire_desc">Crisp recoil impulse on every shot fired.</string>
     <string name="haptic_reload_title">🔄 Reload Vibration</string>
     <string name="haptic_reload_desc">Double mechanical pulse (eject &amp; magazine insert).</string>
     <string name="haptic_intensity_label">Vibration Intensity</string>
+    <string name="test_rumble_title">🎮 Test Rumble &amp; Vibration</string>
+    <string name="test_rumble_desc">Test physical rumble on gamepad and smartphone.</string>
+    <string name="test_rumble_btn">Test Vibration</string>
     <string name="key_picker_title">Assign Button: %1$s</string>
     <string name="key_picker_desc">Select the gamepad button:</string>
 
@@ -185,4 +192,26 @@
     <string name="stop_service">Stop Service</string>
     <string name="gamepad_connected">Gamepad Connected</string>
     <string name="gamepad_disconnected">No gamepad detected</string>
+
+    <!-- New Feature Strings: ADS, Invert, Hot-Switch, Polling -->
+    <string name="ads_multiplier_title">🎯 Separate ADS Sensitivity (LT Scope)</string>
+    <string name="ads_multiplier_desc">Applies dedicated sensitivity multiplier when aiming down sights with LT.</string>
+    <string name="ads_multiplier_label">ADS Sensitivity Multiplier</string>
+    <string name="invert_y_title">↕️ Invert Vertical Axis (Y)</string>
+    <string name="invert_y_desc">Inverts Up / Down camera movements.</string>
+    <string name="invert_x_title">↔️ Invert Horizontal Axis (X)</string>
+    <string name="invert_x_desc">Inverts Left / Right camera movements.</string>
+    <string name="hot_switch_hint">💡 Hot-Switch Shortcut: Hold SELECT + D-Pad Up/Down to switch profiles mid-game!</string>
+    <string name="tab_polling_rate">⚡ Polling &amp; Latency</string>
+    <string name="polling_test_title">⚡ Polling Rate &amp; Latency Analyzer</string>
+    <string name="polling_test_desc">Real-time measurement of controller polling rate (Hz), estimated input lag, and wireless stability.</string>
+    <string name="polling_live_rate">Live Polling Rate</string>
+    <string name="polling_peak_rate">Peak Polling Rate</string>
+    <string name="polling_latency">Estimated Input Lag</string>
+    <string name="polling_jitter">Jitter / Stability</string>
+    <string name="polling_samples">Packets Analyzed</string>
+    <string name="conn_quality_usb">⚡ Ultra-Fast USB (500Hz+)</string>
+    <string name="conn_quality_bt_fast">🟢 Excellent Bluetooth (250Hz)</string>
+    <string name="conn_quality_bt_std">🟡 Standard Bluetooth (125Hz)</string>
+    <string name="conn_quality_slow">🔴 High Latency (&gt;16ms)</string>
 </resources>

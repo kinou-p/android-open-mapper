@@ -75,6 +75,10 @@ class OverlayService : LifecycleService() {
         hapticManager = com.kinou.gameassist.engine.HapticManager(this)
         engine = GamepadEngine(injector, lifecycleScope, hapticManager)
 
+        engine.onHotSwitchProfile = { forward ->
+            cycleProfile(forward)
+        }
+
         updateScreenMetrics()
         createNotificationChannel()
     }
@@ -302,6 +306,49 @@ class OverlayService : LifecycleService() {
         }
         edgeHandleView?.visibility = View.VISIBLE
         inputInterceptorView?.requestFocus()
+    }
+
+    fun cycleProfile(forward: Boolean = true) {
+        val allProfiles = repository.getAllProfiles()
+        if (allProfiles.isEmpty()) return
+        val currentIndex = allProfiles.indexOfFirst { it.id == currentProfile?.id }
+        val nextIndex = if (forward) {
+            if (currentIndex < 0) 0 else (currentIndex + 1) % allProfiles.size
+        } else {
+            if (currentIndex <= 0) allProfiles.size - 1 else currentIndex - 1
+        }
+        val nextProfile = allProfiles[nextIndex]
+        currentProfile = nextProfile
+        engine.setProfile(nextProfile)
+        hapticManager.playProfileSwitchHaptic()
+        showHotSwitchToast(nextProfile.name)
+        updateNotification()
+    }
+
+    private fun showHotSwitchToast(profileName: String) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            android.widget.Toast.makeText(applicationContext, "🎮 Profil actif : $profileName", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun updateNotification() {
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, notificationIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle(getString(R.string.overlay_notif_title))
+            .setContentText(getString(R.string.overlay_notif_text, currentProfile?.name ?: ""))
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
+
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, notification)
     }
 
     override fun onDestroy() {

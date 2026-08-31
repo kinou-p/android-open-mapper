@@ -37,6 +37,36 @@ class GamepadEngine(
     private var hatRight = false
 
     private var loopJob: Job? = null
+    var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
+    private var isSelectHeld = false
+
+    fun onRawButtonDown(btnName: String) {
+        if (btnName == "BUTTON_SELECT" || btnName == "BUTTON_BACK" || btnName == "BUTTON_START") {
+            isSelectHeld = true
+        }
+
+        if (isSelectHeld) {
+            when (btnName) {
+                "DPAD_UP", "DPAD_RIGHT", "BUTTON_R1" -> {
+                    onHotSwitchProfile?.invoke(true)
+                    return
+                }
+                "DPAD_DOWN", "DPAD_LEFT", "BUTTON_L1" -> {
+                    onHotSwitchProfile?.invoke(false)
+                    return
+                }
+            }
+        }
+
+        buttonProcessor.onButtonDown(btnName)
+    }
+
+    fun onRawButtonUp(btnName: String) {
+        if (btnName == "BUTTON_SELECT" || btnName == "BUTTON_BACK" || btnName == "BUTTON_START") {
+            isSelectHeld = false
+        }
+        buttonProcessor.onButtonUp(btnName)
+    }
 
     fun setProfile(profile: GameProfile) {
         currentProfile = profile
@@ -84,12 +114,12 @@ class GamepadEngine(
         when (action) {
             KeyEvent.ACTION_DOWN -> {
                 if (event.repeatCount == 0) {
-                    buttonProcessor.onButtonDown(btnName)
+                    onRawButtonDown(btnName)
                 }
                 return true
             }
             KeyEvent.ACTION_UP -> {
-                buttonProcessor.onButtonUp(btnName)
+                onRawButtonUp(btnName)
                 return true
             }
         }
@@ -125,15 +155,15 @@ class GamepadEngine(
         val ltNow = ltVal > 0.40f
         if (ltNow != ltPressed) {
             ltPressed = ltNow
-            if (ltPressed) buttonProcessor.onButtonDown("BUTTON_L2")
-            else buttonProcessor.onButtonUp("BUTTON_L2")
+            if (ltPressed) onRawButtonDown("BUTTON_L2")
+            else onRawButtonUp("BUTTON_L2")
         }
 
         val rtNow = rtVal > 0.40f
         if (rtNow != rtPressed) {
             rtPressed = rtNow
-            if (rtPressed) buttonProcessor.onButtonDown("BUTTON_R2")
-            else buttonProcessor.onButtonUp("BUTTON_R2")
+            if (rtPressed) onRawButtonDown("BUTTON_R2")
+            else onRawButtonUp("BUTTON_R2")
         }
 
         // 4. Hat D-Pad (AXIS_HAT_X, AXIS_HAT_Y)
@@ -143,25 +173,25 @@ class GamepadEngine(
         val upNow = hatY <= -0.4f
         if (upNow != hatUp) {
             hatUp = upNow
-            if (hatUp) buttonProcessor.onButtonDown("DPAD_UP") else buttonProcessor.onButtonUp("DPAD_UP")
+            if (hatUp) onRawButtonDown("DPAD_UP") else onRawButtonUp("DPAD_UP")
         }
 
         val downNow = hatY >= 0.4f
         if (downNow != hatDown) {
             hatDown = downNow
-            if (hatDown) buttonProcessor.onButtonDown("DPAD_DOWN") else buttonProcessor.onButtonUp("DPAD_DOWN")
+            if (hatDown) onRawButtonDown("DPAD_DOWN") else onRawButtonUp("DPAD_DOWN")
         }
 
         val leftNow = hatX <= -0.4f
         if (leftNow != hatLeft) {
             hatLeft = leftNow
-            if (hatLeft) buttonProcessor.onButtonDown("DPAD_LEFT") else buttonProcessor.onButtonUp("DPAD_LEFT")
+            if (hatLeft) onRawButtonDown("DPAD_LEFT") else onRawButtonUp("DPAD_LEFT")
         }
 
         val rightNow = hatX >= 0.4f
         if (rightNow != hatRight) {
             hatRight = rightNow
-            if (hatRight) buttonProcessor.onButtonDown("DPAD_RIGHT") else buttonProcessor.onButtonUp("DPAD_RIGHT")
+            if (hatRight) onRawButtonDown("DPAD_RIGHT") else onRawButtonUp("DPAD_RIGHT")
         }
 
         return true

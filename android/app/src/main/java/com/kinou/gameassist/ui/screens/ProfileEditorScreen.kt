@@ -254,6 +254,10 @@ fun ProfileCard(
     var flickBoost by remember(profile.id) { mutableFloatStateOf(profile.camera.flickBoost) }
     var flickThreshold by remember(profile.id) { mutableFloatStateOf(profile.camera.flickThreshold) }
     var flickAdsSafety by remember(profile.id) { mutableStateOf(profile.camera.flickAdsSafety) }
+    var adsEnabled by remember(profile.id) { mutableStateOf(profile.camera.adsSensitivityEnabled) }
+    var adsMultiplier by remember(profile.id) { mutableFloatStateOf(profile.camera.adsSensitivityMultiplier) }
+    var invertX by remember(profile.id) { mutableStateOf(profile.camera.invertX) }
+    var invertY by remember(profile.id) { mutableStateOf(profile.camera.invertY) }
     var deadzoneJoy by remember(profile.id) { mutableFloatStateOf(profile.joystick.deadzone) }
     var raaKeepAlive by remember(profile.id) { mutableStateOf(profile.joystick.raaKeepAlive) }
     var jiggleStrafe by remember(profile.id) { mutableStateOf(profile.joystick.jiggleStrafe) }
@@ -264,6 +268,8 @@ fun ProfileCard(
 
     // Haptic Feedback States
     var hapticFeedback by remember(profile.id) { mutableStateOf(profile.settings.hapticFeedback) }
+    var hapticDevice by remember(profile.id) { mutableStateOf(profile.settings.hapticDevice) }
+    var hapticController by remember(profile.id) { mutableStateOf(profile.settings.hapticController) }
     var hapticFire by remember(profile.id) { mutableStateOf(profile.settings.hapticFire) }
     var hapticReload by remember(profile.id) { mutableStateOf(profile.settings.hapticReload) }
     var hapticIntensity by remember(profile.id) { mutableFloatStateOf(profile.settings.hapticIntensity) }
@@ -622,6 +628,148 @@ fun ProfileCard(
                                 onSave()
                             }
                         )
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
+                        // --- Sensibilité ADS Séparée (Visée LT) ---
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        stringResource(R.string.ads_multiplier_title),
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        stringResource(R.string.ads_multiplier_desc),
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Switch(
+                                    checked = adsEnabled,
+                                    onCheckedChange = {
+                                        adsEnabled = it
+                                        profile.camera.adsSensitivityEnabled = it
+                                        onSave()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = DarkBackground,
+                                        checkedTrackColor = NeonCyan,
+                                        uncheckedThumbColor = TextSecondary,
+                                        uncheckedTrackColor = DarkSurface
+                                    )
+                                )
+                            }
+
+                            AnimatedVisibility(visible = adsEnabled) {
+                                SliderSetting(
+                                    label = stringResource(R.string.ads_multiplier_label),
+                                    value = adsMultiplier,
+                                    range = 0.10f..2.00f,
+                                    displayText = "%.2fx".format(adsMultiplier),
+                                    onValueChange = {
+                                        adsMultiplier = it
+                                        profile.camera.adsSensitivityMultiplier = it
+                                        onSave()
+                                    }
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
+                        // --- Inversion des Axes X et Y ---
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        stringResource(R.string.invert_y_title),
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        stringResource(R.string.invert_y_desc),
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Switch(
+                                    checked = invertY,
+                                    onCheckedChange = {
+                                        invertY = it
+                                        profile.camera.invertY = it
+                                        onSave()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = DarkBackground,
+                                        checkedTrackColor = NeonPink,
+                                        uncheckedThumbColor = TextSecondary,
+                                        uncheckedTrackColor = DarkSurface
+                                    )
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        stringResource(R.string.invert_x_title),
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        stringResource(R.string.invert_x_desc),
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Switch(
+                                    checked = invertX,
+                                    onCheckedChange = {
+                                        invertX = it
+                                        profile.camera.invertX = it
+                                        onSave()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = DarkBackground,
+                                        checkedTrackColor = NeonPink,
+                                        uncheckedThumbColor = TextSecondary,
+                                        uncheckedTrackColor = DarkSurface
+                                    )
+                                )
+                            }
+                        }
+
+                        // --- Raccourci Hot-Switch Info Banner ---
+                        Surface(
+                            color = NeonCyan.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.3f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = stringResource(R.string.hot_switch_hint),
+                                color = NeonCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
                     }
                 }
 
@@ -923,6 +1071,61 @@ fun ProfileCard(
 
                         AnimatedVisibility(visible = hapticFeedback) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                // Target 1 : Phone Vibration
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(stringResource(R.string.haptic_target_phone), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                        Text(stringResource(R.string.haptic_target_phone_desc), color = TextSecondary, fontSize = 11.sp)
+                                    }
+                                    Switch(
+                                        checked = hapticDevice,
+                                        onCheckedChange = {
+                                            hapticDevice = it
+                                            profile.settings.hapticDevice = it
+                                            onSave()
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = DarkBackground,
+                                            checkedTrackColor = NeonOrange,
+                                            uncheckedThumbColor = TextSecondary,
+                                            uncheckedTrackColor = DarkSurface
+                                        )
+                                    )
+                                }
+
+                                // Target 2 : Gamepad Rumble
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(stringResource(R.string.haptic_target_controller), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                        Text(stringResource(R.string.haptic_target_controller_desc), color = TextSecondary, fontSize = 11.sp)
+                                    }
+                                    Switch(
+                                        checked = hapticController,
+                                        onCheckedChange = {
+                                            hapticController = it
+                                            profile.settings.hapticController = it
+                                            onSave()
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = DarkBackground,
+                                            checkedTrackColor = NeonOrange,
+                                            uncheckedThumbColor = TextSecondary,
+                                            uncheckedTrackColor = DarkSurface
+                                        )
+                                    )
+                                }
+
+                                HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
+
+                                // Event 1 : Fire
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -934,7 +1137,7 @@ fun ProfileCard(
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         OutlinedButton(
-                                            onClick = { hapticManager.playFireHaptic(hapticIntensity) },
+                                            onClick = { hapticManager.playFireHaptic(hapticIntensity, hapticDevice, hapticController) },
                                             shape = RoundedCornerShape(8.dp),
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                             modifier = Modifier.height(30.dp)
@@ -958,6 +1161,7 @@ fun ProfileCard(
                                     }
                                 }
 
+                                // Event 2 : Reload
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -969,7 +1173,7 @@ fun ProfileCard(
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         OutlinedButton(
-                                            onClick = { hapticManager.playReloadHaptic(hapticIntensity) },
+                                            onClick = { hapticManager.playReloadHaptic(hapticIntensity, hapticDevice, hapticController) },
                                             shape = RoundedCornerShape(8.dp),
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                             modifier = Modifier.height(30.dp)
