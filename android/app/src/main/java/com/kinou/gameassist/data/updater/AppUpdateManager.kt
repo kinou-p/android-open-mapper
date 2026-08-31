@@ -66,21 +66,37 @@ object AppUpdateManager {
             val changelog = json.get("body")?.asString ?: ""
             val htmlUrl = json.get("html_url")?.asString ?: "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases"
 
-            // Search for attached .apk asset
+            // Search for attached .apk asset (prefer version-specific over generic)
             var apkDownloadUrl = ""
             var apkFileName = "OpenMapper-$remoteVersion.apk"
             var apkFileSize = 0L
             val assets = json.getAsJsonArray("assets")
             if (assets != null) {
+                var fallbackUrl = ""
+                var fallbackName = ""
+                var fallbackSize = 0L
                 for (assetElem in assets) {
                     val asset = assetElem.asJsonObject
                     val name = asset.get("name")?.asString ?: ""
                     if (name.endsWith(".apk", ignoreCase = true)) {
-                        apkDownloadUrl = asset.get("browser_download_url")?.asString ?: ""
-                        apkFileName = name
-                        apkFileSize = asset.get("size")?.asLong ?: 0L
-                        break
+                        val downloadUrl = asset.get("browser_download_url")?.asString ?: ""
+                        val size = asset.get("size")?.asLong ?: 0L
+                        if (name.contains(remoteVersion, ignoreCase = true)) {
+                            apkDownloadUrl = downloadUrl
+                            apkFileName = name
+                            apkFileSize = size
+                            break
+                        } else if (fallbackUrl.isEmpty()) {
+                            fallbackUrl = downloadUrl
+                            fallbackName = name
+                            fallbackSize = size
+                        }
                     }
+                }
+                if (apkDownloadUrl.isEmpty() && fallbackUrl.isNotEmpty()) {
+                    apkDownloadUrl = fallbackUrl
+                    apkFileName = fallbackName.ifEmpty { "OpenMapper-$remoteVersion.apk" }
+                    apkFileSize = fallbackSize
                 }
             }
 
@@ -194,6 +210,42 @@ object AppUpdateManager {
             try { inputStream?.close() } catch (_: Exception) {}
             try { outputStream?.close() } catch (_: Exception) {}
             connection?.disconnect()
+        }
+    }
+
+    /**
+     * Checks if a downloaded APK for the specified release already exists in the cache and is complete.
+     */
+    fun getDownloadedApkFile(context: Context, release: AppReleaseInfo): File? {
+        val updateDir = File(context.cacheDir, "updates")
+        if (!updateDir.exists()) return null
+        val targetFile = File(updateDir, release.apkFileName)
+        if (targetFile.exists() && targetFile.length() > 0) {
+            // Verify file size if available from release info
+            if (release.apkFileSize <= 0L || targetFile.length() == release.apkFileSize) {
+                return targetFile
+            }
+        }
+        return null
+    }
+
+    /**
+     * Cleans up old cached APKs from earlier releases so they never conflict with new updates.
+     */
+    fun cleanupOldApks(context: Context, currentTargetFileName: String? = null) {
+        try {
+            val updateDir = File(context.cacheDir, "updates")
+            if (updateDir.exists() && updateDir.isDirectory) {
+                updateDir.listFiles()?.forEach { file ->
+                    if (file.isFile && file.name.endsWith(".apk", ignoreCase = true)) {
+                        if (currentTargetFileName == null || file.name != currentTargetFileName) {
+                            file.delete()
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

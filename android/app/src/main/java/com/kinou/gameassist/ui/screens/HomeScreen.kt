@@ -93,11 +93,13 @@ fun HomeScreen(
     var downloadError by remember { mutableStateOf<String?>(null) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
 
-    // Automatic silent check on launch
+    // Automatic check on launch & sync cached APK state for the exact release
     LaunchedEffect(Unit) {
         val release = AppUpdateManager.checkForUpdate(currentVersion)
         if (release != null && release.isNewer) {
             updateInfo = release
+            AppUpdateManager.cleanupOldApks(context, release.apkFileName)
+            downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
             showUpdateDialog = true
         }
     }
@@ -204,6 +206,8 @@ fun HomeScreen(
                             if (release != null) {
                                 updateInfo = release
                                 if (release.isNewer) {
+                                    AppUpdateManager.cleanupOldApks(context, release.apkFileName)
+                                    downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
                                     showUpdateDialog = true
                                 } else {
                                     Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
@@ -452,7 +456,7 @@ fun HomeScreen(
     if (showUpdateDialog && updateInfo != null) {
         val release = updateInfo!!
         val hasInstallPerm = AppUpdateManager.canInstallPackages(context)
-        val isApkDownloaded = downloadedApkFile?.exists() == true
+        val isApkDownloaded = downloadedApkFile?.exists() == true && downloadedApkFile?.name == release.apkFileName
 
         AlertDialog(
             onDismissRequest = {
