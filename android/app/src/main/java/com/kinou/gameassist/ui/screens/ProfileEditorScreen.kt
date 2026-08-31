@@ -555,7 +555,7 @@ fun ProfileCard(
                             SliderSetting(
                                 label = stringResource(R.string.standard_accel_label),
                                 value = acceleration,
-                                range = 1.0f..2.0f,
+                                range = 1.0f..5.0f,
                                 displayText = "%.2f".format(acceleration),
                                 onValueChange = {
                                     acceleration = it
@@ -570,7 +570,7 @@ fun ProfileCard(
                         SliderSetting(
                             label = stringResource(R.string.sensitivity_x),
                             value = sensX,
-                            range = 0.05f..3.0f,
+                            range = 0.05f..5.0f,
                             displayText = "%.2fx".format(sensX),
                             onValueChange = {
                                 sensX = it
@@ -582,7 +582,7 @@ fun ProfileCard(
                         SliderSetting(
                             label = stringResource(R.string.sensitivity_y),
                             value = sensY,
-                            range = 0.05f..3.0f,
+                            range = 0.05f..5.0f,
                             displayText = "%.2fx".format(sensY),
                             onValueChange = {
                                 sensY = it
