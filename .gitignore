@@ -50,6 +50,7 @@ captures/
 # Keystore files
 *.jks
 *.keystore
+!android/app/keystore/openmapper.keystore
 
 # External native build folder
 .externalNativeBuild/
