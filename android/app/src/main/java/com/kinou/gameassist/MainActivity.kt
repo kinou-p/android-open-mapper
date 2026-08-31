@@ -217,6 +217,8 @@ class MainActivity : AppCompatActivity() {
                                         true
                                     } else false
                                 },
+                                liveRx = liveRx.floatValue,
+                                liveRy = liveRy.floatValue,
                                 onBack = { currentScreen = Screen.HOME }
                             )
 

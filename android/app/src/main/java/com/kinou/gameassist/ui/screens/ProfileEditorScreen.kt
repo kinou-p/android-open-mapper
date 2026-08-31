@@ -48,6 +48,8 @@ fun ProfileEditorScreen(
     onDeleteProfile: (String) -> Unit,
     onDuplicateProfile: (GameProfile) -> Unit,
     onImportProfile: (String) -> Boolean,
+    liveRx: Float = 0f,
+    liveRy: Float = 0f,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -97,6 +99,8 @@ fun ProfileEditorScreen(
                     profile = prof,
                     isSelected = isSelected,
                     canDelete = profiles.size > 1,
+                    liveRx = if (isSelected) liveRx else 0f,
+                    liveRy = if (isSelected) liveRy else 0f,
                     onSelect = {
                         editingProfileId = prof.id
                         onSelectProfile(prof)
@@ -227,6 +231,8 @@ fun ProfileCard(
     profile: GameProfile,
     isSelected: Boolean,
     canDelete: Boolean,
+    liveRx: Float = 0f,
+    liveRy: Float = 0f,
     onSelect: () -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
@@ -486,7 +492,9 @@ fun ProfileCard(
                             curve = responseCurve,
                             acceleration = acceleration,
                             flickBoost = flickBoost,
-                            flickThreshold = flickThreshold
+                            flickThreshold = flickThreshold,
+                            liveRx = liveRx,
+                            liveRy = liveRy
                         )
 
                         val curveDesc = when (responseCurve) {
@@ -1099,128 +1107,253 @@ fun ResponseCurveVisualizer(
     acceleration: Float,
     flickBoost: Float,
     flickThreshold: Float,
+    liveRx: Float = 0f,
+    liveRy: Float = 0f,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        color = DarkBackground,
-        shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
-        modifier = modifier
-            .fillMaxWidth()
-            .height(130.dp)
+    val stickDeflection = kotlin.math.hypot(liveRx, liveRy).coerceIn(0f, 1f)
+    val maxOut = when (curve) {
+        ResponseCurve.DYNAMIC_BOOST -> flickBoost
+        ResponseCurve.STANDARD -> 1.0f
+        else -> 1.0f
+    }
+
+    val liveYVal = when (curve) {
+        ResponseCurve.LINEAR -> stickDeflection
+        ResponseCurve.STANDARD -> stickDeflection.pow(acceleration)
+        ResponseCurve.DYNAMIC -> (0.30f * stickDeflection + 0.70f * stickDeflection.pow(2.2f))
+        ResponseCurve.DYNAMIC_BOOST -> {
+            val thresh = flickThreshold.coerceIn(0.65f, 0.95f)
+            if (stickDeflection <= thresh) {
+                val scale = stickDeflection / thresh
+                (0.25f * scale + 0.75f * scale.pow(2.2f)) * 0.85f
+            } else {
+                val turboT = (stickDeflection - thresh) / (1.0f - thresh)
+                0.85f + (turboT * (flickBoost - 0.85f))
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        androidx.compose.foundation.Canvas(
+        Surface(
+            color = DarkBackground,
+            shape = RoundedCornerShape(12.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .fillMaxWidth()
+                .height(130.dp)
         ) {
-            val w = size.width
-            val h = size.height
+            androidx.compose.foundation.Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+            ) {
+                val w = size.width
+                val h = size.height
 
-            // 1. Grid Lines
-            val gridColor = Color(0x1800F0FF)
-            for (i in 1..3) {
-                val frac = i / 4f
+                // 1. Grid Lines (25%, 50%, 75%)
+                val gridColor = Color(0x1800F0FF)
+                for (i in 1..3) {
+                    val frac = i / 4f
+                    drawLine(
+                        color = gridColor,
+                        start = androidx.compose.ui.geometry.Offset(w * frac, 0f),
+                        end = androidx.compose.ui.geometry.Offset(w * frac, h),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawLine(
+                        color = gridColor,
+                        start = androidx.compose.ui.geometry.Offset(0f, h * frac),
+                        end = androidx.compose.ui.geometry.Offset(w, h * frac),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                }
+
+                // 2. Axes
                 drawLine(
-                    color = gridColor,
-                    start = androidx.compose.ui.geometry.Offset(w * frac, 0f),
-                    end = androidx.compose.ui.geometry.Offset(w * frac, h),
-                    strokeWidth = 1.dp.toPx()
+                    color = Color(0x44FFFFFF),
+                    start = androidx.compose.ui.geometry.Offset(0f, h),
+                    end = androidx.compose.ui.geometry.Offset(w, h),
+                    strokeWidth = 1.5.dp.toPx()
                 )
                 drawLine(
-                    color = gridColor,
-                    start = androidx.compose.ui.geometry.Offset(0f, h * frac),
-                    end = androidx.compose.ui.geometry.Offset(w, h * frac),
-                    strokeWidth = 1.dp.toPx()
+                    color = Color(0x44FFFFFF),
+                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                    end = androidx.compose.ui.geometry.Offset(0f, h),
+                    strokeWidth = 1.5.dp.toPx()
                 )
-            }
 
-            // 2. Axes
-            drawLine(
-                color = Color(0x44FFFFFF),
-                start = androidx.compose.ui.geometry.Offset(0f, h),
-                end = androidx.compose.ui.geometry.Offset(w, h),
-                strokeWidth = 1.5.dp.toPx()
-            )
-            drawLine(
-                color = Color(0x44FFFFFF),
-                start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                end = androidx.compose.ui.geometry.Offset(0f, h),
-                strokeWidth = 1.5.dp.toPx()
-            )
+                // 3. Compute Curve Path
+                val path = androidx.compose.ui.graphics.Path()
+                val fillPath = androidx.compose.ui.graphics.Path()
+                fillPath.moveTo(0f, h)
 
-            // 3. Compute Curve Path
-            val path = androidx.compose.ui.graphics.Path()
-            val fillPath = androidx.compose.ui.graphics.Path()
-            fillPath.moveTo(0f, h)
-
-            val maxOut = when (curve) {
-                ResponseCurve.DYNAMIC_BOOST -> flickBoost
-                ResponseCurve.STANDARD -> 1.0f
-                else -> 1.0f
-            }
-
-            val samples = 60
-            for (i in 0..samples) {
-                val t = i.toFloat() / samples
-                val yVal = when (curve) {
-                    ResponseCurve.LINEAR -> t
-                    ResponseCurve.STANDARD -> t.pow(acceleration)
-                    ResponseCurve.DYNAMIC -> (0.30f * t + 0.70f * t.pow(2.2f))
-                    ResponseCurve.DYNAMIC_BOOST -> {
-                        val thresh = flickThreshold.coerceIn(0.65f, 0.95f)
-                        if (t <= thresh) {
-                            val scale = t / thresh
-                            (0.25f * scale + 0.75f * scale.pow(2.2f)) * 0.85f
-                        } else {
-                            val turboT = (t - thresh) / (1.0f - thresh)
-                            0.85f + (turboT * (flickBoost - 0.85f))
+                val samples = 60
+                for (i in 0..samples) {
+                    val t = i.toFloat() / samples
+                    val yVal = when (curve) {
+                        ResponseCurve.LINEAR -> t
+                        ResponseCurve.STANDARD -> t.pow(acceleration)
+                        ResponseCurve.DYNAMIC -> (0.30f * t + 0.70f * t.pow(2.2f))
+                        ResponseCurve.DYNAMIC_BOOST -> {
+                            val thresh = flickThreshold.coerceIn(0.65f, 0.95f)
+                            if (t <= thresh) {
+                                val scale = t / thresh
+                                (0.25f * scale + 0.75f * scale.pow(2.2f)) * 0.85f
+                            } else {
+                                val turboT = (t - thresh) / (1.0f - thresh)
+                                0.85f + (turboT * (flickBoost - 0.85f))
+                            }
                         }
                     }
+
+                    val px = t * w
+                    val py = h - ((yVal / maxOut).coerceIn(0f, 1f) * h)
+
+                    if (i == 0) {
+                        path.moveTo(px, py)
+                    } else {
+                        path.lineTo(px, py)
+                    }
+                    fillPath.lineTo(px, py)
                 }
 
-                val px = t * w
-                val py = h - ((yVal / maxOut).coerceIn(0f, 1f) * h)
+                fillPath.lineTo(w, h)
+                fillPath.close()
 
-                if (i == 0) {
-                    path.moveTo(px, py)
-                } else {
-                    path.lineTo(px, py)
+                // Draw Gradient Area under Curve
+                drawPath(
+                    path = fillPath,
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(NeonCyan.copy(alpha = 0.30f), NeonCyan.copy(alpha = 0.02f))
+                    )
+                )
+
+                // Draw Curve Line
+                drawPath(
+                    path = path,
+                    color = NeonCyan,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(
+                        width = 2.5.dp.toPx(),
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round
+                    )
+                )
+
+                // 4. Threshold Marker for Dynamic Boost
+                if (curve == ResponseCurve.DYNAMIC_BOOST) {
+                    val threshX = flickThreshold * w
+                    drawLine(
+                        color = NeonPink,
+                        start = androidx.compose.ui.geometry.Offset(threshX, 0f),
+                        end = androidx.compose.ui.geometry.Offset(threshX, h),
+                        strokeWidth = 1.5.dp.toPx(),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
+                    )
                 }
-                fillPath.lineTo(px, py)
+
+                // 5. Live Right Stick Position Marker & Tracer (si manette connectée / active)
+                if (stickDeflection > 0.01f) {
+                    val livePx = stickDeflection * w
+                    val livePy = h - ((liveYVal / maxOut).coerceIn(0f, 1f) * h)
+
+                    // Vertical tracking line
+                    drawLine(
+                        color = NeonPink.copy(alpha = 0.85f),
+                        start = androidx.compose.ui.geometry.Offset(livePx, h),
+                        end = androidx.compose.ui.geometry.Offset(livePx, livePy),
+                        strokeWidth = 2.dp.toPx(),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                    )
+
+                    // Horizontal tracking line to output axis
+                    drawLine(
+                        color = NeonCyan.copy(alpha = 0.45f),
+                        start = androidx.compose.ui.geometry.Offset(0f, livePy),
+                        end = androidx.compose.ui.geometry.Offset(livePx, livePy),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
+                    )
+
+                    // Outer pulse glow
+                    drawCircle(
+                        color = NeonPink.copy(alpha = 0.30f),
+                        radius = 10.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(livePx, livePy)
+                    )
+
+                    // Middle ring
+                    drawCircle(
+                        color = NeonPink,
+                        radius = 5.5.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(livePx, livePy)
+                    )
+
+                    // Inner bright core
+                    drawCircle(
+                        color = Color.White,
+                        radius = 2.5.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(livePx, livePy)
+                    )
+                }
             }
+        }
 
-            fillPath.lineTo(w, h)
-            fillPath.close()
+        // Pourcentages en dessous du graphique (0%, 25%, 50%, 75%, 100%)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("0%", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+            Text("25%", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+            Text("50%", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+            Text("75%", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+            Text("100%", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+        }
 
-            // Draw Gradient Area under Curve
-            drawPath(
-                path = fillPath,
-                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                    colors = listOf(NeonCyan.copy(alpha = 0.30f), NeonCyan.copy(alpha = 0.02f))
-                )
-            )
+        // Live Stick RS Telemetry Badge if stick is moving
+        if (stickDeflection > 0.01f) {
+            val liveInputPercent = (stickDeflection * 100).toInt()
+            val liveOutputPercent = ((liveYVal / maxOut) * 100).toInt()
+            Surface(
+                color = DarkSurface,
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, NeonPink.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(NeonPink)
+                        )
+                        Text(
+                            "🕹️ Position Stick RS : $liveInputPercent%",
+                            fontSize = 11.sp,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
-            // Draw Curve Line
-            drawPath(
-                path = path,
-                color = NeonCyan,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = 2.5.dp.toPx(),
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
-                )
-            )
-
-            // 4. Threshold Marker for Dynamic Boost
-            if (curve == ResponseCurve.DYNAMIC_BOOST) {
-                val threshX = flickThreshold * w
-                drawLine(
-                    color = NeonPink,
-                    start = androidx.compose.ui.geometry.Offset(threshX, 0f),
-                    end = androidx.compose.ui.geometry.Offset(threshX, h),
-                    strokeWidth = 1.5.dp.toPx(),
-                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(8f, 8f), 0f)
-                )
+                    Text(
+                        "Sortie : $liveOutputPercent%",
+                        fontSize = 11.sp,
+                        color = NeonCyan,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
