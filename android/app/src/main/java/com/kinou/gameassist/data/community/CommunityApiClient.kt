@@ -155,7 +155,7 @@ class CommunityApiClient(private val context: Context) {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "OpenMapper-Android/1.0.0")
+                setRequestProperty("User-Agent", "OpenMapper-Android/1.0.1")
             }
 
             val jsonBody = gson.toJson(request)
@@ -178,7 +178,7 @@ class CommunityApiClient(private val context: Context) {
         }
     }
 
-    suspend fun sendTelemetryPing(appVersion: String = "1.0.0") = withContext(Dispatchers.IO) {
+    suspend fun sendTelemetryPing(appVersion: String = "1.0.1") = withContext(Dispatchers.IO) {
         try {
             val url = URL("$BASE_URL/api/telemetry/ping")
             val conn = (url.openConnection() as HttpURLConnection).apply {

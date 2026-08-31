@@ -14,7 +14,7 @@ app.use('*', cors());
 app.get('/', (c) => {
   return c.json({
     name: 'OpenMapper Community API',
-    version: '1.0.0',
+    version: '1.0.1',
     status: 'online',
     endpoints: [
       'GET /api/profiles',
