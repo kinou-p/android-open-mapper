@@ -113,7 +113,20 @@
     <string name="key_mapping_title">Key Mapping</string>
     <string name="btn_tag_fire">🔥 Fire</string>
     <string name="btn_tag_reload">🔄 Reload</string>
+    <string name="btn_tag_ads">🎯 ADS</string>
+    <string name="btn_tag_normal">Normal</string>
     <string name="btn_mode_label">Mode: %1$s</string>
+    <string name="btn_role_label">Role: %1$s</string>
+    <string name="role_picker_title">Action Role: %1$s</string>
+    <string name="role_picker_desc">Select the action role and automated behaviors for this button:</string>
+    <string name="role_normal_title">Normal (Standard Touch)</string>
+    <string name="role_normal_desc">Standard touch action without automated haptic or special assists.</string>
+    <string name="role_fire_title">🔥 Primary Fire</string>
+    <string name="role_fire_desc">Triggers recoil vibration and activates Auto Jiggle Strafe while shooting.</string>
+    <string name="role_reload_title">🔄 Reload Magazine</string>
+    <string name="role_reload_desc">Triggers double-pulse mechanical recoil for magazine reload.</string>
+    <string name="role_ads_title">🎯 ADS Scope Aim</string>
+    <string name="role_ads_desc">Applies dedicated ADS sensitivity multiplier and flick protection.</string>
     <string name="haptic_title">Global Haptic Feedback</string>
     <string name="haptic_desc">Enables vibration pulses on gamepad actions.</string>
     <string name="haptic_target_phone">📱 Phone Vibration</string>
@@ -182,12 +195,14 @@
     <string name="overlay_notif_text">Profile: %1$s • Tap to configure</string>
     <string name="overlay_service_started">Mapping service started</string>
     <string name="overlay_service_stopped">Mapping service stopped</string>
-    <string name="overlay_btn_peek">👁️ Peek</string>
+    <string name="overlay_btn_peek">Peek</string>
     <string name="overlay_btn_opacity">Opacity %1$d%%</string>
     <string name="overlay_btn_assign">🎮 Assign</string>
     <string name="overlay_btn_size_inc">➕ Size</string>
     <string name="overlay_btn_size_dec">➖ Size</string>
     <string name="overlay_btn_nudge">Micro-adjust</string>
+    <string name="overlay_btn_hide_bar">👁️ Hide</string>
+    <string name="overlay_btn_show_bar">▼ Tools</string>
 
     <!-- Legacy / Compat -->
     <string name="shizuku_connected">Shizuku Service Connected</string>

@@ -26,6 +26,7 @@ import com.kinou.gameassist.data.community.*
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.ui.theme.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -66,14 +67,17 @@ fun CommunityScreen(
         "📥 Téléchargés" to "downloads"
     )
 
-    fun loadProfiles() {
+    fun loadProfiles(forceRefresh: Boolean = false) {
         scope.launch {
-            isLoading = true
+            if (profiles.isEmpty() || forceRefresh) {
+                isLoading = true
+            }
             errorMessage = null
             val result = apiClient.fetchProfiles(
                 game = selectedGameFilter,
                 search = searchQuery.ifBlank { null },
-                sort = selectedSort
+                sort = selectedSort,
+                forceRefresh = forceRefresh
             )
             result.onSuccess { response ->
                 profiles = response.profiles
@@ -85,8 +89,12 @@ fun CommunityScreen(
         }
     }
 
-    LaunchedEffect(selectedGameFilter, selectedSort) {
-        loadProfiles()
+    // Debounce search by 400ms and reload immediately on filter / sort change
+    LaunchedEffect(searchQuery, selectedGameFilter, selectedSort) {
+        if (searchQuery.isNotBlank()) {
+            delay(400)
+        }
+        loadProfiles(forceRefresh = false)
     }
 
     Scaffold(
@@ -99,7 +107,7 @@ fun CommunityScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { loadProfiles() }) {
+                    IconButton(onClick = { loadProfiles(forceRefresh = true) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Actualiser", tint = TextPrimary)
                     }
                     Button(
@@ -129,12 +137,11 @@ fun CommunityScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. Search Bar
+            // 1. Search Bar with Debounce
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = {
                     searchQuery = it
-                    loadProfiles()
                 },
                 placeholder = { Text("Rechercher un profil, jeu, créateur...", color = TextSecondary, fontSize = 13.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
@@ -142,7 +149,6 @@ fun CommunityScreen(
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = {
                             searchQuery = ""
-                            loadProfiles()
                         }) {
                             Icon(Icons.Default.Clear, contentDescription = "Effacer", tint = TextSecondary)
                         }
@@ -233,7 +239,7 @@ fun CommunityScreen(
                         Icon(Icons.Default.CloudOff, contentDescription = null, tint = NeonPink, modifier = Modifier.size(36.dp))
                         Text(errorMessage ?: "", color = TextSecondary, fontSize = 13.sp)
                         Button(
-                            onClick = { loadProfiles() },
+                            onClick = { loadProfiles(forceRefresh = true) },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                             shape = RoundedCornerShape(8.dp)
                         ) {
@@ -306,7 +312,7 @@ fun CommunityScreen(
                         res.onSuccess {
                             Toast.makeText(context, "Profil publié sur le Hub Communautaire !", Toast.LENGTH_LONG).show()
                             showPublishDialog = false
-                            loadProfiles()
+                            loadProfiles(forceRefresh = true)
                         }.onFailure { ex ->
                             Toast.makeText(context, "Erreur: ${ex.message}", Toast.LENGTH_LONG).show()
                         }

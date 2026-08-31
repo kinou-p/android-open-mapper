@@ -2,6 +2,7 @@ package com.kinou.gameassist.engine
 
 import com.kinou.gameassist.data.model.ButtonConfig
 import com.kinou.gameassist.data.model.ButtonMode
+import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import kotlinx.coroutines.*
 import java.util.Random
@@ -113,40 +114,6 @@ class ButtonProcessor(
                             }
                         }
                     }
-                    ButtonMode.SLIDE_CANCEL -> {
-                        scope.launch {
-                            val tap1Duration = 38L + (random.nextFloat() * 20f).toLong()
-                            val tap1DriftX = (random.nextFloat() * 2f - 1f) * 2.0f
-                            val tap1DriftY = (random.nextFloat() * 2f - 1f) * 2.0f
-
-                            // 1. Initial slide tap with micro-drift
-                            injector.touchDown(pid, tx, ty)
-                            delay(tap1Duration / 2)
-                            injector.touchMove(pid, tx + tap1DriftX, ty + tap1DriftY)
-                            delay(tap1Duration - (tap1Duration / 2))
-                            injector.touchUp(pid, tx + tap1DriftX, ty + tap1DriftY)
-
-                            // 2. CoD Mobile slide animation trigger window (randomized 120ms - 145ms)
-                            val windowDelay = 120L + (random.nextFloat() * 25f).toLong()
-                            delay(windowDelay)
-
-                            // 3. Second tap with micro-drift
-                            val tap2Duration = 38L + (random.nextFloat() * 20f).toLong()
-                            val tap2DriftX = (random.nextFloat() * 2f - 1f) * 2.0f
-                            val tap2DriftY = (random.nextFloat() * 2f - 1f) * 2.0f
-
-                            injector.touchDown(pid, tx, ty)
-                            delay(tap2Duration / 2)
-                            injector.touchMove(pid, tx + tap2DriftX, ty + tap2DriftY)
-                            delay(tap2Duration - (tap2Duration / 2))
-                            injector.touchUp(pid, tx + tap2DriftX, ty + tap2DriftY)
-
-                            synchronized(lock) {
-                                activePointers.remove(btn.id)
-                                freePointers.add(pid)
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -197,6 +164,9 @@ class ButtonProcessor(
     }
 
     fun isFireButton(btn: ButtonConfig): Boolean {
+        if (btn.role == ButtonRole.FIRE) return true
+        if (btn.role != ButtonRole.NORMAL) return false
+        // Legacy fallback if role wasn't explicitly set
         val fireKeywords = arrayOf("fire", "tir", "shoot", "shot", "dispar", "tiro", "schuss", "fuego", "attak", "attack")
         val matchId = fireKeywords.any { btn.id.contains(it, ignoreCase = true) }
         val matchLabel = fireKeywords.any { btn.label.contains(it, ignoreCase = true) }
@@ -208,6 +178,9 @@ class ButtonProcessor(
     }
 
     fun isReloadButton(btn: ButtonConfig): Boolean {
+        if (btn.role == ButtonRole.RELOAD) return true
+        if (btn.role != ButtonRole.NORMAL) return false
+        // Legacy fallback if role wasn't explicitly set
         val reloadKeywords = arrayOf("reload", "recharg", "recarg", "recarreg", "nachlad", "ricarica", "charger")
         val matchId = reloadKeywords.any { btn.id.contains(it, ignoreCase = true) }
         val matchLabel = reloadKeywords.any { btn.label.contains(it, ignoreCase = true) }
@@ -215,7 +188,25 @@ class ButtonProcessor(
         return matchId || matchLabel || matchGamepad
     }
 
+    fun isAdsButton(btn: ButtonConfig): Boolean {
+        if (btn.role == ButtonRole.ADS) return true
+        if (btn.role != ButtonRole.NORMAL) return false
+        // Legacy fallback if role wasn't explicitly set
+        val adsKeywords = arrayOf("ads", "visee", "visée", "aim", "scope", "mira", "apuntar")
+        val matchId = adsKeywords.any { btn.id.contains(it, ignoreCase = true) }
+        val matchLabel = adsKeywords.any { btn.label.contains(it, ignoreCase = true) }
+        val matchGamepad = btn.gamepadButton.equals("BUTTON_L2", ignoreCase = true) ||
+                           btn.gamepadButton.equals("TRIGGER_L2", ignoreCase = true) ||
+                           btn.gamepadButton.equals("AXIS_BRAKE", ignoreCase = true) ||
+                           btn.gamepadButton.equals("AXIS_LTRIGGER", ignoreCase = true)
+        return matchId || matchLabel || matchGamepad
+    }
+
     fun isFireActive(): Boolean {
         return isButtonActive { isFireButton(it) }
+    }
+
+    fun isAdsActive(): Boolean {
+        return isButtonActive { isAdsButton(it) }
     }
 }

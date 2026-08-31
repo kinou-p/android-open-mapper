@@ -85,7 +85,7 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
 - **🚀 Dynamic Boost & 180° Instant Flick**: Micro-precision center aim combined with fast 180° turns at stick edge + ADS Scope Safety lock.
 - **🧲 RAA Keep-Alive & Organic Jiggle Strafe**: Rotational Aim Assist micro-dithering and humanized anti-detection strafe dodge during fire.
 - **📳 Dynamic Haptic Feedback**: Realistic weapon recoil vibration and mechanical reload pulses with in-app test buttons.
-- **🎮 In-App Key Rebinding**: Easily remap Fire, Reload, and any button directly inside the app with Hold, Tap, or Slide Cancel modes.
+- **🎮 In-App Key Rebinding**: Easily remap Fire, Reload, and any button directly inside the app with Hold or Tap modes.
 - **🪄 Built-in Gamepad Diagnostic**: Real-time stick visualizer, 3-second automatic drift test, and circularity/outer-deadzone calibration.
 - **🔄 In-App Auto-Updater**: Directly detects and downloads new GitHub releases within the app.
 
@@ -107,7 +107,7 @@ flowchart TB
         
         MP["MovementProcessor<br/>(RAA Dither & Jiggle Strafe)"]
         CP["CameraProcessor<br/>(Dual-Pointer Handoff & 180° Flick)"]
-        BP["ButtonProcessor<br/>(Hold / Tap / Slide Cancel)"]
+        BP["ButtonProcessor<br/>(Hold / Tap)"]
     end
 
     subgraph INJECTION ["Shizuku Touch Injection Layer"]

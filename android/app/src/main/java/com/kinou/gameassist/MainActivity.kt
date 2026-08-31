@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         // Anonymous telemetry heartbeat on app launch
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                CommunityApiClient(this@MainActivity).sendTelemetryPing("1.0.1")
+                CommunityApiClient(this@MainActivity).sendTelemetryPing(BuildConfig.VERSION_NAME)
             } catch (_: Exception) {}
         }
 

@@ -38,7 +38,7 @@ Grâce à l'intégration de **Shizuku**, l'application injecte des événements 
   - Intensité réglable et boutons de test interactifs.
 - **Gestionnaire de Touches Intégré dans l'App** :
   - Remappez n'importe quel bouton (`RT`, `LT`, `RB`, `LB`, `A`, `B`, `X`, `Y`, `L3`, `R3`, `D-Pad`...) en 1 clic.
-  - Bascule instantanée de mode d'action : **HOLD** (Maintenu), **TAP** (Pression courte avec micro-drift humain), ou **SLIDE_CANCEL** (Combo glissade CoD).
+  - Bascule instantanée de mode d'action : **HOLD** (Maintenu) ou **TAP** (Pression courte avec micro-drift humain).
 
 ### 📐 4. Diagnostic & Calibration Manette
 - **Visualiseur en temps réel** : Position des sticks et matrice d'état de tous les boutons.
@@ -110,7 +110,7 @@ flowchart TB
         
         MP["MovementProcessor<br/>(RAA Dither & Jiggle Strafe)"]
         CP["CameraProcessor<br/>(Dual-Pointer Handoff & 180° Flick)"]
-        BP["ButtonProcessor<br/>(Hold / Tap / Slide Cancel)"]
+        BP["ButtonProcessor<br/>(Hold / Tap)"]
     end
 
     subgraph INJECTION ["Couche Injection Shizuku"]

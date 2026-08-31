@@ -88,9 +88,10 @@ class GamepadEngine(
         loopJob = scope.launch(Dispatchers.Default) {
             while (isActive && isRunning) {
                 val isFiring = rtPressed || buttonProcessor.isFireActive()
-                val isAimingOrCamera = ltPressed || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > cameraProcessor.config.deadzone)
+                val isAds = ltPressed || buttonProcessor.isAdsActive()
+                val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > cameraProcessor.config.deadzone)
                 movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
-                cameraProcessor.process(rx, ry, ltPressed)
+                cameraProcessor.process(rx, ry, isAds)
                 delay(intervalMs)
             }
         }

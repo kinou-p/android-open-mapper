@@ -167,6 +167,10 @@ class OverlayService : LifecycleService() {
         val rWidth = (16 * density).toInt()
         val rHeight = (100 * density).toInt()
 
+        val prefs = getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
+        val isRight = prefs.getBoolean("edge_handle_is_right", false)
+        val savedY = prefs.getInt("edge_handle_y", 200)
+
         edgeHandleParams = WindowManager.LayoutParams(
             rWidth, rHeight,
             layoutFlag,
@@ -175,9 +179,9 @@ class OverlayService : LifecycleService() {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or (if (isRight) Gravity.END else Gravity.START)
             x = 0
-            y = 200
+            y = savedY
         }
 
         edgeHandleView = EdgeHandleOverlayView(

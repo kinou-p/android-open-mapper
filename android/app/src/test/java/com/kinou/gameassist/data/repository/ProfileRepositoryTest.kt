@@ -32,4 +32,23 @@ class ProfileRepositoryTest {
         )
         assertNull(profile.customScreenshotPath)
     }
+
+    @Test
+    fun testButtonRoleSerialization() {
+        val button = com.kinou.gameassist.data.model.ButtonConfig(
+            id = "btn_fire",
+            label = "Fire Action",
+            gamepadButton = "BUTTON_R2",
+            x = 0.8f,
+            y = 0.7f,
+            role = com.kinou.gameassist.data.model.ButtonRole.FIRE
+        )
+
+        val gson = com.google.gson.Gson()
+        val json = gson.toJson(button)
+        assertTrue(json.contains("\"role\":\"fire\""))
+
+        val deserialized = gson.fromJson(json, com.kinou.gameassist.data.model.ButtonConfig::class.java)
+        assertEquals(com.kinou.gameassist.data.model.ButtonRole.FIRE, deserialized.role)
+    }
 }

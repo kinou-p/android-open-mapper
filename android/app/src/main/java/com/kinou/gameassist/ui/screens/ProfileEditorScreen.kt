@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.model.ButtonConfig
 import com.kinou.gameassist.data.model.ButtonMode
+import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.ResponseCurve
 import com.kinou.gameassist.engine.HapticManager
@@ -62,10 +63,10 @@ fun ProfileEditorScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.profiles_title), fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.btn_back))
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Tune, contentDescription = null, tint = NeonCyan)
+                        Text(stringResource(R.string.profiles_title), fontWeight = FontWeight.Bold)
                     }
                 },
                 actions = {
@@ -80,8 +81,7 @@ fun ProfileEditorScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = DarkBackground,
-                    titleContentColor = TextPrimary,
-                    navigationIconContentColor = TextPrimary
+                    titleContentColor = TextPrimary
                 )
             )
         },
@@ -279,7 +279,9 @@ fun ProfileCard(
 
     // Button Mapping States
     var buttonToEditKey by remember { mutableStateOf<ButtonConfig?>(null) }
+    var buttonToEditRole by remember { mutableStateOf<ButtonConfig?>(null) }
     var showKeyPickerDialog by remember { mutableStateOf(false) }
+    var showRolePickerDialog by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -972,13 +974,15 @@ fun ProfileCard(
                         }
 
                         profile.buttons.forEach { btn ->
-                            val isFire = btn.id.contains("fire", ignoreCase = true) || btn.label.contains("tir", ignoreCase = true) || btn.label.contains("fire", ignoreCase = true)
-                            val isReload = btn.id.contains("reload", ignoreCase = true) || btn.label.contains("recharg", ignoreCase = true)
+                            val isFire = btn.role == ButtonRole.FIRE
+                            val isReload = btn.role == ButtonRole.RELOAD
+                            val isAds = btn.role == ButtonRole.ADS
 
-                            val highlightColor = when {
-                                isFire -> NeonPink
-                                isReload -> NeonOrange
-                                else -> DarkCardBorder
+                            val highlightColor = when (btn.role) {
+                                ButtonRole.FIRE -> NeonPink
+                                ButtonRole.RELOAD -> NeonOrange
+                                ButtonRole.ADS -> NeonGreen
+                                ButtonRole.NORMAL -> DarkCardBorder
                             }
 
                             Surface(
@@ -997,28 +1001,62 @@ fun ProfileCard(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                             Text(btn.label, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                            if (isFire) {
-                                                Text(stringResource(R.string.btn_tag_fire), color = NeonPink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                            } else if (isReload) {
-                                                Text(stringResource(R.string.btn_tag_reload), color = NeonOrange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            when (btn.role) {
+                                                ButtonRole.FIRE -> Text(stringResource(R.string.btn_tag_fire), color = NeonPink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                ButtonRole.RELOAD -> Text(stringResource(R.string.btn_tag_reload), color = NeonOrange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                ButtonRole.ADS -> Text(stringResource(R.string.btn_tag_ads), color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                                ButtonRole.NORMAL -> Unit
                                             }
                                         }
                                         Text(stringResource(R.string.btn_mode_label, btn.mode.name), color = TextSecondary, fontSize = 11.sp)
                                     }
 
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        // Role Selector Pill
+                                        Surface(
+                                            color = when (btn.role) {
+                                                ButtonRole.FIRE -> Color(0x33FF0055)
+                                                ButtonRole.RELOAD -> Color(0x33FFAA00)
+                                                ButtonRole.ADS -> Color(0x3300FF66)
+                                                ButtonRole.NORMAL -> Color(0x22FFFFFF)
+                                            },
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.clickable {
+                                                buttonToEditRole = btn
+                                                showRolePickerDialog = true
+                                            }
+                                        ) {
+                                            val roleLabel = when (btn.role) {
+                                                ButtonRole.FIRE -> stringResource(R.string.btn_tag_fire)
+                                                ButtonRole.RELOAD -> stringResource(R.string.btn_tag_reload)
+                                                ButtonRole.ADS -> stringResource(R.string.btn_tag_ads)
+                                                ButtonRole.NORMAL -> stringResource(R.string.btn_tag_normal)
+                                            }
+                                            Text(
+                                                roleLabel,
+                                                color = when (btn.role) {
+                                                    ButtonRole.FIRE -> NeonPink
+                                                    ButtonRole.RELOAD -> NeonOrange
+                                                    ButtonRole.ADS -> NeonGreen
+                                                    ButtonRole.NORMAL -> TextSecondary
+                                                },
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                                            )
+                                        }
+
+                                        // Mode Toggle (HOLD / TAP)
                                         Surface(
                                             color = when (btn.mode) {
                                                 ButtonMode.HOLD -> Color(0x3300F0FF)
                                                 ButtonMode.TAP -> Color(0x33FFAA00)
-                                                ButtonMode.SLIDE_CANCEL -> Color(0x33FF0055)
                                             },
                                             shape = RoundedCornerShape(6.dp),
                                             modifier = Modifier.clickable {
                                                 btn.mode = when (btn.mode) {
                                                     ButtonMode.HOLD -> ButtonMode.TAP
-                                                    ButtonMode.TAP -> ButtonMode.SLIDE_CANCEL
-                                                    ButtonMode.SLIDE_CANCEL -> ButtonMode.HOLD
+                                                    ButtonMode.TAP -> ButtonMode.HOLD
                                                 }
                                                 onSave()
                                             }
@@ -1028,7 +1066,6 @@ fun ProfileCard(
                                                 color = when (btn.mode) {
                                                     ButtonMode.HOLD -> NeonCyan
                                                     ButtonMode.TAP -> NeonOrange
-                                                    ButtonMode.SLIDE_CANCEL -> NeonPink
                                                 },
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
@@ -1036,13 +1073,19 @@ fun ProfileCard(
                                             )
                                         }
 
+                                        // Gamepad Key Picker Button
                                         Button(
                                             onClick = {
                                                 buttonToEditKey = btn
                                                 showKeyPickerDialog = true
                                             },
                                             colors = ButtonDefaults.buttonColors(
-                                                containerColor = if (isFire) NeonPink else if (isReload) NeonOrange else NeonCyan
+                                                containerColor = when (btn.role) {
+                                                    ButtonRole.FIRE -> NeonPink
+                                                    ButtonRole.RELOAD -> NeonOrange
+                                                    ButtonRole.ADS -> NeonGreen
+                                                    ButtonRole.NORMAL -> NeonCyan
+                                                }
                                             ),
                                             shape = RoundedCornerShape(8.dp),
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
@@ -1331,6 +1374,95 @@ fun ProfileCard(
                 TextButton(onClick = {
                     showKeyPickerDialog = false
                     buttonToEditKey = null
+                }) {
+                    Text(stringResource(R.string.btn_close), color = TextSecondary)
+                }
+            },
+            containerColor = DarkCard
+        )
+    }
+
+    // ==========================================
+    // DIALOG: SÉLECTEUR DE RÔLE DE BOUTON
+    // ==========================================
+    if (showRolePickerDialog && buttonToEditRole != null) {
+        val btn = buttonToEditRole!!
+        AlertDialog(
+            onDismissRequest = {
+                showRolePickerDialog = false
+                buttonToEditRole = null
+            },
+            title = {
+                Text(stringResource(R.string.role_picker_title, btn.label), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(stringResource(R.string.role_picker_desc), color = TextSecondary, fontSize = 12.sp)
+
+                    val roleOptions = listOf(
+                        Triple(ButtonRole.NORMAL, stringResource(R.string.role_normal_title), stringResource(R.string.role_normal_desc)),
+                        Triple(ButtonRole.FIRE, stringResource(R.string.role_fire_title), stringResource(R.string.role_fire_desc)),
+                        Triple(ButtonRole.RELOAD, stringResource(R.string.role_reload_title), stringResource(R.string.role_reload_desc)),
+                        Triple(ButtonRole.ADS, stringResource(R.string.role_ads_title), stringResource(R.string.role_ads_desc))
+                    )
+
+                    roleOptions.forEach { (role, title, desc) ->
+                        val isCurrent = btn.role == role
+                        val roleColor = when (role) {
+                            ButtonRole.FIRE -> NeonPink
+                            ButtonRole.RELOAD -> NeonOrange
+                            ButtonRole.ADS -> NeonGreen
+                            ButtonRole.NORMAL -> NeonCyan
+                        }
+                        Surface(
+                            color = if (isCurrent) roleColor.copy(alpha = 0.15f) else DarkSurface,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isCurrent) roleColor else DarkCardBorder),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    btn.role = role
+                                    onSave()
+                                    showRolePickerDialog = false
+                                    buttonToEditRole = null
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        title,
+                                        color = if (isCurrent) roleColor else TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        desc,
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                if (isCurrent) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = roleColor, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRolePickerDialog = false
+                    buttonToEditRole = null
                 }) {
                     Text(stringResource(R.string.btn_close), color = TextSecondary)
                 }

@@ -8,6 +8,7 @@ import android.content.Context
 import android.graphics.*
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -26,6 +27,8 @@ class EdgeHandleOverlayView(
     private val onStopService: () -> Unit
 ) : View(context) {
 
+    enum class ScreenEdge { LEFT, RIGHT }
+
     private val density = resources.displayMetrics.density
 
     // Dimensions
@@ -39,13 +42,16 @@ class EdgeHandleOverlayView(
     private val btnCornerRadius = 10 * density
 
     // State
+    var currentEdge = ScreenEdge.LEFT
+        private set
     var isMenuOpen = false
         private set
     private var menuProgress = 0f // 0f (collapsed) -> 1f (fully open menu)
     private var pullDistance = 0f
     private var currentAlpha = 0.35f
     private var isInteracting = false
-    private var isDraggingVertically = false
+    private var isDraggingHandle = false
+    private var isSlidingToOpen = false
     private var hasHapticPlayed = false
 
     private enum class MenuButton { HUD, APP, STOP, CLOSE }
@@ -102,8 +108,20 @@ class EdgeHandleOverlayView(
     private var menuAnimator: ValueAnimator? = null
 
     init {
+        val prefs = context.getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
+        val isRight = prefs.getBoolean("edge_handle_is_right", false)
+        currentEdge = if (isRight) ScreenEdge.RIGHT else ScreenEdge.LEFT
+
         isHapticFeedbackEnabled = true
         scheduleDimming(2500)
+    }
+
+    private fun saveEdgePrefs() {
+        context.getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("edge_handle_is_right", currentEdge == ScreenEdge.RIGHT)
+            .putInt("edge_handle_y", params.y)
+            .apply()
     }
 
     private fun scheduleDimming(delayMs: Long) {
@@ -177,6 +195,8 @@ class EdgeHandleOverlayView(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
+        val isRightEdge = currentEdge == ScreenEdge.RIGHT
+
         // Global alpha calculation
         val effectiveAlpha = if (isMenuOpen || menuProgress > 0f) 1.0f else currentAlpha
         val alphaInt = (effectiveAlpha * 255).toInt().coerceIn(0, 255)
@@ -187,13 +207,25 @@ class EdgeHandleOverlayView(
 
         // Draw outer card
         val path = Path()
-        val rect = RectF(0f, 0f, currentDrawerW, currentDrawerH)
-        val radii = floatArrayOf(
-            0f, 0f,                               // Top-Left (docked to edge)
-            cornerRadius, cornerRadius,           // Top-Right
-            cornerRadius, cornerRadius,           // Bottom-Right
-            0f, 0f                                // Bottom-Left (docked to edge)
-        )
+        val cardLeft = if (isRightEdge) w - currentDrawerW else 0f
+        val cardRight = if (isRightEdge) w else currentDrawerW
+        val rect = RectF(cardLeft, 0f, cardRight, currentDrawerH)
+
+        val radii = if (isRightEdge) {
+            floatArrayOf(
+                cornerRadius, cornerRadius,           // Top-Left (rounded inside)
+                0f, 0f,                               // Top-Right (docked to right screen edge)
+                0f, 0f,                               // Bottom-Right (docked to right screen edge)
+                cornerRadius, cornerRadius            // Bottom-Left (rounded inside)
+            )
+        } else {
+            floatArrayOf(
+                0f, 0f,                               // Top-Left (docked to left screen edge)
+                cornerRadius, cornerRadius,           // Top-Right (rounded inside)
+                cornerRadius, cornerRadius,           // Bottom-Right (rounded inside)
+                0f, 0f                                // Bottom-Left (docked to left screen edge)
+            )
+        }
         path.addRoundRect(rect, radii, Path.Direction.CW)
 
         handleBgPaint.alpha = (0xEE * effectiveAlpha).toInt()
@@ -205,9 +237,9 @@ class EdgeHandleOverlayView(
         canvas.drawPath(path, handleStrokePaint)
 
         if (menuProgress < 0.35f) {
-            // Draw resting handle grip bar & arrow
+            // Draw resting handle grip bar
             handleBarIndicatorPaint.alpha = (alphaInt * 0.85f).toInt()
-            val gripX = restingWidth * 0.45f
+            val gripX = if (isRightEdge) w - restingWidth * 0.45f else restingWidth * 0.45f
             val gripH = 22 * density
             val gripW = 3 * density
             val gripRect = RectF(gripX - gripW / 2f, (currentDrawerH - gripH) / 2f, gripX + gripW / 2f, (currentDrawerH + gripH) / 2f)
@@ -220,11 +252,11 @@ class EdgeHandleOverlayView(
         } else {
             // Draw Expanded Menu Content
             val contentAlpha = ((menuProgress - 0.35f) / 0.65f).coerceIn(0f, 1f)
-            drawMenuContent(canvas, currentDrawerW, currentDrawerH, contentAlpha)
+            drawMenuContent(canvas, cardLeft, cardRight, currentDrawerH, contentAlpha)
         }
     }
 
-    private fun drawMenuContent(canvas: Canvas, w: Float, h: Float, alpha: Float) {
+    private fun drawMenuContent(canvas: Canvas, left: Float, right: Float, h: Float, alpha: Float) {
         val a = (alpha * 255).toInt().coerceIn(0, 255)
 
         // 1. Header: Title & Close
@@ -232,18 +264,18 @@ class EdgeHandleOverlayView(
         textPaint.alpha = a
         textPaint.textSize = 13 * density
         textPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("🎮 GAMEASSIST", 14 * density, 24 * density, textPaint)
+        canvas.drawText("🎮 GAMEASSIST", left + 14 * density, 24 * density, textPaint)
 
         // Close button (✖)
         textPaint.color = if (pressedButton == MenuButton.CLOSE) 0xFFFF0055.toInt() else 0xFF888888.toInt()
         textPaint.alpha = a
         textPaint.textSize = 14 * density
         textPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText("✖", w - 18 * density, 24 * density, textPaint)
+        canvas.drawText("✖", right - 18 * density, 24 * density, textPaint)
 
         // 2. Action Buttons
-        val btnLeft = 12 * density
-        val btnRight = w - 12 * density
+        val btnLeft = left + 12 * density
+        val btnRight = right - 12 * density
         val btnHeight = 40 * density
 
         // Button 1: 🎮 Éditeur HUD
@@ -314,12 +346,14 @@ class EdgeHandleOverlayView(
     }
 
     private fun getButtonAt(x: Float, y: Float): MenuButton? {
-        val w = menuWidth.toFloat()
-        val btnLeft = 12 * density
-        val btnRight = w - 12 * density
+        val w = width.toFloat()
+        val left = if (currentEdge == ScreenEdge.RIGHT) w - menuWidth else 0f
+        val right = if (currentEdge == ScreenEdge.RIGHT) w else menuWidth.toFloat()
+        val btnLeft = left + 12 * density
+        val btnRight = right - 12 * density
 
-        // Close button at top right
-        if (x in (w - 36 * density)..w && y in 0f..(34 * density)) {
+        // Close button at top right of menu
+        if (x in (right - 36 * density)..right && y in 0f..(34 * density)) {
             return MenuButton.CLOSE
         }
 
@@ -349,10 +383,16 @@ class EdgeHandleOverlayView(
                         performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         invalidate()
                         return true
-                    } else if (event.x > menuWidth || event.y > menuHeight) {
-                        // Tapped outside menu
-                        closeMenu()
-                        return true
+                    } else {
+                        val isInsideMenu = if (currentEdge == ScreenEdge.RIGHT) {
+                            event.x >= width - menuWidth && event.y <= menuHeight
+                        } else {
+                            event.x <= menuWidth && event.y <= menuHeight
+                        }
+                        if (!isInsideMenu) {
+                            closeMenu()
+                            return true
+                        }
                     }
                     return true
                 }
@@ -377,8 +417,12 @@ class EdgeHandleOverlayView(
                         MenuButton.STOP -> closeMenu { onStopService() }
                         MenuButton.CLOSE -> closeMenu()
                         null -> {
-                            // If tapped outside or swiped back
-                            if (event.x > menuWidth || event.y > menuHeight) {
+                            val isInsideMenu = if (currentEdge == ScreenEdge.RIGHT) {
+                                event.x >= width - menuWidth && event.y <= menuHeight
+                            } else {
+                                event.x <= menuWidth && event.y <= menuHeight
+                            }
+                            if (!isInsideMenu) {
                                 closeMenu()
                             }
                         }
@@ -395,14 +439,15 @@ class EdgeHandleOverlayView(
             return super.onTouchEvent(event)
         }
 
-        // Touch handling when menu is COLLAPSED (Slide gesture / drag)
+        // Touch handling when menu is COLLAPSED (Slide gesture / drag & reposition / edge switch)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 mainHandler.removeCallbacks(dimRunnable)
                 alphaAnimator?.cancel()
                 currentAlpha = 1.0f
                 isInteracting = true
-                isDraggingVertically = false
+                isDraggingHandle = false
+                isSlidingToOpen = false
                 hasHapticPlayed = false
                 pullDistance = 0f
 
@@ -410,7 +455,7 @@ class EdgeHandleOverlayView(
                 initialTouchRawY = event.rawY
                 initialWindowY = params.y
 
-                ensureWindowSize(menuWidth, menuHeight)
+                ensureWindowSize(restingWidth, restingHeight)
                 invalidate()
                 return true
             }
@@ -418,22 +463,44 @@ class EdgeHandleOverlayView(
             MotionEvent.ACTION_MOVE -> {
                 val dxRaw = event.rawX - initialTouchRawX
                 val dyRaw = event.rawY - initialTouchRawY
+                val screenWidth = resources.displayMetrics.widthPixels
+                val screenHeight = resources.displayMetrics.heightPixels
 
-                // Vertical reposition drag vs horizontal slide
-                if (!isDraggingVertically && abs(dyRaw) > 18 * density && abs(dxRaw) < 14 * density) {
-                    isDraggingVertically = true
+                if (!isDraggingHandle && !isSlidingToOpen) {
+                    val isPullingAway = if (currentEdge == ScreenEdge.LEFT) {
+                        dxRaw > 12 * density && dxRaw > abs(dyRaw) * 1.2f
+                    } else {
+                        -dxRaw > 12 * density && -dxRaw > abs(dyRaw) * 1.2f
+                    }
+
+                    if (isPullingAway) {
+                        isSlidingToOpen = true
+                        ensureWindowSize(menuWidth, menuHeight)
+                    } else if (abs(dyRaw) > 10 * density || abs(dxRaw) > 10 * density) {
+                        isDraggingHandle = true
+                        ensureWindowSize(restingWidth, restingHeight)
+                    }
                 }
 
-                if (isDraggingVertically) {
-                    val screenHeight = resources.displayMetrics.heightPixels
-                    val newY = (initialWindowY + dyRaw.toInt()).coerceIn(0, max(0, screenHeight - restingHeight))
+                if (isDraggingHandle) {
+                    // 1. Check if rawX crossed screen midpoint to switch edge
+                    val targetEdge = if (event.rawX > screenWidth / 2f) ScreenEdge.RIGHT else ScreenEdge.LEFT
+                    if (targetEdge != currentEdge) {
+                        currentEdge = targetEdge
+                        params.gravity = Gravity.TOP or (if (currentEdge == ScreenEdge.RIGHT) Gravity.END else Gravity.START)
+                        params.x = 0
+                        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    }
+
+                    // 2. Update Y position
+                    val newY = (event.rawY - restingHeight / 2f).toInt().coerceIn(0, max(0, screenHeight - restingHeight))
                     params.y = newY
                     try {
                         windowManager.updateViewLayout(this, params)
                     } catch (_: Exception) {}
                     menuProgress = 0f
-                } else {
-                    pullDistance = max(0f, dxRaw)
+                } else if (isSlidingToOpen) {
+                    pullDistance = if (currentEdge == ScreenEdge.LEFT) max(0f, dxRaw) else max(0f, -dxRaw)
                     menuProgress = (pullDistance / triggerThreshold).coerceIn(0f, 1f)
 
                     if (pullDistance >= triggerThreshold && !hasHapticPlayed) {
@@ -450,13 +517,22 @@ class EdgeHandleOverlayView(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 isInteracting = false
-                if (isDraggingVertically) {
-                    isDraggingVertically = false
+                if (isDraggingHandle) {
+                    isDraggingHandle = false
+                    saveEdgePrefs()
                     ensureWindowSize(restingWidth, restingHeight)
                     scheduleDimming(2500)
                     invalidate()
+                } else if (isSlidingToOpen) {
+                    isSlidingToOpen = false
+                    if (pullDistance >= triggerThreshold * 0.7f) {
+                        performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        openMenu()
+                    } else {
+                        closeMenu()
+                    }
                 } else {
-                    // Single tap or horizontal slide -> Open Menu!
+                    // Tap on resting handle -> Open Menu
                     performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                     openMenu()
                 }

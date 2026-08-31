@@ -11,11 +11,27 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
+data class CacheEntry<T>(val data: T, val timestamp: Long)
+
 class CommunityApiClient(private val context: Context) {
 
     companion object {
         const val BASE_URL = "https://openmapper-api.android-openmapper.workers.dev"
         private const val TIMEOUT_MS = 10_000
+        const val DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
+
+        // Shared in-memory cache across instances and screen recompositions
+        private val profilesCache = java.util.concurrent.ConcurrentHashMap<String, CacheEntry<CommunityListResponse>>()
+        private val profileDetailCache = java.util.concurrent.ConcurrentHashMap<String, CacheEntry<CommunityProfileDetail>>()
+
+        fun clearCache() {
+            profilesCache.clear()
+            profileDetailCache.clear()
+        }
+
+        fun invalidateProfile(profileId: String) {
+            profileDetailCache.remove(profileId)
+        }
     }
 
     private val gson = Gson()
@@ -26,8 +42,21 @@ class CommunityApiClient(private val context: Context) {
         search: String? = null,
         sort: String = "popular", // popular, recent, downloads
         page: Int = 1,
-        limit: Int = 20
+        limit: Int = 20,
+        forceRefresh: Boolean = false,
+        cacheTtlMs: Long = DEFAULT_CACHE_TTL_MS
     ): Result<CommunityListResponse> = withContext(Dispatchers.IO) {
+        val cacheKey = "${game ?: ""}|${search ?: ""}|$sort|$page|$limit"
+        val now = System.currentTimeMillis()
+
+        if (!forceRefresh) {
+            profilesCache[cacheKey]?.let { cached ->
+                if (now - cached.timestamp < cacheTtlMs) {
+                    return@withContext Result.success(cached.data)
+                }
+            }
+        }
+
         try {
             val queryParams = mutableListOf<String>()
             if (!game.isNullOrBlank()) queryParams.add("game=${URLEncoder.encode(game, "UTF-8")}")
@@ -50,6 +79,7 @@ class CommunityApiClient(private val context: Context) {
             if (responseCode in 200..299) {
                 val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
                 val response = gson.fromJson(json, CommunityListResponse::class.java)
+                profilesCache[cacheKey] = CacheEntry(response, now)
                 Result.success(response)
             } else {
                 val err = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: "HTTP $responseCode"
@@ -60,7 +90,20 @@ class CommunityApiClient(private val context: Context) {
         }
     }
 
-    suspend fun getProfileDetail(profileId: String): Result<CommunityProfileDetail> = withContext(Dispatchers.IO) {
+    suspend fun getProfileDetail(
+        profileId: String,
+        forceRefresh: Boolean = false,
+        cacheTtlMs: Long = DEFAULT_CACHE_TTL_MS
+    ): Result<CommunityProfileDetail> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        if (!forceRefresh) {
+            profileDetailCache[profileId]?.let { cached ->
+                if (now - cached.timestamp < cacheTtlMs) {
+                    return@withContext Result.success(cached.data)
+                }
+            }
+        }
+
         try {
             val url = URL("$BASE_URL/api/profiles/$profileId")
             val conn = (url.openConnection() as HttpURLConnection).apply {
@@ -76,6 +119,7 @@ class CommunityApiClient(private val context: Context) {
                 val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
                 val response = gson.fromJson(json, CommunityDetailResponse::class.java)
                 if (response.success && response.profile != null) {
+                    profileDetailCache[profileId] = CacheEntry(response.profile, now)
                     Result.success(response.profile)
                 } else {
                     Result.failure(Exception(response.error ?: "Profil introuvable"))
@@ -168,6 +212,7 @@ class CommunityApiClient(private val context: Context) {
             if (responseCode in 200..299) {
                 val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
                 val response = gson.fromJson(json, PublishProfileResponse::class.java)
+                clearCache()
                 Result.success(response)
             } else {
                 val err = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: "HTTP $responseCode"

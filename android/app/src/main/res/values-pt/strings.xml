@@ -113,7 +113,20 @@
     <string name="key_mapping_title">Mapeamento de Botões</string>
     <string name="btn_tag_fire">🔥 Tiro</string>
     <string name="btn_tag_reload">🔄 Recarga</string>
+    <string name="btn_tag_ads">🎯 Mira</string>
+    <string name="btn_tag_normal">Normal</string>
     <string name="btn_mode_label">Modo: %1$s</string>
+    <string name="btn_role_label">Função: %1$s</string>
+    <string name="role_picker_title">Função da Ação: %1$s</string>
+    <string name="role_picker_desc">Selecione a função e comportamentos automáticos para este botão:</string>
+    <string name="role_normal_title">Normal (Botão Padrão)</string>
+    <string name="role_normal_desc">Ação de toque padrão sem resposta háptica ou assistências especiais.</string>
+    <string name="role_fire_title">🔥 Tiro Principal</string>
+    <string name="role_fire_desc">Aciona vibração de recuo e ativa o Auto Jiggle Strafe ao atirar.</string>
+    <string name="role_reload_title">🔄 Recarga</string>
+    <string name="role_reload_desc">Aciona vibração mecânica de duplo impulso (ejeção e encaixe do carregador).</string>
+    <string name="role_ads_title">🎯 Mira com Luneta (ADS)</string>
+    <string name="role_ads_desc">Aplica multiplicador dedicado de sensibilidade ADS e proteção anti-flick.</string>
     <string name="haptic_title">Resposta Háptica Global</string>
     <string name="haptic_desc">Ativa vibrações em ações do controle.</string>
     <string name="haptic_target_phone">📱 Vibração do Smartphone</string>
@@ -182,12 +195,14 @@
     <string name="overlay_notif_text">Perfil: %1$s • Toque para configurar</string>
     <string name="overlay_service_started">Serviço de mapeamento iniciado</string>
     <string name="overlay_service_stopped">Serviço de mapeamento parado</string>
-    <string name="overlay_btn_peek">👁️ Peek</string>
+    <string name="overlay_btn_peek">Peek</string>
     <string name="overlay_btn_opacity">Opacidade %1$d%%</string>
     <string name="overlay_btn_assign">🎮 Atribuir</string>
     <string name="overlay_btn_size_inc">➕ Tamanho</string>
     <string name="overlay_btn_size_dec">➖ Tamanho</string>
     <string name="overlay_btn_nudge">Microajuste</string>
+    <string name="overlay_btn_hide_bar">👁️ Ocultar</string>
+    <string name="overlay_btn_show_bar">▼ Ferramentas</string>
 
     <!-- Legacy / Compat -->
     <string name="shizuku_connected">Serviço Shizuku Conectado</string>

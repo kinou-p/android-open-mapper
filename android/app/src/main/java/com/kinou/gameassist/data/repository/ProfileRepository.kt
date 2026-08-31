@@ -35,6 +35,7 @@ class ProfileRepository(private val context: Context) {
                 val json = f.readText()
                 val p = gson.fromJson(json, GameProfile::class.java)
                 if (p != null) {
+                    ensureRolesMigrated(p)
                     list.add(p)
                 }
             } catch (e: Exception) {
@@ -53,7 +54,9 @@ class ProfileRepository(private val context: Context) {
         val file = File(profilesDir, "$id.json")
         if (!file.exists()) return null
         return try {
-            gson.fromJson(file.readText(), GameProfile::class.java)
+            val p = gson.fromJson(file.readText(), GameProfile::class.java)
+            p?.let { ensureRolesMigrated(it) }
+            p
         } catch (e: Exception) {
             null
         }
@@ -81,6 +84,7 @@ class ProfileRepository(private val context: Context) {
         return try {
             val imported = gson.fromJson(json, GameProfile::class.java)
             if (imported != null) {
+                ensureRolesMigrated(imported)
                 // Ensure unique ID if imported
                 if (getProfile(imported.id) != null) {
                     imported.id = "profile_${UUID.randomUUID().toString().take(8)}"
@@ -92,6 +96,20 @@ class ProfileRepository(private val context: Context) {
         } catch (e: Exception) {
             e.printStackTrace()
             null
+        }
+    }
+
+    private fun ensureRolesMigrated(p: GameProfile) {
+        for (btn in p.buttons) {
+            @Suppress("SENSELESS_COMPARISON")
+            if ((btn.role as ButtonRole?) == null) {
+                btn.role = when {
+                    btn.id.contains("fire", ignoreCase = true) || btn.label.contains("tir", ignoreCase = true) || btn.label.contains("fire", ignoreCase = true) || btn.gamepadButton.equals("BUTTON_R2", ignoreCase = true) || btn.gamepadButton.equals("TRIGGER_R2", ignoreCase = true) -> ButtonRole.FIRE
+                    btn.id.contains("reload", ignoreCase = true) || btn.label.contains("recharg", ignoreCase = true) || btn.label.contains("reload", ignoreCase = true) -> ButtonRole.RELOAD
+                    btn.id.contains("ads", ignoreCase = true) || btn.label.contains("visée", ignoreCase = true) || btn.label.contains("visee", ignoreCase = true) || btn.gamepadButton.equals("BUTTON_L2", ignoreCase = true) || btn.gamepadButton.equals("TRIGGER_L2", ignoreCase = true) -> ButtonRole.ADS
+                    else -> ButtonRole.NORMAL
+                }
+            }
         }
     }
 
@@ -163,20 +181,20 @@ class ProfileRepository(private val context: Context) {
                 acceleration = 1.25f
             ),
             buttons = mutableListOf(
-                ButtonConfig("btn_fire", btnFire, "BUTTON_R2", 0.85f, 0.70f, 0.055f, ButtonMode.HOLD),
-                ButtonConfig("btn_ads", btnAds, "BUTTON_L2", 0.85f, 0.40f, 0.050f, ButtonMode.HOLD),
-                ButtonConfig("btn_jump", btnJump, "BUTTON_A", 0.94f, 0.72f, 0.045f, ButtonMode.HOLD),
-                ButtonConfig("btn_slide", btnSlide, "BUTTON_B", 0.90f, 0.86f, 0.045f, ButtonMode.HOLD),
-                ButtonConfig("btn_reload", btnReload, "BUTTON_X", 0.76f, 0.85f, 0.045f, ButtonMode.TAP),
-                ButtonConfig("btn_switch", btnSwitch, "BUTTON_Y", 0.72f, 0.94f, 0.045f, ButtonMode.TAP),
-                ButtonConfig("btn_grenade_lethal", btnFrag, "BUTTON_R1", 0.76f, 0.58f, 0.045f, ButtonMode.HOLD),
-                ButtonConfig("btn_grenade_tactical", btnFlash, "BUTTON_L1", 0.68f, 0.58f, 0.045f, ButtonMode.HOLD),
-                ButtonConfig("btn_scorestreak", "Scorestreak", "DPAD_UP", 0.68f, 0.74f, 0.040f, ButtonMode.TAP),
-                ButtonConfig("btn_operator", btnOperator, "DPAD_RIGHT", 0.75f, 0.42f, 0.045f, ButtonMode.TAP),
-                ButtonConfig("btn_prone", btnProne, "DPAD_DOWN", 0.96f, 0.88f, 0.040f, ButtonMode.HOLD),
-                ButtonConfig("btn_sprint_click", btnSprint, "BUTTON_THUMBL", 0.18f, 0.56f, 0.040f, ButtonMode.TAP),
-                ButtonConfig("btn_melee", btnMelee, "BUTTON_THUMBR", 0.80f, 0.78f, 0.040f, ButtonMode.TAP),
-                ButtonConfig("btn_map", btnMap, "BUTTON_SELECT", 0.95f, 0.08f, 0.040f, ButtonMode.TAP)
+                ButtonConfig("btn_fire", btnFire, "BUTTON_R2", 0.85f, 0.70f, 0.055f, ButtonMode.HOLD, ButtonRole.FIRE),
+                ButtonConfig("btn_ads", btnAds, "BUTTON_L2", 0.85f, 0.40f, 0.050f, ButtonMode.HOLD, ButtonRole.ADS),
+                ButtonConfig("btn_jump", btnJump, "BUTTON_A", 0.94f, 0.72f, 0.045f, ButtonMode.HOLD, ButtonRole.NORMAL),
+                ButtonConfig("btn_slide", btnSlide, "BUTTON_B", 0.90f, 0.86f, 0.045f, ButtonMode.HOLD, ButtonRole.NORMAL),
+                ButtonConfig("btn_reload", btnReload, "BUTTON_X", 0.76f, 0.85f, 0.045f, ButtonMode.TAP, ButtonRole.RELOAD),
+                ButtonConfig("btn_switch", btnSwitch, "BUTTON_Y", 0.72f, 0.94f, 0.045f, ButtonMode.TAP, ButtonRole.NORMAL),
+                ButtonConfig("btn_grenade_lethal", btnFrag, "BUTTON_R1", 0.76f, 0.58f, 0.045f, ButtonMode.HOLD, ButtonRole.NORMAL),
+                ButtonConfig("btn_grenade_tactical", btnFlash, "BUTTON_L1", 0.68f, 0.58f, 0.045f, ButtonMode.HOLD, ButtonRole.NORMAL),
+                ButtonConfig("btn_scorestreak", "Scorestreak", "DPAD_UP", 0.68f, 0.74f, 0.040f, ButtonMode.TAP, ButtonRole.NORMAL),
+                ButtonConfig("btn_operator", btnOperator, "DPAD_RIGHT", 0.75f, 0.42f, 0.045f, ButtonMode.TAP, ButtonRole.NORMAL),
+                ButtonConfig("btn_prone", btnProne, "DPAD_DOWN", 0.96f, 0.88f, 0.040f, ButtonMode.HOLD, ButtonRole.NORMAL),
+                ButtonConfig("btn_sprint_click", btnSprint, "BUTTON_THUMBL", 0.18f, 0.56f, 0.040f, ButtonMode.TAP, ButtonRole.NORMAL),
+                ButtonConfig("btn_melee", btnMelee, "BUTTON_THUMBR", 0.80f, 0.78f, 0.040f, ButtonMode.TAP, ButtonRole.NORMAL),
+                ButtonConfig("btn_map", btnMap, "BUTTON_SELECT", 0.95f, 0.08f, 0.040f, ButtonMode.TAP, ButtonRole.NORMAL)
             )
         )
     }
@@ -199,7 +217,7 @@ class ProfileRepository(private val context: Context) {
             else -> "Armor Plate / Heal"
         }
         p.buttons.add(
-            ButtonConfig("btn_armor", btnArmor, "DPAD_LEFT", 0.62f, 0.88f, 0.045f, ButtonMode.TAP)
+            ButtonConfig("btn_armor", btnArmor, "DPAD_LEFT", 0.62f, 0.88f, 0.045f, ButtonMode.TAP, ButtonRole.NORMAL)
         )
         return p
     }

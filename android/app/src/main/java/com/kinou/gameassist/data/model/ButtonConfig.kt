@@ -6,9 +6,18 @@ enum class ButtonMode {
     @SerializedName("hold")
     HOLD,
     @SerializedName("tap")
-    TAP,
-    @SerializedName("slide_cancel")
-    SLIDE_CANCEL
+    TAP
+}
+
+enum class ButtonRole {
+    @SerializedName("normal")
+    NORMAL,
+    @SerializedName("fire")
+    FIRE,
+    @SerializedName("reload")
+    RELOAD,
+    @SerializedName("ads")
+    ADS
 }
 
 data class ButtonConfig(
@@ -31,5 +40,8 @@ data class ButtonConfig(
     var radius: Float = 0.04f, // Normalized relative to screen height
 
     @SerializedName("mode")
-    var mode: ButtonMode = ButtonMode.HOLD
+    var mode: ButtonMode = ButtonMode.HOLD,
+
+    @SerializedName("role")
+    var role: ButtonRole = ButtonRole.NORMAL
 )
