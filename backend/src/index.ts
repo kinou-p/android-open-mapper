@@ -21,7 +21,9 @@ app.get('/', (c) => {
       'GET /api/profiles/:id',
       'POST /api/profiles',
       'POST /api/profiles/:id/vote',
-      'POST /api/profiles/:id/download'
+      'POST /api/profiles/:id/download',
+      'POST /api/telemetry/ping',
+      'GET /api/stats'
     ]
   });
 });
@@ -297,6 +299,80 @@ app.post('/api/profiles/:id/download', async (c) => {
     `).bind(profileId).run();
 
     return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// 6. Telemetry Ping (Anonymous Unique Devices & Active Sessions)
+app.post('/api/telemetry/ping', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { deviceHash, appVersion } = body;
+
+    if (!deviceHash || typeof deviceHash !== 'string' || !HASH_REGEX.test(deviceHash)) {
+      return c.json({ success: false, error: 'Empreinte d\'appareil invalide ou manquante' }, 400);
+    }
+
+    const now = Date.now();
+    const version = typeof appVersion === 'string' ? appVersion.slice(0, 20) : '1.0.0';
+
+    await c.env.DB.prepare(`
+      INSERT INTO devices (device_hash, first_seen, last_seen, app_version, launch_count)
+      VALUES (?, ?, ?, ?, 1)
+      ON CONFLICT(device_hash) DO UPDATE SET
+        last_seen = excluded.last_seen,
+        app_version = excluded.app_version,
+        launch_count = launch_count + 1
+    `).bind(deviceHash, now, now, version).run();
+
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// 7. Global Statistics (Unique Devices, Active Devices, Profiles & Downloads)
+app.get('/api/stats', async (c) => {
+  try {
+    const now = Date.now();
+    const dayAgo = now - 24 * 60 * 60 * 1000;
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+    const devicesStats: any = await c.env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_devices,
+        SUM(CASE WHEN last_seen >= ? THEN 1 ELSE 0 END) as active_24h,
+        SUM(CASE WHEN last_seen >= ? THEN 1 ELSE 0 END) as active_7d,
+        SUM(CASE WHEN last_seen >= ? THEN 1 ELSE 0 END) as active_30d,
+        COALESCE(SUM(launch_count), 0) as total_launches
+      FROM devices
+    `).bind(dayAgo, weekAgo, monthAgo).first();
+
+    const profileStats: any = await c.env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_profiles,
+        COALESCE(SUM(downloads_count), 0) as total_downloads,
+        COALESCE(SUM(likes_count), 0) as total_likes
+      FROM profiles
+    `).first();
+
+    return c.json({
+      success: true,
+      devices: {
+        total_unique_devices: devicesStats?.total_devices || 0,
+        active_24h: devicesStats?.active_24h || 0,
+        active_7d: devicesStats?.active_7d || 0,
+        active_30d: devicesStats?.active_30d || 0,
+        total_app_launches: devicesStats?.total_launches || 0
+      },
+      community: {
+        total_profiles: profileStats?.total_profiles || 0,
+        total_profile_downloads: profileStats?.total_downloads || 0,
+        total_profile_likes: profileStats?.total_likes || 0
+      }
+    });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }

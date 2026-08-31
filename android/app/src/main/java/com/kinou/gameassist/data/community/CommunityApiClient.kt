@@ -178,6 +178,35 @@ class CommunityApiClient(private val context: Context) {
         }
     }
 
+    suspend fun sendTelemetryPing(appVersion: String = "1.0.0") = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$BASE_URL/api/telemetry/ping")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 5000
+                readTimeout = 5000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "OpenMapper-Android/$appVersion")
+            }
+
+            val payload = mapOf(
+                "deviceHash" to deviceHash,
+                "appVersion" to appVersion
+            )
+            val jsonBody = gson.toJson(payload)
+
+            OutputStreamWriter(conn.outputStream, "UTF-8").use {
+                it.write(jsonBody)
+                it.flush()
+            }
+            conn.responseCode // trigger request
+        } catch (_: Exception) {
+            // Silently ignore network failures for background telemetry
+        }
+    }
+
     private fun formatFriendlyError(e: Throwable): Exception {
         val msg = e.message ?: ""
         return if (msg.contains("SSL", ignoreCase = true) || msg.contains("handshake", ignoreCase = true) || msg.contains("protocol", ignoreCase = true)) {

@@ -19,6 +19,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.kinou.gameassist.data.community.CommunityApiClient
 import com.kinou.gameassist.data.language.LanguageManager
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ProfileRepository
@@ -53,6 +57,13 @@ class MainActivity : AppCompatActivity() {
         LanguageManager.init(this)
         repository = ProfileRepository(this)
         ShizukuManager.init()
+
+        // Anonymous telemetry heartbeat on app launch
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                CommunityApiClient(this@MainActivity).sendTelemetryPing("1.0.0")
+            } catch (_: Exception) {}
+        }
 
         setContent {
             GameAssistTheme {

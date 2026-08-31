@@ -28,3 +28,13 @@ CREATE TABLE IF NOT EXISTS votes (
     PRIMARY KEY (profile_id, device_hash),
     FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS devices (
+    device_hash TEXT PRIMARY KEY,
+    first_seen INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    app_version TEXT,
+    launch_count INTEGER DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen DESC);
