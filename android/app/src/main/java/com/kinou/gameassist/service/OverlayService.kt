@@ -255,7 +255,6 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    @Suppress("DEPRECATION")
     private fun openHudEditor() {
         val prof = currentProfile ?: return
         if (editorView != null) return
@@ -263,19 +262,28 @@ class OverlayService : LifecycleService() {
         val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
+            @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
         updateScreenMetrics()
 
+        val baseFlags = WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+            WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+
+        val windowFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            baseFlags
+        } else {
+            @Suppress("DEPRECATION")
+            baseFlags or WindowManager.LayoutParams.FLAG_FULLSCREEN
+        }
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             layoutFlag,
-            WindowManager.LayoutParams.FLAG_FULLSCREEN or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-            WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
+            windowFlags,
             PixelFormat.TRANSLUCENT
         ).apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
