@@ -172,33 +172,46 @@ fun GamepadTestScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Tab Selector
-            Row(
+            // Tab Selector (2 par ligne)
+            val tabs = listOf(
+                TestTab.VISUALIZER to stringResource(R.string.tab_visualizer),
+                TestTab.DRIFT_CALIBRATION to stringResource(R.string.tab_drift),
+                TestTab.CIRCULARITY to stringResource(R.string.tab_circularity),
+                TestTab.POLLING_RATE to stringResource(R.string.tab_polling_rate)
+            )
+
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf(
-                    TestTab.VISUALIZER to stringResource(R.string.tab_visualizer),
-                    TestTab.DRIFT_CALIBRATION to stringResource(R.string.tab_drift),
-                    TestTab.CIRCULARITY to stringResource(R.string.tab_circularity),
-                    TestTab.POLLING_RATE to stringResource(R.string.tab_polling_rate)
-                ).forEach { (tab, title) ->
-                    val active = selectedTab == tab
-                    Button(
-                        onClick = { selectedTab = tab },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (active) NeonCyan else DarkCardBorder
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                tabs.chunked(2).forEach { rowTabs ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            title,
-                            color = if (active) DarkBackground else TextPrimary,
-                            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = 11.sp
-                        )
+                        rowTabs.forEach { (tab, title) ->
+                            val active = selectedTab == tab
+                            Button(
+                                onClick = { selectedTab = tab },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (active) NeonCyan else DarkCardBorder
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = title,
+                                    color = if (active) DarkBackground else TextPrimary,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 12.5.sp,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 }
             }
