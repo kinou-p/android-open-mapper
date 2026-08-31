@@ -277,12 +277,6 @@ fun ProfileCard(
     var hapticReload by remember(profile.id) { mutableStateOf(profile.settings.hapticReload) }
     var hapticIntensity by remember(profile.id) { mutableFloatStateOf(profile.settings.hapticIntensity) }
 
-    // Button Mapping States
-    var buttonToEditKey by remember { mutableStateOf<ButtonConfig?>(null) }
-    var buttonToEditRole by remember { mutableStateOf<ButtonConfig?>(null) }
-    var showKeyPickerDialog by remember { mutableStateOf(false) }
-    var showRolePickerDialog by remember { mutableStateOf(false) }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = if (isSelected) DarkCard else DarkSurface),
@@ -351,7 +345,7 @@ fun ProfileCard(
             if (isSelected) {
                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
 
-                // Actions: Exporter, Dupliquer, Supprimer
+                // Actions: Exporter, Dupliquer
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -374,12 +368,6 @@ fun ProfileCard(
                         Icon(Icons.Default.ContentCopy, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(stringResource(R.string.btn_duplicate), color = TextPrimary, fontSize = 11.sp)
-                    }
-
-                    if (canDelete) {
-                        IconButton(onClick = onDelete) {
-                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.btn_delete), tint = NeonPink)
-                        }
                     }
                 }
 
@@ -410,8 +398,7 @@ fun ProfileCard(
                 val subTabs = listOf(
                     stringResource(R.string.tab_aim_title) to 0,
                     stringResource(R.string.tab_movement_title) to 1,
-                    stringResource(R.string.tab_buttons_title) to 2,
-                    stringResource(R.string.tab_haptic_title) to 3
+                    stringResource(R.string.tab_haptic_title) to 2
                 )
 
                 Row(
@@ -929,198 +916,9 @@ fun ProfileCard(
                 }
 
                 // ==========================================
-                // TAB 2 : 🎮 TOUCHES & REMAPPING
+                // TAB 2 : 📳 HAPTIQUE & VIBRATIONS
                 // ==========================================
                 if (selectedTab == 2) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(stringResource(R.string.key_mapping_title), fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 13.sp)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                OutlinedButton(
-                                    onClick = onOpenVisualEditor,
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(30.dp)
-                                ) {
-                                    Icon(Icons.Default.DashboardCustomize, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(14.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Disposition HUD", fontSize = 11.sp, color = NeonCyan, fontWeight = FontWeight.Bold)
-                                }
-                                IconButton(
-                                    onClick = {
-                                        val newBtn = ButtonConfig(
-                                            id = "btn_${UUID.randomUUID().toString().take(6)}",
-                                            label = "Action ${profile.buttons.size + 1}",
-                                            gamepadButton = "BUTTON_A",
-                                            x = 0.5f,
-                                            y = 0.5f,
-                                            radius = 0.045f,
-                                            mode = ButtonMode.TAP
-                                        )
-                                        profile.buttons.add(newBtn)
-                                        onSave()
-                                        buttonToEditKey = newBtn
-                                        showKeyPickerDialog = true
-                                    },
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Icon(Icons.Default.AddCircle, contentDescription = stringResource(R.string.btn_add), tint = NeonCyan)
-                                }
-                            }
-                        }
-
-                        profile.buttons.forEach { btn ->
-                            val isFire = btn.role == ButtonRole.FIRE
-                            val isReload = btn.role == ButtonRole.RELOAD
-                            val isAds = btn.role == ButtonRole.ADS
-
-                            val highlightColor = when (btn.role) {
-                                ButtonRole.FIRE -> NeonPink
-                                ButtonRole.RELOAD -> NeonOrange
-                                ButtonRole.ADS -> NeonGreen
-                                ButtonRole.NORMAL -> DarkCardBorder
-                            }
-
-                            Surface(
-                                color = DarkSurface,
-                                shape = RoundedCornerShape(12.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, highlightColor),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Text(btn.label, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                            when (btn.role) {
-                                                ButtonRole.FIRE -> Text(stringResource(R.string.btn_tag_fire), color = NeonPink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                ButtonRole.RELOAD -> Text(stringResource(R.string.btn_tag_reload), color = NeonOrange, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                ButtonRole.ADS -> Text(stringResource(R.string.btn_tag_ads), color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                                ButtonRole.NORMAL -> Unit
-                                            }
-                                        }
-                                        Text(stringResource(R.string.btn_mode_label, btn.mode.name), color = TextSecondary, fontSize = 11.sp)
-                                    }
-
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        // Role Selector Pill
-                                        Surface(
-                                            color = when (btn.role) {
-                                                ButtonRole.FIRE -> Color(0x33FF0055)
-                                                ButtonRole.RELOAD -> Color(0x33FFAA00)
-                                                ButtonRole.ADS -> Color(0x3300FF66)
-                                                ButtonRole.NORMAL -> Color(0x22FFFFFF)
-                                            },
-                                            shape = RoundedCornerShape(6.dp),
-                                            modifier = Modifier.clickable {
-                                                buttonToEditRole = btn
-                                                showRolePickerDialog = true
-                                            }
-                                        ) {
-                                            val roleLabel = when (btn.role) {
-                                                ButtonRole.FIRE -> stringResource(R.string.btn_tag_fire)
-                                                ButtonRole.RELOAD -> stringResource(R.string.btn_tag_reload)
-                                                ButtonRole.ADS -> stringResource(R.string.btn_tag_ads)
-                                                ButtonRole.NORMAL -> stringResource(R.string.btn_tag_normal)
-                                            }
-                                            Text(
-                                                roleLabel,
-                                                color = when (btn.role) {
-                                                    ButtonRole.FIRE -> NeonPink
-                                                    ButtonRole.RELOAD -> NeonOrange
-                                                    ButtonRole.ADS -> NeonGreen
-                                                    ButtonRole.NORMAL -> TextSecondary
-                                                },
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                                            )
-                                        }
-
-                                        // Mode Toggle (HOLD / TAP)
-                                        Surface(
-                                            color = when (btn.mode) {
-                                                ButtonMode.HOLD -> Color(0x3300F0FF)
-                                                ButtonMode.TAP -> Color(0x33FFAA00)
-                                            },
-                                            shape = RoundedCornerShape(6.dp),
-                                            modifier = Modifier.clickable {
-                                                btn.mode = when (btn.mode) {
-                                                    ButtonMode.HOLD -> ButtonMode.TAP
-                                                    ButtonMode.TAP -> ButtonMode.HOLD
-                                                }
-                                                onSave()
-                                            }
-                                        ) {
-                                            Text(
-                                                btn.mode.name.take(5),
-                                                color = when (btn.mode) {
-                                                    ButtonMode.HOLD -> NeonCyan
-                                                    ButtonMode.TAP -> NeonOrange
-                                                },
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-                                            )
-                                        }
-
-                                        // Gamepad Key Picker Button
-                                        Button(
-                                            onClick = {
-                                                buttonToEditKey = btn
-                                                showKeyPickerDialog = true
-                                            },
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = when (btn.role) {
-                                                    ButtonRole.FIRE -> NeonPink
-                                                    ButtonRole.RELOAD -> NeonOrange
-                                                    ButtonRole.ADS -> NeonGreen
-                                                    ButtonRole.NORMAL -> NeonCyan
-                                                }
-                                            ),
-                                            shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                            modifier = Modifier.height(32.dp)
-                                        ) {
-                                            Text(
-                                                btn.gamepadButton.replace("BUTTON_", "").replace("TRIGGER_", ""),
-                                                color = Color.Black,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp
-                                            )
-                                        }
-
-                                        if (profile.buttons.size > 1) {
-                                            IconButton(
-                                                onClick = {
-                                                    profile.buttons.remove(btn)
-                                                    onSave()
-                                                },
-                                                modifier = Modifier.size(28.dp)
-                                            ) {
-                                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.btn_delete), tint = TextSecondary, modifier = Modifier.size(16.dp))
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ==========================================
-                // TAB 3 : 📳 HAPTIQUE & VIBRATIONS
-                // ==========================================
-                if (selectedTab == 3) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1292,183 +1090,6 @@ fun ProfileCard(
                 }
             }
         }
-    }
-
-    // ==========================================
-    // DIALOG: SÉLECTEUR DE TOUCHE MANETTE
-    // ==========================================
-    if (showKeyPickerDialog && buttonToEditKey != null) {
-        val btn = buttonToEditKey!!
-        AlertDialog(
-            onDismissRequest = {
-                showKeyPickerDialog = false
-                buttonToEditKey = null
-            },
-            title = {
-                Text(stringResource(R.string.key_picker_title, btn.label), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 380.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(stringResource(R.string.key_picker_desc), color = TextSecondary, fontSize = 12.sp)
-
-                    val keyOptions = listOf(
-                        "BUTTON_R2" to "RT / R2 (Trigger R)",
-                        "BUTTON_L2" to "LT / L2 (Trigger L)",
-                        "BUTTON_R1" to "RB / R1 (Bumper R)",
-                        "BUTTON_L1" to "LB / L1 (Bumper L)",
-                        "BUTTON_A" to "A / Cross (Bottom)",
-                        "BUTTON_B" to "B / Circle (Right)",
-                        "BUTTON_X" to "X / Square (Left)",
-                        "BUTTON_Y" to "Y / Triangle (Top)",
-                        "BUTTON_THUMBL" to "L3 (Left Stick Click)",
-                        "BUTTON_THUMBR" to "R3 (Right Stick Click)",
-                        "DPAD_UP" to "D-Pad Up",
-                        "DPAD_DOWN" to "D-Pad Down",
-                        "DPAD_LEFT" to "D-Pad Left",
-                        "DPAD_RIGHT" to "D-Pad Right",
-                        "BUTTON_START" to "Start / Menu / Options",
-                        "BUTTON_SELECT" to "Select / Back / Share"
-                    )
-
-                    keyOptions.forEach { (k, label) ->
-                        val isCurrent = btn.gamepadButton.equals(k, ignoreCase = true)
-                        Surface(
-                            color = if (isCurrent) NeonCyan.copy(alpha = 0.15f) else DarkSurface,
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isCurrent) NeonCyan else DarkCardBorder),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    btn.gamepadButton = k
-                                    onSave()
-                                    showKeyPickerDialog = false
-                                    buttonToEditKey = null
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    label,
-                                    color = if (isCurrent) NeonCyan else TextPrimary,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
-                                )
-                                if (isCurrent) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(18.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showKeyPickerDialog = false
-                    buttonToEditKey = null
-                }) {
-                    Text(stringResource(R.string.btn_close), color = TextSecondary)
-                }
-            },
-            containerColor = DarkCard
-        )
-    }
-
-    // ==========================================
-    // DIALOG: SÉLECTEUR DE RÔLE DE BOUTON
-    // ==========================================
-    if (showRolePickerDialog && buttonToEditRole != null) {
-        val btn = buttonToEditRole!!
-        AlertDialog(
-            onDismissRequest = {
-                showRolePickerDialog = false
-                buttonToEditRole = null
-            },
-            title = {
-                Text(stringResource(R.string.role_picker_title, btn.label), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(stringResource(R.string.role_picker_desc), color = TextSecondary, fontSize = 12.sp)
-
-                    val roleOptions = listOf(
-                        Triple(ButtonRole.NORMAL, stringResource(R.string.role_normal_title), stringResource(R.string.role_normal_desc)),
-                        Triple(ButtonRole.FIRE, stringResource(R.string.role_fire_title), stringResource(R.string.role_fire_desc)),
-                        Triple(ButtonRole.RELOAD, stringResource(R.string.role_reload_title), stringResource(R.string.role_reload_desc)),
-                        Triple(ButtonRole.ADS, stringResource(R.string.role_ads_title), stringResource(R.string.role_ads_desc))
-                    )
-
-                    roleOptions.forEach { (role, title, desc) ->
-                        val isCurrent = btn.role == role
-                        val roleColor = when (role) {
-                            ButtonRole.FIRE -> NeonPink
-                            ButtonRole.RELOAD -> NeonOrange
-                            ButtonRole.ADS -> NeonGreen
-                            ButtonRole.NORMAL -> NeonCyan
-                        }
-                        Surface(
-                            color = if (isCurrent) roleColor.copy(alpha = 0.15f) else DarkSurface,
-                            shape = RoundedCornerShape(10.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isCurrent) roleColor else DarkCardBorder),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    btn.role = role
-                                    onSave()
-                                    showRolePickerDialog = false
-                                    buttonToEditRole = null
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        title,
-                                        color = if (isCurrent) roleColor else TextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        desc,
-                                        color = TextSecondary,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                                if (isCurrent) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = roleColor, modifier = Modifier.size(20.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showRolePickerDialog = false
-                    buttonToEditRole = null
-                }) {
-                    Text(stringResource(R.string.btn_close), color = TextSecondary)
-                }
-            },
-            containerColor = DarkCard
-        )
     }
 }
 
