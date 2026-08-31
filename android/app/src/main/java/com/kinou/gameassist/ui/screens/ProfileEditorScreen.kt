@@ -563,7 +563,7 @@ fun ProfileCard(
                             SliderSetting(
                                 label = stringResource(R.string.standard_accel_label),
                                 value = acceleration,
-                                range = 1.0f..5.0f,
+                                range = 1.0f..10.0f,
                                 displayText = "%.2f".format(acceleration),
                                 onValueChange = {
                                     acceleration = it
