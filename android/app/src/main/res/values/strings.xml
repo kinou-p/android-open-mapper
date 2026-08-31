@@ -182,6 +182,12 @@
     <string name="overlay_notif_text">Profile: %1$s • Tap to configure</string>
     <string name="overlay_service_started">Mapping service started</string>
     <string name="overlay_service_stopped">Mapping service stopped</string>
+    <string name="overlay_btn_peek">👁️ Peek</string>
+    <string name="overlay_btn_opacity">Opacity %1$d%%</string>
+    <string name="overlay_btn_assign">🎮 Assign</string>
+    <string name="overlay_btn_size_inc">➕ Size</string>
+    <string name="overlay_btn_size_dec">➖ Size</string>
+    <string name="overlay_btn_nudge">Micro-adjust</string>
 
     <!-- Legacy / Compat -->
     <string name="shizuku_connected">Shizuku Service Connected</string>
@@ -214,4 +220,17 @@
     <string name="conn_quality_bt_fast">🟢 Bluetooth Excellent (250Hz)</string>
     <string name="conn_quality_bt_std">🟡 Bluetooth Standard (125Hz)</string>
     <string name="conn_quality_slow">🔴 Latence Élevée (&gt;16ms)</string>
+
+    <!-- Visual HUD Layout Editor & Screenshots -->
+    <string name="btn_visual_editor">📐 Visual Layout (HUD Screenshot)</string>
+    <string name="visual_editor_title">Visual Editor - %1$s</string>
+    <string name="btn_import_screenshot">📸 Import Screenshot</string>
+    <string name="btn_change_screenshot">📸 Change Screenshot</string>
+    <string name="btn_remove_screenshot">🗑️ Remove Background</string>
+    <string name="screenshot_imported_toast">Screenshot imported successfully!</string>
+    <string name="screenshot_removed_toast">Screenshot removed</string>
+    <string name="screenshot_import_error">Could not load selected image</string>
+    <string name="visual_editor_hint">Move, resize, and align controls directly over your game\'s on-screen buttons.</string>
+    <string name="visual_editor_no_screenshot_hint">📸 Tap « Import Screenshot » to load an in-game screenshot and layout your controls over it!</string>
+    <string name="visual_editor_bg_opacity">BG: %1$d%%</string>
 </resources>

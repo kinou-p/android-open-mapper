@@ -32,13 +32,15 @@ import com.kinou.gameassist.ui.screens.CommunityScreen
 import com.kinou.gameassist.ui.screens.GamepadTestScreen
 import com.kinou.gameassist.ui.screens.HomeScreen
 import com.kinou.gameassist.ui.screens.ProfileEditorScreen
+import com.kinou.gameassist.ui.screens.VisualHudEditorScreen
 import com.kinou.gameassist.ui.theme.*
 
 enum class Screen {
     HOME,
     PROFILES,
     COMMUNITY,
-    GAMEPAD_TEST
+    GAMEPAD_TEST,
+    VISUAL_HUD_EDITOR
 }
 
 class MainActivity : AppCompatActivity() {
@@ -115,76 +117,78 @@ class MainActivity : AppCompatActivity() {
                 val isServiceRunning by OverlayService.isServiceRunningFlow.collectAsState()
 
                 BackHandler(enabled = currentScreen != Screen.HOME) {
-                    currentScreen = Screen.HOME
+                    currentScreen = if (currentScreen == Screen.VISUAL_HUD_EDITOR) Screen.PROFILES else Screen.HOME
                 }
 
                 Scaffold(
                     bottomBar = {
-                        NavigationBar(
-                            containerColor = DarkSurface,
-                            contentColor = TextPrimary,
-                            tonalElevation = 8.dp
-                        ) {
-                            NavigationBarItem(
-                                selected = currentScreen == Screen.HOME,
-                                onClick = { currentScreen = Screen.HOME },
-                                icon = { Icon(Icons.Default.Home, contentDescription = stringResource(R.string.nav_home)) },
-                                label = { Text(stringResource(R.string.nav_home), fontSize = 10.sp, fontWeight = if (currentScreen == Screen.HOME) FontWeight.Bold else FontWeight.Normal) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = DarkBackground,
-                                    selectedTextColor = NeonCyan,
-                                    indicatorColor = NeonCyan,
-                                    unselectedIconColor = TextSecondary,
-                                    unselectedTextColor = TextSecondary
+                        if (currentScreen != Screen.VISUAL_HUD_EDITOR) {
+                            NavigationBar(
+                                containerColor = DarkSurface,
+                                contentColor = TextPrimary,
+                                tonalElevation = 8.dp
+                            ) {
+                                NavigationBarItem(
+                                    selected = currentScreen == Screen.HOME,
+                                    onClick = { currentScreen = Screen.HOME },
+                                    icon = { Icon(Icons.Default.Home, contentDescription = stringResource(R.string.nav_home)) },
+                                    label = { Text(stringResource(R.string.nav_home), fontSize = 10.sp, fontWeight = if (currentScreen == Screen.HOME) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = DarkBackground,
+                                        selectedTextColor = NeonCyan,
+                                        indicatorColor = NeonCyan,
+                                        unselectedIconColor = TextSecondary,
+                                        unselectedTextColor = TextSecondary
+                                    )
                                 )
-                            )
 
-                            NavigationBarItem(
-                                selected = currentScreen == Screen.PROFILES,
-                                onClick = { currentScreen = Screen.PROFILES },
-                                icon = { Icon(Icons.Default.Tune, contentDescription = stringResource(R.string.nav_profiles)) },
-                                label = { Text(stringResource(R.string.nav_profiles), fontSize = 10.sp, fontWeight = if (currentScreen == Screen.PROFILES) FontWeight.Bold else FontWeight.Normal) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = DarkBackground,
-                                    selectedTextColor = NeonCyan,
-                                    indicatorColor = NeonCyan,
-                                    unselectedIconColor = TextSecondary,
-                                    unselectedTextColor = TextSecondary
+                                NavigationBarItem(
+                                    selected = currentScreen == Screen.PROFILES,
+                                    onClick = { currentScreen = Screen.PROFILES },
+                                    icon = { Icon(Icons.Default.Tune, contentDescription = stringResource(R.string.nav_profiles)) },
+                                    label = { Text(stringResource(R.string.nav_profiles), fontSize = 10.sp, fontWeight = if (currentScreen == Screen.PROFILES) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = DarkBackground,
+                                        selectedTextColor = NeonCyan,
+                                        indicatorColor = NeonCyan,
+                                        unselectedIconColor = TextSecondary,
+                                        unselectedTextColor = TextSecondary
+                                    )
                                 )
-                            )
 
-                            NavigationBarItem(
-                                selected = currentScreen == Screen.COMMUNITY,
-                                onClick = { currentScreen = Screen.COMMUNITY },
-                                icon = { Icon(Icons.Default.Public, contentDescription = "Communauté") },
-                                label = { Text("Communauté", fontSize = 10.sp, fontWeight = if (currentScreen == Screen.COMMUNITY) FontWeight.Bold else FontWeight.Normal) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = DarkBackground,
-                                    selectedTextColor = NeonCyan,
-                                    indicatorColor = NeonCyan,
-                                    unselectedIconColor = TextSecondary,
-                                    unselectedTextColor = TextSecondary
+                                NavigationBarItem(
+                                    selected = currentScreen == Screen.COMMUNITY,
+                                    onClick = { currentScreen = Screen.COMMUNITY },
+                                    icon = { Icon(Icons.Default.Public, contentDescription = "Communauté") },
+                                    label = { Text("Communauté", fontSize = 10.sp, fontWeight = if (currentScreen == Screen.COMMUNITY) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = DarkBackground,
+                                        selectedTextColor = NeonCyan,
+                                        indicatorColor = NeonCyan,
+                                        unselectedIconColor = TextSecondary,
+                                        unselectedTextColor = TextSecondary
+                                    )
                                 )
-                            )
 
-                            NavigationBarItem(
-                                selected = currentScreen == Screen.GAMEPAD_TEST,
-                                onClick = { currentScreen = Screen.GAMEPAD_TEST },
-                                icon = { Icon(Icons.Default.SportsEsports, contentDescription = stringResource(R.string.nav_diagnostic)) },
-                                label = { Text(stringResource(R.string.nav_diagnostic), fontSize = 10.sp, fontWeight = if (currentScreen == Screen.GAMEPAD_TEST) FontWeight.Bold else FontWeight.Normal) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = DarkBackground,
-                                    selectedTextColor = NeonCyan,
-                                    indicatorColor = NeonCyan,
-                                    unselectedIconColor = TextSecondary,
-                                    unselectedTextColor = TextSecondary
+                                NavigationBarItem(
+                                    selected = currentScreen == Screen.GAMEPAD_TEST,
+                                    onClick = { currentScreen = Screen.GAMEPAD_TEST },
+                                    icon = { Icon(Icons.Default.SportsEsports, contentDescription = stringResource(R.string.nav_diagnostic)) },
+                                    label = { Text(stringResource(R.string.nav_diagnostic), fontSize = 10.sp, fontWeight = if (currentScreen == Screen.GAMEPAD_TEST) FontWeight.Bold else FontWeight.Normal) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = DarkBackground,
+                                        selectedTextColor = NeonCyan,
+                                        indicatorColor = NeonCyan,
+                                        unselectedIconColor = TextSecondary,
+                                        unselectedTextColor = TextSecondary
+                                    )
                                 )
-                            )
+                            }
                         }
                     },
                     containerColor = DarkBackground
                 ) { paddingValues ->
-                    Box(modifier = Modifier.padding(paddingValues)) {
+                    Box(modifier = Modifier.padding(if (currentScreen == Screen.VISUAL_HUD_EDITOR) PaddingValues(0.dp) else paddingValues)) {
                         when (currentScreen) {
                             Screen.HOME -> HomeScreen(
                                 profiles = profiles,
@@ -264,10 +268,30 @@ class MainActivity : AppCompatActivity() {
                                         true
                                     } else false
                                 },
+                                onOpenVisualEditor = { prof ->
+                                    selectedProfile = prof
+                                    currentScreen = Screen.VISUAL_HUD_EDITOR
+                                },
                                 liveRx = liveRx.floatValue,
                                 liveRy = liveRy.floatValue,
                                 onBack = { currentScreen = Screen.HOME }
                             )
+
+                            Screen.VISUAL_HUD_EDITOR -> {
+                                selectedProfile?.let { prof ->
+                                    VisualHudEditorScreen(
+                                        profile = prof,
+                                        onSaveProfile = { updated ->
+                                            repository.saveProfile(updated)
+                                            OverlayService.updateLiveProfile(updated)
+                                            profiles = repository.getAllProfiles()
+                                        },
+                                        onBack = { currentScreen = Screen.PROFILES }
+                                    )
+                                } ?: run {
+                                    currentScreen = Screen.PROFILES
+                                }
+                            }
 
                             Screen.COMMUNITY -> CommunityScreen(
                                 repository = repository,

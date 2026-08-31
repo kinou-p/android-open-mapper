@@ -182,6 +182,12 @@
     <string name="overlay_notif_text">Perfil: %1$s • Toca para configurar</string>
     <string name="overlay_service_started">Servicio de mapeo iniciado</string>
     <string name="overlay_service_stopped">Servicio de mapeo detenido</string>
+    <string name="overlay_btn_peek">👁️ Peek</string>
+    <string name="overlay_btn_opacity">Opacidad %1$d%%</string>
+    <string name="overlay_btn_assign">🎮 Asignar</string>
+    <string name="overlay_btn_size_inc">➕ Tamaño</string>
+    <string name="overlay_btn_size_dec">➖ Tamaño</string>
+    <string name="overlay_btn_nudge">Microajuste</string>
 
     <!-- Legacy / Compat -->
     <string name="shizuku_connected">Servicio Shizuku Conectado</string>
@@ -214,4 +220,17 @@
     <string name="conn_quality_bt_fast">🟢 Bluetooth Excelente (250Hz)</string>
     <string name="conn_quality_bt_std">🟡 Bluetooth Estándar (125Hz)</string>
     <string name="conn_quality_slow">🔴 Latencia Alta (&gt;16ms)</string>
+
+    <!-- Visual HUD Layout Editor & Screenshots -->
+    <string name="btn_visual_editor">📐 Diseño Visual (Captura HUD)</string>
+    <string name="visual_editor_title">Editor Visual - %1$s</string>
+    <string name="btn_import_screenshot">📸 Importar Captura</string>
+    <string name="btn_change_screenshot">📸 Cambiar Captura</string>
+    <string name="btn_remove_screenshot">🗑️ Quitar Fondo</string>
+    <string name="screenshot_imported_toast">¡Captura de pantalla importada con éxito!</string>
+    <string name="screenshot_removed_toast">Captura de pantalla eliminada</string>
+    <string name="screenshot_import_error">No se pudo cargar la imagen seleccionada</string>
+    <string name="visual_editor_hint">Mueve, redimensiona y alinea tus controles directamente sobre los botones del juego.</string>
+    <string name="visual_editor_no_screenshot_hint">📸 ¡Toca « Importar Captura » para cargar una captura del juego y colocar tus botones encima!</string>
+    <string name="visual_editor_bg_opacity">Fondo: %1$d%%</string>
 </resources>

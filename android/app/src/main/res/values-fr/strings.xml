@@ -182,6 +182,12 @@
     <string name="overlay_notif_text">Profil: %1$s • Touchez pour configurer</string>
     <string name="overlay_service_started">Service de mapping démarré</string>
     <string name="overlay_service_stopped">Service de mapping arrêté</string>
+    <string name="overlay_btn_peek">👁️ Peek</string>
+    <string name="overlay_btn_opacity">Opacité %1$d%%</string>
+    <string name="overlay_btn_assign">🎮 Assigner</string>
+    <string name="overlay_btn_size_inc">➕ Taille</string>
+    <string name="overlay_btn_size_dec">➖ Taille</string>
+    <string name="overlay_btn_nudge">Micro-ajustement</string>
 
     <!-- Legacy / Compat -->
     <string name="shizuku_connected">Service Shizuku Connecté</string>
@@ -214,4 +220,17 @@
     <string name="conn_quality_bt_fast">🟢 Bluetooth Excellent (250Hz)</string>
     <string name="conn_quality_bt_std">🟡 Bluetooth Standard (125Hz)</string>
     <string name="conn_quality_slow">🔴 Latence Élevée (&gt;16ms)</string>
+
+    <!-- Visual HUD Layout Editor & Screenshots -->
+    <string name="btn_visual_editor">📐 Éditeur Visuel (Capture HUD)</string>
+    <string name="visual_editor_title">Éditeur Visuel - %1$s</string>
+    <string name="btn_import_screenshot">📸 Importer Capture</string>
+    <string name="btn_change_screenshot">📸 Changer Capture</string>
+    <string name="btn_remove_screenshot">🗑️ Retirer Fond</string>
+    <string name="screenshot_imported_toast">Capture d\'écran importée avec succès !</string>
+    <string name="screenshot_removed_toast">Capture d\'écran retirée</string>
+    <string name="screenshot_import_error">Impossible de charger l\'image sélectionnée</string>
+    <string name="visual_editor_hint">Déplacez, redimensionnez et alignez vos touches directement sur les icônes de votre jeu.</string>
+    <string name="visual_editor_no_screenshot_hint">📸 Touchez « Importer Capture » pour charger une capture d\'écran de votre jeu et disposer vos touches dessus !</string>
+    <string name="visual_editor_bg_opacity">Fond : %1$d%%</string>
 </resources>

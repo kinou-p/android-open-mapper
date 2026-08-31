@@ -48,5 +48,8 @@ data class GameProfile(
     var buttons: MutableList<ButtonConfig> = mutableListOf(),
 
     @SerializedName("settings")
-    var settings: GameSettings = GameSettings()
+    var settings: GameSettings = GameSettings(),
+
+    @SerializedName("custom_screenshot_path")
+    var customScreenshotPath: String? = null
 )

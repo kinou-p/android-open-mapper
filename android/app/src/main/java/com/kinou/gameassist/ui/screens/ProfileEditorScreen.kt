@@ -48,6 +48,7 @@ fun ProfileEditorScreen(
     onDeleteProfile: (String) -> Unit,
     onDuplicateProfile: (GameProfile) -> Unit,
     onImportProfile: (String) -> Boolean,
+    onOpenVisualEditor: (GameProfile) -> Unit,
     liveRx: Float = 0f,
     liveRy: Float = 0f,
     onBack: () -> Unit
@@ -108,6 +109,7 @@ fun ProfileEditorScreen(
                     onSave = { onSaveProfile(prof) },
                     onDelete = { profileToDelete = prof },
                     onDuplicate = { onDuplicateProfile(prof) },
+                    onOpenVisualEditor = { onOpenVisualEditor(prof) },
                     onExport = {
                         val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
                         val json = gson.toJson(prof)
@@ -237,6 +239,7 @@ fun ProfileCard(
     onSave: () -> Unit,
     onDelete: () -> Unit,
     onDuplicate: () -> Unit,
+    onOpenVisualEditor: () -> Unit,
     onExport: () -> Unit
 ) {
     val context = LocalContext.current
@@ -376,6 +379,25 @@ fun ProfileCard(
                             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.btn_delete), tint = NeonPink)
                         }
                     }
+                }
+
+                // Bouton Principal: Éditeur Visuel (Capture HUD)
+                Button(
+                    onClick = onOpenVisualEditor,
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                ) {
+                    Icon(Icons.Default.DashboardCustomize, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        stringResource(R.string.btn_visual_editor),
+                        color = DarkBackground,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
                 }
 
                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
@@ -915,24 +937,37 @@ fun ProfileCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(stringResource(R.string.key_mapping_title), fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 13.sp)
-                            IconButton(
-                                onClick = {
-                                    val newBtn = ButtonConfig(
-                                        id = "btn_${UUID.randomUUID().toString().take(6)}",
-                                        label = "Action ${profile.buttons.size + 1}",
-                                        gamepadButton = "BUTTON_A",
-                                        x = 0.5f,
-                                        y = 0.5f,
-                                        radius = 0.045f,
-                                        mode = ButtonMode.TAP
-                                    )
-                                    profile.buttons.add(newBtn)
-                                    onSave()
-                                    buttonToEditKey = newBtn
-                                    showKeyPickerDialog = true
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedButton(
+                                    onClick = onOpenVisualEditor,
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier.height(30.dp)
+                                ) {
+                                    Icon(Icons.Default.DashboardCustomize, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Disposition HUD", fontSize = 11.sp, color = NeonCyan, fontWeight = FontWeight.Bold)
                                 }
-                            ) {
-                                Icon(Icons.Default.AddCircle, contentDescription = stringResource(R.string.btn_add), tint = NeonCyan)
+                                IconButton(
+                                    onClick = {
+                                        val newBtn = ButtonConfig(
+                                            id = "btn_${UUID.randomUUID().toString().take(6)}",
+                                            label = "Action ${profile.buttons.size + 1}",
+                                            gamepadButton = "BUTTON_A",
+                                            x = 0.5f,
+                                            y = 0.5f,
+                                            radius = 0.045f,
+                                            mode = ButtonMode.TAP
+                                        )
+                                        profile.buttons.add(newBtn)
+                                        onSave()
+                                        buttonToEditKey = newBtn
+                                        showKeyPickerDialog = true
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(Icons.Default.AddCircle, contentDescription = stringResource(R.string.btn_add), tint = NeonCyan)
+                                }
                             }
                         }
 

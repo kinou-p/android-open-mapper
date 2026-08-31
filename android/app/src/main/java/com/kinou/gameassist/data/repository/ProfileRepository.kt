@@ -65,6 +65,10 @@ class ProfileRepository(private val context: Context) {
     }
 
     fun deleteProfile(id: String): Boolean {
+        val existing = getProfile(id)
+        if (existing?.customScreenshotPath != null) {
+            ScreenshotManager.deleteScreenshot(existing.customScreenshotPath)
+        }
         val file = File(profilesDir, "$id.json")
         return file.delete()
     }
@@ -93,9 +97,11 @@ class ProfileRepository(private val context: Context) {
 
     fun duplicateProfile(profile: GameProfile): GameProfile {
         val newId = "profile_${UUID.randomUUID().toString().take(8)}"
+        val newScreenshotPath = ScreenshotManager.duplicateScreenshot(context, newId, profile.customScreenshotPath)
         val copy = profile.copy(
             id = newId,
             name = "${profile.name} (Copie)",
+            customScreenshotPath = newScreenshotPath,
             buttons = profile.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
         )
         val isFr = com.kinou.gameassist.data.language.LanguageManager.isFrench(context)
