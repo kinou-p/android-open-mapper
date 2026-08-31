@@ -45,7 +45,8 @@ class ShizukuTouchInjector {
             val eventTime = SystemClock.uptimeMillis()
 
             pointerPool.addOrUpdate(pointerId, clampedX, clampedY, pressure)
-            val (props, coords, targetIndex) = pointerPool.buildPointerArrays(pointerId)
+            val targetIndex = pointerPool.populatePointerBuffers(pointerId)
+            val count = pointerPool.getActiveCount()
             val action = if (isFirstPointer) {
                 MotionEvent.ACTION_DOWN
             } else {
@@ -56,9 +57,9 @@ class ShizukuTouchInjector {
                 downTime,
                 eventTime,
                 action,
-                props.size,
-                props,
-                coords,
+                count,
+                pointerPool.cachedProperties,
+                pointerPool.cachedCoords,
                 0,
                 0,
                 1.0f,
@@ -84,16 +85,16 @@ class ShizukuTouchInjector {
             val eventTime = SystemClock.uptimeMillis()
 
             pointerPool.addOrUpdate(pointerId, clampedX, clampedY, pressure)
-
-            val (props, coords, _) = pointerPool.buildPointerArrays(pointerId)
+            pointerPool.populatePointerBuffers(pointerId)
+            val count = pointerPool.getActiveCount()
 
             val event = MotionEvent.obtain(
                 downTime,
                 eventTime,
                 MotionEvent.ACTION_MOVE,
-                props.size,
-                props,
-                coords,
+                count,
+                pointerPool.cachedProperties,
+                pointerPool.cachedCoords,
                 0,
                 0,
                 1.0f,
@@ -122,7 +123,8 @@ class ShizukuTouchInjector {
             pointerPool.addOrUpdate(pointerId, finalX, finalY, 0.0f)
 
             val isLastPointer = pointerPool.getActiveCount() == 1
-            val (props, coords, targetIndex) = pointerPool.buildPointerArrays(pointerId)
+            val targetIndex = pointerPool.populatePointerBuffers(pointerId)
+            val count = pointerPool.getActiveCount()
 
             val action = if (isLastPointer) {
                 MotionEvent.ACTION_UP
@@ -134,9 +136,9 @@ class ShizukuTouchInjector {
                 downTime,
                 eventTime,
                 action,
-                props.size,
-                props,
-                coords,
+                count,
+                pointerPool.cachedProperties,
+                pointerPool.cachedCoords,
                 0,
                 0,
                 1.0f,
@@ -160,15 +162,16 @@ class ShizukuTouchInjector {
             if (pointerPool.getActiveCount() == 0) return
 
             val eventTime = SystemClock.uptimeMillis()
-            val (props, coords, _) = pointerPool.buildPointerArrays(-1)
+            pointerPool.populatePointerBuffers(-1)
+            val count = pointerPool.getActiveCount()
 
             val event = MotionEvent.obtain(
                 downTime,
                 eventTime,
                 MotionEvent.ACTION_CANCEL,
-                props.size,
-                props,
-                coords,
+                count,
+                pointerPool.cachedProperties,
+                pointerPool.cachedCoords,
                 0,
                 0,
                 1.0f,

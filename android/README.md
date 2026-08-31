@@ -94,6 +94,56 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ---
 
+## 🏛️ Architecture Système
+
+```mermaid
+flowchart TB
+    subgraph KERNEL ["Noyau Linux & Périphériques"]
+        DEV["/dev/input/event* (Gamepad USB/BT)"]
+        SYS_INPUT["Android InputManager Service"]
+    end
+
+    subgraph ENGINE ["Moteur d'Entrée OpenMapper"]
+        LIR["LinuxInputReader<br/>(Shizuku elevated cat / getevent)"]
+        BIP["BinaryInputParser<br/>(Zero-Alloc 24B / 16B Parsing)"]
+        GE["GamepadEngine (Loop 120-240 Hz)"]
+        
+        MP["MovementProcessor<br/>(RAA Dither & Jiggle Strafe)"]
+        CP["CameraProcessor<br/>(Dual-Pointer Handoff & 180° Flick)"]
+        BP["ButtonProcessor<br/>(Hold / Tap / Slide Cancel)"]
+    end
+
+    subgraph INJECTION ["Couche Injection Shizuku"]
+        STI["ShizukuTouchInjector (ReentrantLock)"]
+        PP["PointerPool (Humanized Jitter & Pressure)"]
+        IIH["IInputManagerHelper (AIDL / Reflection)"]
+    end
+
+    subgraph OVERLAY ["Interface & Services Android"]
+        OS["OverlayService (Foreground Special Use)"]
+        EHO["EdgeHandleOverlayView (Drawer 16dp)"]
+        HEO["HudEditorOverlayView (Canvas 2D + Pinch-to-Resize)"]
+    end
+
+    subgraph CLOUD ["Backend Serverless Cloudflare"]
+        HONO["Worker Hono (API REST)"]
+        D1[("Cloudflare D1 (SQLite Edge)")]
+    end
+
+    DEV -->|Flux binaire struct input_event| LIR
+    LIR --> BIP --> GE
+    GE --> MP & CP & BP
+    MP & CP & BP --> STI
+    STI --> PP --> IIH
+    IIH -->|injectInputEvent mode 0 ASYNC| SYS_INPUT
+
+    OS --> EHO & HEO & GE
+    OS -.->|Profils JSON & Votes| HONO
+    HONO --> D1
+```
+
+---
+
 ## 🏗️ Structure du Projet
 
 ```

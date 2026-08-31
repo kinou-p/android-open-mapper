@@ -1053,4 +1053,19 @@ class HudEditorOverlayView(
         invalidate()
         return super.onGenericMotionEvent(event)
     }
+
+    fun releaseBitmap() {
+        screenshotBitmap?.let {
+            if (!it.isRecycled) {
+                it.recycle()
+            }
+        }
+        screenshotBitmap = null
+        invalidate()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        releaseBitmap()
+    }
 }

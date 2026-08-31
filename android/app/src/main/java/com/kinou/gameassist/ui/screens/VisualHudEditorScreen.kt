@@ -29,20 +29,23 @@ fun VisualHudEditorScreen(
     val context = LocalContext.current
     val activity = context as? Activity
 
+    var screenshotBitmap by remember(profile.id, profile.customScreenshotPath) {
+        mutableStateOf(ScreenshotManager.loadScreenshotBitmap(profile.customScreenshotPath))
+    }
+
+    var editorViewRef by remember { mutableStateOf<HudEditorOverlayView?>(null) }
+
     // Force landscape orientation to match the exact game screen aspect ratio
     DisposableEffect(Unit) {
         val previousOrientation = activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         onDispose {
             activity?.requestedOrientation = previousOrientation
+            screenshotBitmap?.recycle()
+            screenshotBitmap = null
+            editorViewRef?.releaseBitmap()
         }
     }
-
-    var screenshotBitmap by remember(profile.id, profile.customScreenshotPath) {
-        mutableStateOf(ScreenshotManager.loadScreenshotBitmap(profile.customScreenshotPath))
-    }
-
-    var editorViewRef by remember { mutableStateOf<HudEditorOverlayView?>(null) }
 
     // System Photo Picker launcher
     val photoPickerLauncher = rememberLauncherForActivityResult(

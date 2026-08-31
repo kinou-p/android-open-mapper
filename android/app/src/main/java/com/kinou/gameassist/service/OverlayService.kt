@@ -301,6 +301,7 @@ class OverlayService : LifecycleService() {
 
     private fun closeHudEditor() {
         editorView?.let {
+            it.releaseBitmap()
             windowManager.removeView(it)
             editorView = null
         }

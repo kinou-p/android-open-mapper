@@ -2,32 +2,53 @@ package com.kinou.gameassist.injector
 
 import android.view.MotionEvent
 import java.util.Random
-import java.util.concurrent.ConcurrentHashMap
 
 data class PointerState(
-    val id: Int,
-    var x: Float,
-    var y: Float,
+    var id: Int = 0,
+    var x: Float = 0f,
+    var y: Float = 0f,
     var basePressure: Float = 0.55f,
     var currentPressure: Float = 0.55f,
     var touchMajor: Float = 42.0f,
     var touchMinor: Float = 36.0f,
-    var size: Float = 0.10f
+    var size: Float = 0.10f,
+    var active: Boolean = false
 )
 
 class PointerPool {
-    private val activePointers = ConcurrentHashMap<Int, PointerState>()
+    companion object {
+        const val MAX_POINTERS = 10
+    }
+
+    private val states = Array(MAX_POINTERS) { id ->
+        PointerState(id = id, x = 0f, y = 0f)
+    }
+
+    // Pre-allocated static arrays for MotionEvent.obtain with 0 heap allocation on the hot path
+    val cachedProperties = Array(MAX_POINTERS) { MotionEvent.PointerProperties() }
+    val cachedCoords = Array(MAX_POINTERS) { MotionEvent.PointerCoords() }
+
     private val random = Random()
+    private var activeCount = 0
 
-    fun getActiveCount(): Int = activePointers.size
+    fun getActiveCount(): Int = activeCount
 
-    fun contains(pointerId: Int): Boolean = activePointers.containsKey(pointerId)
+    fun contains(pointerId: Int): Boolean {
+        return pointerId in 0 until MAX_POINTERS && states[pointerId].active
+    }
 
-    fun get(pointerId: Int): PointerState? = activePointers[pointerId]
+    fun get(pointerId: Int): PointerState? {
+        if (pointerId in 0 until MAX_POINTERS && states[pointerId].active) {
+            return states[pointerId]
+        }
+        return null
+    }
 
     fun addOrUpdate(pointerId: Int, x: Float, y: Float, requestedPressure: Float? = null) {
-        val state = activePointers[pointerId]
-        if (state != null) {
+        if (pointerId !in 0 until MAX_POINTERS) return
+        val state = states[pointerId]
+
+        if (state.active) {
             state.x = x
             state.y = y
             // Organic micro-fluctuation during movement (+/- 0.02)
@@ -40,6 +61,11 @@ class PointerPool {
             state.touchMinor = (state.touchMinor + ellipseJitter * 0.8f).coerceIn(30.0f, 44.0f)
             state.size = (state.touchMajor / 400.0f).coerceIn(0.08f, 0.15f)
         } else {
+            state.active = true
+            activeCount++
+            state.x = x
+            state.y = y
+
             // New touch down: Generate organic human touch characteristics
             // Pressure randomized between 0.45 and 0.70
             val p = requestedPressure?.takeIf { it in 0.45f..0.70f }
@@ -50,63 +76,62 @@ class PointerPool {
             val minor = 32.0f + random.nextFloat() * 8.0f
             val normSize = major / 400.0f
 
-            activePointers[pointerId] = PointerState(
-                id = pointerId,
-                x = x,
-                y = y,
-                basePressure = p,
-                currentPressure = p,
-                touchMajor = major,
-                touchMinor = minor,
-                size = normSize
-            )
+            state.basePressure = p
+            state.currentPressure = p
+            state.touchMajor = major
+            state.touchMinor = minor
+            state.size = normSize
         }
     }
 
     fun remove(pointerId: Int): PointerState? {
-        return activePointers.remove(pointerId)
+        if (pointerId !in 0 until MAX_POINTERS) return null
+        val state = states[pointerId]
+        if (state.active) {
+            state.active = false
+            activeCount = maxOf(0, activeCount - 1)
+            return state
+        }
+        return null
     }
 
     fun clear() {
-        activePointers.clear()
+        for (i in 0 until MAX_POINTERS) {
+            states[i].active = false
+        }
+        activeCount = 0
     }
 
     /**
-     * Prepares PointerProperties and PointerCoords arrays for MotionEvent.obtain.
-     * Returns a Triple of (propertiesArray, coordsArray, targetPointerIndex).
+     * Prepares PointerProperties and PointerCoords in pre-allocated buffers without any heap allocations.
+     * Returns targetPointerIndex (the index of targetPointerId in the active slice [0 until activeCount]).
      */
-    fun buildPointerArrays(targetPointerId: Int): Triple<Array<MotionEvent.PointerProperties>, Array<MotionEvent.PointerCoords>, Int> {
-        val size = activePointers.size
-        val properties = Array(size) { MotionEvent.PointerProperties() }
-        val coords = Array(size) { MotionEvent.PointerCoords() }
-
+    fun populatePointerBuffers(targetPointerId: Int): Int {
         var targetIndex = 0
-        var index = 0
+        var outIndex = 0
 
-        // Sort keys for deterministic ordering
-        val sortedKeys = activePointers.keys().toList().sorted()
+        for (id in 0 until MAX_POINTERS) {
+            val state = states[id]
+            if (!state.active) continue
 
-        for (pid in sortedKeys) {
-            val state = activePointers[pid] ?: continue
+            cachedProperties[outIndex].id = id
+            cachedProperties[outIndex].toolType = MotionEvent.TOOL_TYPE_FINGER
 
-            properties[index].id = pid
-            properties[index].toolType = MotionEvent.TOOL_TYPE_FINGER
+            cachedCoords[outIndex].x = state.x
+            cachedCoords[outIndex].y = state.y
+            cachedCoords[outIndex].pressure = state.currentPressure
+            cachedCoords[outIndex].size = state.size
+            cachedCoords[outIndex].touchMajor = state.touchMajor
+            cachedCoords[outIndex].touchMinor = state.touchMinor
+            cachedCoords[outIndex].toolMajor = state.touchMajor
+            cachedCoords[outIndex].toolMinor = state.touchMinor
 
-            coords[index].x = state.x
-            coords[index].y = state.y
-            coords[index].pressure = state.currentPressure
-            coords[index].size = state.size
-            coords[index].touchMajor = state.touchMajor
-            coords[index].touchMinor = state.touchMinor
-            coords[index].toolMajor = state.touchMajor
-            coords[index].toolMinor = state.touchMinor
-
-            if (pid == targetPointerId) {
-                targetIndex = index
+            if (id == targetPointerId) {
+                targetIndex = outIndex
             }
-            index++
+            outIndex++
         }
 
-        return Triple(properties, coords, targetIndex)
+        return targetIndex
     }
 }

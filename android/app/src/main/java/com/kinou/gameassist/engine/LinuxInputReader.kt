@@ -18,7 +18,9 @@ class LinuxInputReader(
     private val engine: GamepadEngine,
     private val scope: CoroutineScope
 ) {
-    private var process: Process? = null
+    private val activeProcesses = mutableListOf<Process>()
+    private val activeStreams = mutableListOf<InputStream>()
+    private val processLock = Any()
     private var isRunning = false
     private var readerJob: Job? = null
 
@@ -32,6 +34,30 @@ class LinuxInputReader(
     private var hatLeft = false
     private var hatRight = false
 
+    private val shizukuNewProcessMethod by lazy {
+        try {
+            val m = Shizuku::class.java.getDeclaredMethod(
+                "newProcess",
+                Array<String>::class.java,
+                Array<String>::class.java,
+                String::class.java
+            )
+            m.isAccessible = true
+            m
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun spawnShizukuProcess(cmd: Array<String>): Process? {
+        return try {
+            shizukuNewProcessMethod?.invoke(null, cmd, null, null) as? Process
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     fun start() {
         if (isRunning) return
         isRunning = true
@@ -41,31 +67,38 @@ class LinuxInputReader(
                 val gamepadNodes = findGamepadEventNodes()
                 val is64Bit = isKernel64Bit()
 
-                val cmd = if (gamepadNodes.isNotEmpty()) {
-                    // Direct binary read from the identified gamepad event node
-                    arrayOf("cat", gamepadNodes[0])
+                if (gamepadNodes.isNotEmpty()) {
+                    // Multi-node parallel streaming: captures buttons/sticks, touchpad, and motion gyro simultaneously
+                    for (node in gamepadNodes) {
+                        launch(Dispatchers.IO) {
+                            val proc = spawnShizukuProcess(arrayOf("cat", node)) ?: return@launch
+                            val inStream = proc.inputStream
+                            synchronized(processLock) {
+                                activeProcesses.add(proc)
+                                activeStreams.add(inStream)
+                            }
+                            try {
+                                runBinaryStream(inStream, is64Bit)
+                            } finally {
+                                try { inStream.close() } catch (_: Exception) {}
+                                try { proc.destroy() } catch (_: Exception) {}
+                            }
+                        }
+                    }
                 } else {
                     // Fallback to system getevent in quiet hex mode
-                    arrayOf("getevent", "-q")
-                }
-
-                val method = Shizuku::class.java.getDeclaredMethod(
-                    "newProcess",
-                    Array<String>::class.java,
-                    Array<String>::class.java,
-                    String::class.java
-                )
-                method.isAccessible = true
-                process = method.invoke(null, cmd, null, null) as? Process
-
-                val inStream = process?.inputStream ?: return@launch
-
-                if (gamepadNodes.isNotEmpty()) {
-                    // High-speed direct binary stream
-                    runBinaryStream(inStream, is64Bit)
-                } else {
-                    // High-speed zero-allocation ASCII hex stream
-                    runAsciiHexStream(inStream)
+                    val proc = spawnShizukuProcess(arrayOf("getevent", "-q")) ?: return@launch
+                    val inStream = proc.inputStream
+                    synchronized(processLock) {
+                        activeProcesses.add(proc)
+                        activeStreams.add(inStream)
+                    }
+                    try {
+                        runAsciiHexStream(inStream)
+                    } finally {
+                        try { inStream.close() } catch (_: Exception) {}
+                        try { proc.destroy() } catch (_: Exception) {}
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -76,12 +109,24 @@ class LinuxInputReader(
     fun stop() {
         isRunning = false
         readerJob?.cancel()
-        try {
-            process?.destroy()
-        } catch (e: Exception) {
-            // Ignore
+        synchronized(processLock) {
+            for (stream in activeStreams) {
+                try {
+                    stream.close()
+                } catch (_: Exception) {}
+            }
+            activeStreams.clear()
+
+            for (proc in activeProcesses) {
+                try {
+                    proc.outputStream?.close()
+                } catch (_: Exception) {}
+                try {
+                    proc.destroy()
+                } catch (_: Exception) {}
+            }
+            activeProcesses.clear()
         }
-        process = null
     }
 
     /**
