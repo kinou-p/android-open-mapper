@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
@@ -306,9 +307,17 @@ fun ProfileCard(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(profileName, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                        Text(
+                            text = profileName,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
                         IconButton(
                             onClick = {
                                 renameInputText = profile.name
@@ -368,32 +377,19 @@ fun ProfileCard(
             if (isSelected) {
                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
 
-                // Actions: Renommer, Exporter, Dupliquer
+                // Actions: Exporter, Dupliquer
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = {
-                            renameInputText = profile.name
-                            showRenameDialog = true
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.btn_rename), color = NeonCyan, fontSize = 11.sp)
-                    }
-
-                    OutlinedButton(
                         onClick = onExport,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Share, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.btn_export), color = TextPrimary, fontSize = 11.sp)
+                        Text(stringResource(R.string.btn_export), color = NeonCyan, fontSize = 11.sp, maxLines = 1)
                     }
 
                     OutlinedButton(
@@ -403,7 +399,7 @@ fun ProfileCard(
                     ) {
                         Icon(Icons.Default.ContentCopy, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.btn_duplicate), color = TextPrimary, fontSize = 11.sp)
+                        Text(stringResource(R.string.btn_duplicate), color = TextPrimary, fontSize = 11.sp, maxLines = 1)
                     }
                 }
 
