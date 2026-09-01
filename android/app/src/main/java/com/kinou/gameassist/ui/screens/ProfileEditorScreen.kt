@@ -268,6 +268,9 @@ fun ProfileCard(
     var flickAdsSafety by remember(profile.id) { mutableStateOf(profile.camera.flickAdsSafety) }
     var adsEnabled by remember(profile.id) { mutableStateOf(profile.camera.adsSensitivityEnabled) }
     var adsMultiplier by remember(profile.id) { mutableFloatStateOf(profile.camera.adsSensitivityMultiplier) }
+    var antiRecoilEnabled by remember(profile.id) { mutableStateOf(profile.camera.antiRecoilEnabled) }
+    var antiRecoilSpeed by remember(profile.id) { mutableFloatStateOf(profile.camera.antiRecoilSpeed) }
+    var antiRecoilAdsOnly by remember(profile.id) { mutableStateOf(profile.camera.antiRecoilAdsOnly) }
     var invertX by remember(profile.id) { mutableStateOf(profile.camera.invertX) }
     var invertY by remember(profile.id) { mutableStateOf(profile.camera.invertY) }
     var deadzoneJoy by remember(profile.id) { mutableFloatStateOf(profile.joystick.deadzone) }
@@ -731,6 +734,100 @@ fun ProfileCard(
                                     },
                                     onValueChangeFinished = { onSave() }
                                 )
+                            }
+                        }
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
+                        // --- Anti-Recul Vertical (Compensateur de Tir) ---
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        stringResource(R.string.anti_recoil_title),
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        stringResource(R.string.anti_recoil_desc),
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Switch(
+                                    checked = antiRecoilEnabled,
+                                    onCheckedChange = {
+                                        antiRecoilEnabled = it
+                                        profile.camera.antiRecoilEnabled = it
+                                        onSave()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = DarkBackground,
+                                        checkedTrackColor = NeonOrange,
+                                        uncheckedThumbColor = TextSecondary,
+                                        uncheckedTrackColor = DarkSurface
+                                    )
+                                )
+                            }
+
+                            AnimatedVisibility(visible = antiRecoilEnabled) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    SliderSetting(
+                                        label = stringResource(R.string.anti_recoil_speed_label),
+                                        value = antiRecoilSpeed,
+                                        range = 0.1f..10.0f,
+                                        displayText = "%.1fx".format(antiRecoilSpeed),
+                                        onValueChange = {
+                                            antiRecoilSpeed = it
+                                            profile.camera.antiRecoilSpeed = it
+                                        },
+                                        onValueChangeFinished = { onSave() }
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                stringResource(R.string.anti_recoil_ads_only_title),
+                                                color = NeonCyan,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                stringResource(R.string.anti_recoil_ads_only_desc),
+                                                color = TextSecondary,
+                                                fontSize = 10.sp
+                                            )
+                                        }
+                                        Switch(
+                                            checked = antiRecoilAdsOnly,
+                                            onCheckedChange = {
+                                                antiRecoilAdsOnly = it
+                                                profile.camera.antiRecoilAdsOnly = it
+                                                onSave()
+                                            },
+                                            colors = SwitchDefaults.colors(
+                                                checkedThumbColor = DarkBackground,
+                                                checkedTrackColor = NeonCyan,
+                                                uncheckedThumbColor = TextSecondary,
+                                                uncheckedTrackColor = DarkSurface
+                                            )
+                                        )
+                                    }
+                                }
                             }
                         }
 

@@ -70,6 +70,15 @@ data class CameraConfig(
     @SerialName("invert_y")
     var invertY: Boolean = false,
 
+    @SerialName("anti_recoil_enabled")
+    var antiRecoilEnabled: Boolean = false,
+
+    @SerialName("anti_recoil_speed")
+    var antiRecoilSpeed: Float = 1.0f,
+
+    @SerialName("anti_recoil_ads_only")
+    var antiRecoilAdsOnly: Boolean = false,
+
     @SerialName("max_step_pixels")
     var maxStepPixels: Float = 55.0f
 )

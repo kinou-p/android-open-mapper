@@ -457,10 +457,13 @@ function validateProfileStructure(obj: any): { valid: boolean; error?: string } 
       checkNumber(c.flickBoost ?? c.flick_boost, 0.5, 10.0, 'Camera flick_boost') ||
       checkNumber(c.flickThreshold ?? c.flick_threshold, 0.1, 1.0, 'Camera flick_threshold') ||
       checkNumber(c.adsSensitivityMultiplier ?? c.ads_sensitivity_multiplier, 0.05, 5.0, 'Camera ads_sensitivity_multiplier') ||
+      checkNumber(c.antiRecoilSpeed ?? c.anti_recoil_speed, 0.0, 50.0, 'Camera anti_recoil_speed') ||
       checkNumber(c.maxStepPixels ?? c.max_step_pixels, 1.0, 150.0, 'Camera max_step_pixels') ||
       checkBoolean(c.enabled, 'Camera enabled') ||
       checkBoolean(c.flickAdsSafety ?? c.flick_ads_safety, 'Camera flick_ads_safety') ||
       checkBoolean(c.adsSensitivityEnabled ?? c.ads_sensitivity_enabled, 'Camera ads_sensitivity_enabled') ||
+      checkBoolean(c.antiRecoilEnabled ?? c.anti_recoil_enabled, 'Camera anti_recoil_enabled') ||
+      checkBoolean(c.antiRecoilAdsOnly ?? c.anti_recoil_ads_only, 'Camera anti_recoil_ads_only') ||
       checkBoolean(c.invertX ?? c.invert_x, 'Camera invert_x') ||
       checkBoolean(c.invertY ?? c.invert_y, 'Camera invert_y') ||
       checkString(c.responseCurve ?? c.response_curve, 50, 'Camera response_curve');

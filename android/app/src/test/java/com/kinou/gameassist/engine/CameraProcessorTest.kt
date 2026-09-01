@@ -221,4 +221,53 @@ class CameraProcessorTest {
         assertEquals(3, injector.events.size)
         assertEquals("UP", injector.events[2].type)
     }
+
+    @Test
+    fun testAntiRecoilDescentWhenFiringWithNeutralStick() {
+        config.antiRecoilEnabled = true
+        config.antiRecoilSpeed = 2.0f
+        config.antiRecoilAdsOnly = false
+        processor.config = config
+
+        // Stick neutral (rx=0, ry=0), but firing = true
+        processor.process(0.0f, 0.0f, isAiming = false, isFiring = true)
+
+        assertEquals(2, injector.events.size)
+        assertEquals("DOWN", injector.events[0].type)
+        assertEquals(1740f, injector.events[0].x, 0.01f)
+        assertEquals(540f, injector.events[0].y, 0.01f)
+
+        assertEquals("MOVE", injector.events[1].type)
+        assertEquals(1740f, injector.events[1].x, 0.01f) // X stays centered
+        assertTrue("Anti-recoil should smoothly pull down (Y > origY)", injector.events[1].y > 540f)
+    }
+
+    @Test
+    fun testAntiRecoilDisabledDoesNotMoveWhenStickNeutral() {
+        config.antiRecoilEnabled = false
+        config.antiRecoilSpeed = 2.0f
+        processor.config = config
+
+        // Stick neutral, firing = true but anti-recoil disabled
+        processor.process(0.0f, 0.0f, isAiming = false, isFiring = true)
+        assertTrue(injector.events.isEmpty())
+    }
+
+    @Test
+    fun testAntiRecoilAdsOnlyConstraint() {
+        config.antiRecoilEnabled = true
+        config.antiRecoilSpeed = 2.0f
+        config.antiRecoilAdsOnly = true
+        processor.config = config
+
+        // 1. Hipfire: isAiming = false -> No anti-recoil
+        processor.process(0.0f, 0.0f, isAiming = false, isFiring = true)
+        assertTrue(injector.events.isEmpty())
+
+        // 2. ADS: isAiming = true -> Anti-recoil activates
+        processor.process(0.0f, 0.0f, isAiming = true, isFiring = true)
+        assertEquals(2, injector.events.size)
+        assertEquals("DOWN", injector.events[0].type)
+        assertTrue(injector.events[1].y > 540f)
+    }
 }

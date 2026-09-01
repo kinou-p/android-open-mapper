@@ -113,6 +113,11 @@
     <string name="smoothing_title">Suavização (Anti-Jitter / Tremores)</string>
     <string name="aim_assist_title">🧲 Aim Assist Permanente (Keep-Alive RAA)</string>
     <string name="aim_assist_desc">Mantém a assistência de rotação de mira ativa continuamente.</string>
+    <string name="anti_recoil_title">🛡️ Anti-Recuo Vertical (Compensador de Tiro)</string>
+    <string name="anti_recoil_desc">Compensa automaticamente o recuo puxando suavemente a mira para baixo ao atirar.</string>
+    <string name="anti_recoil_speed_label">Velocidade de Descida (Força do Recuo)</string>
+    <string name="anti_recoil_ads_only_title">🎯 Ativar Apenas ao Mirar (ADS)</string>
+    <string name="anti_recoil_ads_only_desc">Apenas aplica a descida ao mirar na mira telescópica (LT / ADS).</string>
     <string name="jiggle_strafe_title">⚡ Auto Jiggle Strafe (Esquiva ao Atirar)</string>
     <string name="jiggle_strafe_desc">Oscila lateralmente ao atirar para desviar de balas.</string>
     <string name="jiggle_random_pattern_title">🎲 Padrões Aleatórios e Fintas</string>

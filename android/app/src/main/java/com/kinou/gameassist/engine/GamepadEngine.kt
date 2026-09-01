@@ -155,7 +155,7 @@ class GamepadEngine(
                         val isAds = ltPressed || buttonProcessor.isAdsActive()
                         val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
                         movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
-                        cameraProcessor.process(rx, ry, isAds)
+                        cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
 
                         val nowNanos = System.nanoTime()
                         buttonProcessor.processPendingTaps(nowNanos)

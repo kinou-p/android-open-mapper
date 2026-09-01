@@ -25,7 +25,7 @@ class CameraProcessor(
     @Volatile private var prevSmoothDx = 0.0f
     @Volatile private var prevSmoothDy = 0.0f
 
-    fun process(rx: Float, ry: Float, isAiming: Boolean = false) {
+    fun process(rx: Float, ry: Float, isAiming: Boolean = false, isFiring: Boolean = false) {
         // Snapshot local immuable de la config pour toute la frame.
         val cfg = config
         if (!cfg.enabled) {
@@ -48,57 +48,72 @@ class CameraProcessor(
         val innerDeadzone = cfg.deadzone
         val outerDeadzone = cfg.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
 
-        if (mag > innerDeadzone) {
-            val normMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
-            val rawDirX = rx / mag
-            val rawDirY = ry / mag
-            val dirX = if (cfg.invertX) -rawDirX else rawDirX
-            val dirY = if (cfg.invertY) -rawDirY else rawDirY
+        // Fine-grained dynamic resolution scaling: ~17.6px per frame at max tilt for 3200px screen
+        val baseStep = screenW * 0.0055f
 
-            var curvedMagX: Float
-            var curvedMagY: Float
+        // Anti-Recoil computation: pulls camera downwards (positive delta Y) during weapon fire
+        val isRecoilActive = cfg.antiRecoilEnabled && isFiring && (!cfg.antiRecoilAdsOnly || isAiming)
+        val recoilDy = if (isRecoilActive) {
+            cfg.antiRecoilSpeed.coerceIn(0.0f, 20.0f) * (baseStep * 0.12f)
+        } else {
+            0.0f
+        }
 
-            when (cfg.responseCurve) {
-                com.kinou.gameassist.data.model.ResponseCurve.LINEAR -> {
-                    curvedMagX = normMag
-                    curvedMagY = normMag
-                }
-                com.kinou.gameassist.data.model.ResponseCurve.STANDARD -> {
-                    val curved = normMag.pow(cfg.acceleration)
-                    curvedMagX = curved
-                    curvedMagY = curved
-                }
-                com.kinou.gameassist.data.model.ResponseCurve.DYNAMIC -> {
-                    val curved = 0.30f * normMag + 0.70f * normMag.pow(2.2f)
-                    curvedMagX = curved
-                    curvedMagY = curved
-                }
-                com.kinou.gameassist.data.model.ResponseCurve.DYNAMIC_BOOST -> {
-                    val threshold = cfg.flickThreshold.coerceIn(0.65f, 0.95f)
-                    if (normMag <= threshold) {
-                        val scale = normMag / threshold
-                        val base = (0.25f * scale + 0.75f * scale.pow(2.2f)) * 0.85f
-                        curvedMagX = base
-                        curvedMagY = base
-                    } else {
-                        val turboT = (normMag - threshold) / (1.0f - threshold)
-                        // ADS Safety: If aiming in ADS (LT held) and safety is enabled, dampen turbo boost
-                        val effectiveBoost = if (cfg.flickAdsSafety && isAiming) 1.20f else cfg.flickBoost.coerceIn(1.2f, 5.0f)
-                        
-                        // Horizontal (X) gets full turbo boost for 180° turns
-                        curvedMagX = 0.85f + (turboT * (effectiveBoost - 0.85f))
-                        
-                        // Vertical (Y) stays stable and level to prevent aiming at the sky/ground
-                        curvedMagY = 0.85f + (turboT * 0.15f)
+        if (mag > innerDeadzone || recoilDy > 0f) {
+            val adsFactor = if (cfg.adsSensitivityEnabled && isAiming) cfg.adsSensitivityMultiplier.coerceIn(0.05f, 3.0f) else 1.0f
+
+            var targetDx = 0.0f
+            var targetDy = recoilDy
+
+            if (mag > innerDeadzone) {
+                val normMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
+                val rawDirX = rx / mag
+                val rawDirY = ry / mag
+                val dirX = if (cfg.invertX) -rawDirX else rawDirX
+                val dirY = if (cfg.invertY) -rawDirY else rawDirY
+
+                var curvedMagX: Float
+                var curvedMagY: Float
+
+                when (cfg.responseCurve) {
+                    com.kinou.gameassist.data.model.ResponseCurve.LINEAR -> {
+                        curvedMagX = normMag
+                        curvedMagY = normMag
+                    }
+                    com.kinou.gameassist.data.model.ResponseCurve.STANDARD -> {
+                        val curved = normMag.pow(cfg.acceleration)
+                        curvedMagX = curved
+                        curvedMagY = curved
+                    }
+                    com.kinou.gameassist.data.model.ResponseCurve.DYNAMIC -> {
+                        val curved = 0.30f * normMag + 0.70f * normMag.pow(2.2f)
+                        curvedMagX = curved
+                        curvedMagY = curved
+                    }
+                    com.kinou.gameassist.data.model.ResponseCurve.DYNAMIC_BOOST -> {
+                        val threshold = cfg.flickThreshold.coerceIn(0.65f, 0.95f)
+                        if (normMag <= threshold) {
+                            val scale = normMag / threshold
+                            val base = (0.25f * scale + 0.75f * scale.pow(2.2f)) * 0.85f
+                            curvedMagX = base
+                            curvedMagY = base
+                        } else {
+                            val turboT = (normMag - threshold) / (1.0f - threshold)
+                            // ADS Safety: If aiming in ADS (LT held) and safety is enabled, dampen turbo boost
+                            val effectiveBoost = if (cfg.flickAdsSafety && isAiming) 1.20f else cfg.flickBoost.coerceIn(1.2f, 5.0f)
+
+                            // Horizontal (X) gets full turbo boost for 180° turns
+                            curvedMagX = 0.85f + (turboT * (effectiveBoost - 0.85f))
+
+                            // Vertical (Y) stays stable and level to prevent aiming at the sky/ground
+                            curvedMagY = 0.85f + (turboT * 0.15f)
+                        }
                     }
                 }
+
+                targetDx = dirX * curvedMagX * cfg.sensitivityX * adsFactor * baseStep
+                targetDy += dirY * curvedMagY * cfg.sensitivityY * adsFactor * baseStep
             }
-            
-            // Fine-grained dynamic resolution scaling: ~17.6px per frame at max tilt for 3200px screen
-            val baseStep = screenW * 0.0055f
-            val adsFactor = if (cfg.adsSensitivityEnabled && isAiming) cfg.adsSensitivityMultiplier.coerceIn(0.05f, 3.0f) else 1.0f
-            val targetDx = dirX * curvedMagX * cfg.sensitivityX * adsFactor * baseStep
-            val targetDy = dirY * curvedMagY * cfg.sensitivityY * adsFactor * baseStep
 
             // Exponential moving average (EMA) smoothing
             val alpha = (1.0f - cfg.smoothing.coerceIn(0f, 0.8f))

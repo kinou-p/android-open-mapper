@@ -113,6 +113,11 @@
     <string name="smoothing_title">Lissage (Anti-Jitter / Tremblements)</string>
     <string name="aim_assist_title">🧲 Aim Assist Permanent (Keep-Alive RAA)</string>
     <string name="aim_assist_desc">Maintient l\'aide à la visée rotative active en continu.</string>
+    <string name="anti_recoil_title">🛡️ Anti-Recul Vertical (Compensateur de Tir)</string>
+    <string name="anti_recoil_desc">Compense automatiquement le recul de l\'arme en tirant doucement la visée vers le bas lors du tir.</string>
+    <string name="anti_recoil_speed_label">Vitesse de Descente (Force du Recul)</string>
+    <string name="anti_recoil_ads_only_title">🎯 Activer Uniquement en Visée (ADS)</string>
+    <string name="anti_recoil_ads_only_desc">N\'applique la descente que lorsque vous visez dans la lunette (LT / ADS).</string>
     <string name="jiggle_strafe_title">⚡ Auto Jiggle Strafe (Esquive en Tir)</string>
     <string name="jiggle_strafe_desc">Oscille latéralement pendant le tir pour esquiver les balles.</string>
     <string name="jiggle_random_pattern_title">🎲 Patterns Aléatoires &amp; Feintes</string>

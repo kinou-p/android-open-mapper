@@ -113,6 +113,11 @@
     <string name="smoothing_title">Smoothing (Anti-Jitter / Shaking)</string>
     <string name="aim_assist_title">🧲 Permanent Aim Assist (RAA Keep-Alive)</string>
     <string name="aim_assist_desc">Keeps rotational aim assist active continuously.</string>
+    <string name="anti_recoil_title">🛡️ Vertical Anti-Recoil (Recoil Compensator)</string>
+    <string name="anti_recoil_desc">Automatically compensates for weapon climb by smoothly pulling aim downward while firing.</string>
+    <string name="anti_recoil_speed_label">Descent Speed (Recoil Strength)</string>
+    <string name="anti_recoil_ads_only_title">🎯 ADS Only (Aiming Down Sights)</string>
+    <string name="anti_recoil_ads_only_desc">Only applies downward pull when aiming down sights (LT / ADS).</string>
     <string name="jiggle_strafe_title">⚡ Auto Jiggle Strafe (Dodge While Firing)</string>
     <string name="jiggle_strafe_desc">Oscillates laterally while firing to dodge enemy bullets.</string>
     <string name="jiggle_random_pattern_title">🎲 Random Patterns &amp; Feints</string>
