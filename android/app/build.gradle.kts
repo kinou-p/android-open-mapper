@@ -32,9 +32,17 @@ val keystoreAlias = System.getenv("KEY_ALIAS")
 // extractible par décompilation. Elle ne fournit qu'une intégrité anti-falsification
 // (HMAC-SHA256), PAS une authentification. L'anti-abus réel repose sur les rate-limits
 // serveur et le jeton d'appareil opaque émis par /api/device/register.
-val apiSigningSecret = System.getenv("APP_SECRET")
+val rawAppSecret = System.getenv("APP_SECRET")
     ?: localProperties.getProperty("APP_SECRET")
-    ?: "development_fallback_secret_key"
+val isReleaseTask = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+
+val apiSigningSecret = when {
+    !rawAppSecret.isNullOrBlank() -> rawAppSecret
+    isReleaseTask -> throw GradleException(
+        "❌ ERREUR CRITIQUE : La variable APP_SECRET (variable d'environnement ou dans local.properties) doit être définie pour compiler en mode Release !"
+    )
+    else -> "development_fallback_secret_key"
+}
 
 android {
     namespace = "com.kinou.gameassist"

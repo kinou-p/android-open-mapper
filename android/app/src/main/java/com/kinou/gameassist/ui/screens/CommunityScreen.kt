@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -282,7 +283,10 @@ fun CommunityScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(profiles, key = { it.id ?: "" }) { item ->
+                    itemsIndexed(
+                        items = profiles,
+                        key = { index, item -> item.id?.takeIf { it.isNotBlank() } ?: "profile_idx_$index" }
+                    ) { _, item ->
                         CommunityProfileCard(
                             profile = item,
                             onVote = { voteVal ->

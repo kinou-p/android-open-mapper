@@ -145,15 +145,16 @@ class MainActivity : AppCompatActivity() {
         setContent {
             GameAssistTheme {
                 var currentScreen by remember { mutableStateOf(Screen.HOME) }
-                var profiles by remember { mutableStateOf<List<GameProfile>>(emptyList()) }
+                val profiles by repository.profilesFlow.collectAsState()
                 var selectedProfile by remember { mutableStateOf<GameProfile?>(null) }
                 val isServiceRunning by OverlayService.isServiceRunningFlow.collectAsState()
 
-                LaunchedEffect(Unit) {
-                    val loadedProfiles = repository.getAllProfilesAsync()
-                    profiles = loadedProfiles
-                    if (selectedProfile == null) {
-                        selectedProfile = loadedProfiles.firstOrNull()
+                LaunchedEffect(profiles) {
+                    if (selectedProfile == null && profiles.isNotEmpty()) {
+                        selectedProfile = profiles.firstOrNull()
+                    } else if (selectedProfile != null) {
+                        val matched = profiles.firstOrNull { it.id == selectedProfile?.id }
+                        selectedProfile = matched ?: profiles.firstOrNull()
                     }
                 }
 
@@ -297,20 +298,11 @@ class MainActivity : AppCompatActivity() {
                                 onDeleteProfile = { id ->
                                     lifecycleScope.launch {
                                         repository.deleteProfileAsync(id)
-                                        val all = repository.getAllProfilesAsync()
-                                        profiles = all
-                                        val next = all.firstOrNull()
-                                        selectedProfile = next
-                                        if (next != null) {
-                                            OverlayService.updateLiveProfile(next)
-                                        }
                                     }
                                 },
                                 onDuplicateProfile = { prof ->
                                     lifecycleScope.launch {
                                         val copy = repository.duplicateProfileAsync(prof)
-                                        val all = repository.getAllProfilesAsync()
-                                        profiles = all
                                         selectedProfile = copy
                                         OverlayService.updateLiveProfile(copy)
                                     }
@@ -319,8 +311,6 @@ class MainActivity : AppCompatActivity() {
                                     lifecycleScope.launch {
                                         val imp = repository.importProfileFromJsonAsync(json)
                                         if (imp != null) {
-                                            val all = repository.getAllProfilesAsync()
-                                            profiles = all
                                             selectedProfile = imp
                                             OverlayService.updateLiveProfile(imp)
                                             onResult(true)
@@ -345,7 +335,6 @@ class MainActivity : AppCompatActivity() {
                                         onSaveProfile = { updated ->
                                             lifecycleScope.launch {
                                                 repository.saveProfileAsync(updated)
-                                                profiles = repository.getAllProfilesAsync()
                                             }
                                             OverlayService.updateLiveProfile(updated)
                                         },
@@ -360,10 +349,7 @@ class MainActivity : AppCompatActivity() {
                                 repository = repository,
                                 localProfiles = profiles,
                                 onProfileImported = { imp ->
-                                    lifecycleScope.launch {
-                                        profiles = repository.getAllProfilesAsync()
-                                        selectedProfile = imp
-                                    }
+                                    selectedProfile = imp
                                     OverlayService.updateLiveProfile(imp)
                                 }
                             )

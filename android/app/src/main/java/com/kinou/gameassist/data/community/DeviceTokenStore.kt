@@ -39,9 +39,18 @@ object DeviceTokenStore {
             )
         } catch (e: Throwable) {
             Log.w(TAG, "KeyStore inaccessible ou corrompu, purge et tentative de réinitialisation...", e)
-            // 2. En cas de clé corrompue (OEM / MAJ OS), purge du fichier chiffré et réessai
+            // 2. En cas de clé corrompue (OEM / MAJ OS), purge du fichier chiffré, suppression de l'alias KeyStore et réessai
             try {
                 appContext.deleteSharedPreferences(PREFS)
+                try {
+                    val keyStore = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+                    if (keyStore.containsAlias(MasterKey.DEFAULT_MASTER_KEY_ALIAS)) {
+                        keyStore.deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+                    }
+                } catch (ksEx: Throwable) {
+                    Log.w(TAG, "Impossible de purger l'alias AndroidKeyStore", ksEx)
+                }
+
                 val masterKey = MasterKey.Builder(appContext)
                     .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
                     .build()

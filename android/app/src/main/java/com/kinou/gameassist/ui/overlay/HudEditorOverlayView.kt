@@ -36,6 +36,7 @@ class HudEditorOverlayView(
     private val density = resources.displayMetrics.density
 
     // Screenshot Bitmap for In-App & Overlay visual layout
+    @Volatile
     private var screenshotBitmap: Bitmap? = null
     private val bitmapSrcRect = Rect()
     private val bitmapDstRect = RectF()
@@ -43,7 +44,7 @@ class HudEditorOverlayView(
 
     fun setScreenshot(bitmap: Bitmap?) {
         screenshotBitmap = bitmap
-        invalidate()
+        postInvalidateOnAnimation()
     }
 
     // Selection & Drag State

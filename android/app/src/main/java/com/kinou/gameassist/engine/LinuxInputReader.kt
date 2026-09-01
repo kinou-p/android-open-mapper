@@ -30,14 +30,14 @@ class LinuxInputReader(
     private var readerJob: Job? = null
 
     // Trigger states
-    private var ltActive = false
-    private var rtActive = false
+    private val ltActive = AtomicBoolean(false)
+    private val rtActive = AtomicBoolean(false)
 
     // DPad Hat states
-    private var hatUp = false
-    private var hatDown = false
-    private var hatLeft = false
-    private var hatRight = false
+    private val hatUp = AtomicBoolean(false)
+    private val hatDown = AtomicBoolean(false)
+    private val hatLeft = AtomicBoolean(false)
+    private val hatRight = AtomicBoolean(false)
 
     private val shizukuNewProcessMethod by lazy {
         try {
@@ -194,6 +194,12 @@ class LinuxInputReader(
             }
             activeProcesses.clear()
         }
+        ltActive.set(false)
+        rtActive.set(false)
+        hatUp.set(false)
+        hatDown.set(false)
+        hatLeft.set(false)
+        hatRight.set(false)
         isStartingOrRunning.set(false)
     }
 
@@ -344,9 +350,9 @@ class LinuxInputReader(
             // ABS_GAS (0x0009): RT Trigger
             0x0009 -> {
                 val isDown = rawValue > 30L
-                if (isDown != rtActive) {
-                    rtActive = isDown
-                    if (rtActive) engine.onRawButtonDown("BUTTON_R2")
+                val prev = rtActive.getAndSet(isDown)
+                if (isDown != prev) {
+                    if (isDown) engine.onRawButtonDown("BUTTON_R2")
                     else engine.onRawButtonUp("BUTTON_R2")
                 }
             }
@@ -354,9 +360,9 @@ class LinuxInputReader(
             // ABS_BRAKE (0x000a): LT Trigger
             0x000a -> {
                 val isDown = rawValue > 30L
-                if (isDown != ltActive) {
-                    ltActive = isDown
-                    if (ltActive) engine.onRawButtonDown("BUTTON_L2")
+                val prev = ltActive.getAndSet(isDown)
+                if (isDown != prev) {
+                    if (isDown) engine.onRawButtonDown("BUTTON_L2")
                     else engine.onRawButtonUp("BUTTON_L2")
                 }
             }
@@ -366,14 +372,14 @@ class LinuxInputReader(
                 val leftNow = rawValue < 0
                 val rightNow = rawValue > 0
 
-                if (leftNow != hatLeft) {
-                    hatLeft = leftNow
-                    if (hatLeft) engine.onRawButtonDown("DPAD_LEFT")
+                val prevLeft = hatLeft.getAndSet(leftNow)
+                if (leftNow != prevLeft) {
+                    if (leftNow) engine.onRawButtonDown("DPAD_LEFT")
                     else engine.onRawButtonUp("DPAD_LEFT")
                 }
-                if (rightNow != hatRight) {
-                    hatRight = rightNow
-                    if (hatRight) engine.onRawButtonDown("DPAD_RIGHT")
+                val prevRight = hatRight.getAndSet(rightNow)
+                if (rightNow != prevRight) {
+                    if (rightNow) engine.onRawButtonDown("DPAD_RIGHT")
                     else engine.onRawButtonUp("DPAD_RIGHT")
                 }
             }
@@ -383,14 +389,14 @@ class LinuxInputReader(
                 val upNow = rawValue < 0
                 val downNow = rawValue > 0
 
-                if (upNow != hatUp) {
-                    hatUp = upNow
-                    if (hatUp) engine.onRawButtonDown("DPAD_UP")
+                val prevUp = hatUp.getAndSet(upNow)
+                if (upNow != prevUp) {
+                    if (upNow) engine.onRawButtonDown("DPAD_UP")
                     else engine.onRawButtonUp("DPAD_UP")
                 }
-                if (downNow != hatDown) {
-                    hatDown = downNow
-                    if (hatDown) engine.onRawButtonDown("DPAD_DOWN")
+                val prevDown = hatDown.getAndSet(downNow)
+                if (downNow != prevDown) {
+                    if (downNow) engine.onRawButtonDown("DPAD_DOWN")
                     else engine.onRawButtonUp("DPAD_DOWN")
                 }
             }

@@ -12,6 +12,7 @@ export function generateDeviceToken(): string {
 
 export async function normalizeDeviceToken(token: unknown): Promise<string | null> {
   if (!isValidHex64(token)) return null;
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+  const canonicalToken = token.toLowerCase();
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalToken));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }

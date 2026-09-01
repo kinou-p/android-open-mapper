@@ -34,6 +34,7 @@ class CommunityApiClient(private val context: Context) {
         const val BASE_URL = "https://openmapper-api.android-openmapper.workers.dev"
         private const val TIMEOUT_MS = 10_000
         const val DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
+        private const val USER_AGENT = "OpenMapper-Android/${BuildConfig.VERSION_NAME}"
 
         // Shared in-memory cache across instances and screen recompositions
         private val profilesCache = java.util.concurrent.ConcurrentHashMap<String, CacheEntry<CommunityListResponse>>()
@@ -80,7 +81,7 @@ class CommunityApiClient(private val context: Context) {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "OpenMapper-Android/${BuildConfig.VERSION_NAME}")
+                setRequestProperty("User-Agent", USER_AGENT)
             }
             val payload = mapOf("appVersion" to BuildConfig.VERSION_NAME)
             val jsonBody = json.encodeToString(payload)
@@ -169,7 +170,7 @@ class CommunityApiClient(private val context: Context) {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "OpenMapper-Android/1.0.0")
+                setRequestProperty("User-Agent", USER_AGENT)
             }
 
             val responseCode = conn.responseCode
@@ -219,7 +220,7 @@ class CommunityApiClient(private val context: Context) {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "OpenMapper-Android/1.0.0")
+                setRequestProperty("User-Agent", USER_AGENT)
             }
 
             val responseCode = conn.responseCode
@@ -255,7 +256,7 @@ class CommunityApiClient(private val context: Context) {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "OpenMapper-Android/1.0.0")
+                setRequestProperty("User-Agent", USER_AGENT)
             }
 
             val payload = mapOf(
@@ -300,7 +301,7 @@ class CommunityApiClient(private val context: Context) {
                 readTimeout = 5000
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("User-Agent", "OpenMapper-Android/${BuildConfig.VERSION_NAME}")
+                setRequestProperty("User-Agent", USER_AGENT)
             }
             val payload = mapOf("deviceToken" to ensureDeviceToken())
             val bodyBytes = json.encodeToString(payload).toByteArray(Charsets.UTF_8)
@@ -333,7 +334,7 @@ class CommunityApiClient(private val context: Context) {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=UTF-8")
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "OpenMapper-Android/1.0.1")
+                setRequestProperty("User-Agent", USER_AGENT)
             }
 
             val jsonBody = json.encodeToString(request)
@@ -365,7 +366,7 @@ class CommunityApiClient(private val context: Context) {
         }
     }
 
-    suspend fun sendTelemetryPing(appVersion: String = "1.0.1") = withContext(Dispatchers.IO) {
+    suspend fun sendTelemetryPing(appVersion: String = BuildConfig.VERSION_NAME) = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
         try {
             val url = URL("$BASE_URL/api/telemetry/ping")

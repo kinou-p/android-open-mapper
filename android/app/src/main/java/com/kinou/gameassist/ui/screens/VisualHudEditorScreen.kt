@@ -40,11 +40,7 @@ fun VisualHudEditorScreen(
         val loaded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             ScreenshotManager.loadScreenshotBitmap(context, profile.customScreenshotPath)
         }
-        val oldBmp = screenshotBitmap
         screenshotBitmap = loaded
-        if (oldBmp != null && !oldBmp.isRecycled && oldBmp != loaded) {
-            oldBmp.recycle()
-        }
     }
 
     var editorViewRef by remember { mutableStateOf<HudEditorOverlayView?>(null) }
@@ -56,11 +52,6 @@ fun VisualHudEditorScreen(
         onDispose {
             activity?.requestedOrientation = previousOrientation
             editorViewRef?.releaseBitmap()
-            screenshotBitmap?.let { bmp ->
-                if (!bmp.isRecycled) {
-                    bmp.recycle()
-                }
-            }
             screenshotBitmap = null
         }
     }

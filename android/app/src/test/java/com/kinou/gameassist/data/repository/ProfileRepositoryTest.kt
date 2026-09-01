@@ -104,11 +104,64 @@ class ProfileRepositoryTest {
         assertEquals(1.45f, badProfile.camera.sensitivityX, 0.001f) // Infinity fallback
         assertEquals(1.15f, badProfile.camera.sensitivityY, 0.001f) // Negative fallback to default
         assertEquals(0.08f, badProfile.camera.deadzone, 0.001f) // NaN fallback
+        assertEquals(55.0f, badProfile.camera.maxStepPixels, 0.001f) // Default fallback
+
+        badProfile.camera.maxStepPixels = 999.0f
+        ProfileRepository.validateAndSanitizeProfile(badProfile)
+        assertEquals(150.0f, badProfile.camera.maxStepPixels, 0.001f) // Clamped to 150.0
+
+        badProfile.camera.maxStepPixels = -5.0f
+        ProfileRepository.validateAndSanitizeProfile(badProfile)
+        assertEquals(55.0f, badProfile.camera.maxStepPixels, 0.001f) // Reset to default for <= 0
 
         val btn = badProfile.buttons.first()
         assertEquals(100, btn.label.length)
         assertEquals(0.5f, btn.x, 0.001f) // NaN fallback
         assertEquals(-0.5f, btn.y, 0.001f) // Clamped to -0.5
         assertEquals(0.045f, btn.radius, 0.001f) // Negative fallback
+    }
+
+    @Test
+    fun testProfileIdSanitizationAgainstPathTraversal() {
+        val dangerousIds = listOf(
+            "../../../shared_prefs/openmapper_device_token",
+            "..\\..\\windows\\style",
+            "/absolute/path/override",
+            "profile with spaces",
+            "profile;rm -rf /",
+            "id_with_special_char$#@",
+            "",
+            "   "
+        )
+
+        for (dangerId in dangerousIds) {
+            val profile = GameProfile(
+                id = dangerId,
+                name = "Test Traversal"
+            )
+            val result = ProfileRepository.validateAndSanitizeProfile(profile)
+            assertTrue(result)
+            assertNotEquals(dangerId, profile.id)
+            assertTrue("ID assaini doit correspondre au pattern sûr: ${profile.id}", profile.id.matches(Regex("^[a-zA-Z0-9_-]{1,64}$")))
+        }
+    }
+
+    @Test
+    fun testValidProfileIdKept() {
+        val validIds = listOf(
+            "profile_12345678",
+            "codm_mp_default",
+            "custom-profile-v2",
+            "abcDEF123_-"
+        )
+
+        for (validId in validIds) {
+            val profile = GameProfile(
+                id = validId,
+                name = "Valid Profile"
+            )
+            ProfileRepository.validateAndSanitizeProfile(profile)
+            assertEquals(validId, profile.id)
+        }
     }
 }

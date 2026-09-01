@@ -19,7 +19,16 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 app.use('*', cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Accept', 'User-Agent', 'Authorization', 'X-Requested-With', 'Origin'],
+  allowHeaders: [
+    'Content-Type',
+    'Accept',
+    'User-Agent',
+    'Authorization',
+    'X-Requested-With',
+    'Origin',
+    'X-Timestamp',
+    'X-Signature',
+  ],
   maxAge: 86400,
 }));
 
@@ -270,6 +279,11 @@ export function recordMemRateLimit(
   windowMs: number,
   maxRequests: number
 ): { blocked: boolean; retryAfterSec: number } {
+  // Le pré-filtre par bucket 1-minute n'est valide que pour les règles avec fenêtre de ~60 secondes
+  if (windowMs !== 60_000) {
+    return { blocked: false, retryAfterSec: 0 };
+  }
+
   const currentMinute = Math.floor(now / 60_000);
 
   // Rotation des buckets en O(1) sans boucle d'itération
@@ -393,7 +407,7 @@ function validateProfileStructure(obj: any): { valid: boolean; error?: string } 
       checkNumber(c.flickBoost ?? c.flick_boost, 0.5, 10.0, 'Camera flick_boost') ||
       checkNumber(c.flickThreshold ?? c.flick_threshold, 0.1, 1.0, 'Camera flick_threshold') ||
       checkNumber(c.adsSensitivityMultiplier ?? c.ads_sensitivity_multiplier, 0.05, 5.0, 'Camera ads_sensitivity_multiplier') ||
-      checkNumber(c.maxStepPixels ?? c.max_step_pixels, 1.0, 500.0, 'Camera max_step_pixels') ||
+      checkNumber(c.maxStepPixels ?? c.max_step_pixels, 1.0, 150.0, 'Camera max_step_pixels') ||
       checkBoolean(c.enabled, 'Camera enabled') ||
       checkBoolean(c.flickAdsSafety ?? c.flick_ads_safety, 'Camera flick_ads_safety') ||
       checkBoolean(c.adsSensitivityEnabled ?? c.ads_sensitivity_enabled, 'Camera ads_sensitivity_enabled') ||

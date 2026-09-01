@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.core.util.AtomicFile
 import com.kinou.gameassist.data.model.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -25,6 +28,13 @@ class ProfileRepository private constructor(context: Context) {
     @Volatile
     private var isCacheLoaded = false
 
+    private val _profilesFlow = MutableStateFlow<List<GameProfile>>(emptyList())
+    val profilesFlow: StateFlow<List<GameProfile>> = _profilesFlow.asStateFlow()
+
+    private fun updateFlowLocked() {
+        _profilesFlow.value = profileCache.values.map { it.deepCopy() }
+    }
+
     companion object {
         @Volatile
         private var instance: ProfileRepository? = null
@@ -40,7 +50,12 @@ class ProfileRepository private constructor(context: Context) {
             }
         }
 
+        private val SAFE_ID_REGEX = Regex("^[a-zA-Z0-9_-]{1,64}$")
+
         fun validateAndSanitizeProfile(p: GameProfile): Boolean {
+            if (p.id.isBlank() || !SAFE_ID_REGEX.matches(p.id)) {
+                p.id = "profile_${UUID.randomUUID().toString().take(8)}"
+            }
             if (p.name.isBlank()) p.name = "Custom Profile"
             if (p.packageName.isBlank()) p.packageName = "com.game.app"
 
@@ -67,6 +82,7 @@ class ProfileRepository private constructor(context: Context) {
             if (!cam.flickBoost.isFinite()) cam.flickBoost = 2.0f else cam.flickBoost = cam.flickBoost.coerceIn(1.0f, 5.0f)
             if (!cam.flickThreshold.isFinite()) cam.flickThreshold = 0.80f else cam.flickThreshold = cam.flickThreshold.coerceIn(0.5f, 1.0f)
             if (!cam.adsSensitivityMultiplier.isFinite()) cam.adsSensitivityMultiplier = 0.70f else cam.adsSensitivityMultiplier = cam.adsSensitivityMultiplier.coerceIn(0.1f, 3.0f)
+            if (!cam.maxStepPixels.isFinite() || cam.maxStepPixels <= 0f) cam.maxStepPixels = 55.0f else cam.maxStepPixels = cam.maxStepPixels.coerceIn(1.0f, 150.0f)
 
             // Sanitize Buttons
             if (p.buttons.size > 50) {
@@ -88,6 +104,8 @@ class ProfileRepository private constructor(context: Context) {
             if (!profilesDir.exists()) {
                 profilesDir.mkdirs()
                 initializeDefaultProfiles()
+            } else {
+                loadCacheLocked()
             }
         }
     }
@@ -99,38 +117,52 @@ class ProfileRepository private constructor(context: Context) {
         saveProfileInternal(codmBr)
     }
 
-    suspend fun getAllProfilesAsync(): List<GameProfile> = withContext(Dispatchers.IO) {
-        getAllProfiles()
-    }
-
-    fun getAllProfiles(): List<GameProfile> {
-        synchronized(fileLock) {
-            if (isCacheLoaded && profileCache.isNotEmpty()) {
-                return profileCache.values.map { it.deepCopy() }
-            }
-            val list = mutableListOf<GameProfile>()
-            val files = profilesDir.listFiles { file -> file.extension == "json" } ?: return list
-            profileCache.clear()
+    private fun loadCacheLocked() {
+        val files = profilesDir.listFiles { file -> file.extension == "json" }
+        profileCache.clear()
+        if (files != null) {
             for (f in files) {
                 try {
                     val jsonText = f.readText()
                     val p = json.decodeFromString<GameProfile>(jsonText)
                     ensureRolesMigrated(p)
                     validateAndSanitizeProfile(p)
-                    list.add(p)
                     profileCache[p.id] = p
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
-            if (list.isEmpty()) {
-                val def = createDefaultCodmProfile()
-                saveProfileInternal(def)
-                list.add(def)
-                profileCache[def.id] = def
-            }
+        }
+        if (profileCache.isEmpty()) {
+            val def = createDefaultCodmProfile()
+            saveProfileInternal(def)
+        } else {
             isCacheLoaded = true
-            return list.map { it.deepCopy() }
+            updateFlowLocked()
+        }
+    }
+
+    suspend fun getAllProfilesAsync(): List<GameProfile> = withContext(Dispatchers.IO) {
+        getAllProfiles()
+    }
+
+    fun getAllProfiles(): List<GameProfile> {
+        synchronized(fileLock) {
+            if (!isCacheLoaded) {
+                loadCacheLocked()
+            }
+            return _profilesFlow.value
+        }
+    }
+
+    private fun getProfileFile(id: String): File? {
+        if (!SAFE_ID_REGEX.matches(id)) return null
+        val target = File(profilesDir, "$id.json")
+        return try {
+            val allowedDir = profilesDir.canonicalPath + File.separator
+            if (target.canonicalPath.startsWith(allowedDir)) target else null
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -139,10 +171,11 @@ class ProfileRepository private constructor(context: Context) {
     }
 
     fun getProfile(id: String): GameProfile? {
+        if (!SAFE_ID_REGEX.matches(id)) return null
         synchronized(fileLock) {
             profileCache[id]?.let { return it.deepCopy() }
 
-            val file = File(profilesDir, "$id.json")
+            val file = getProfileFile(id) ?: return null
             if (!file.exists()) return null
             return try {
                 val p = json.decodeFromString<GameProfile>(file.readText())
@@ -180,7 +213,7 @@ class ProfileRepository private constructor(context: Context) {
 
     private fun saveProfileInternal(profile: GameProfile) {
         validateAndSanitizeProfile(profile)
-        val file = File(profilesDir, "${profile.id}.json")
+        val file = getProfileFile(profile.id) ?: return
         val atomicFile = AtomicFile(file)
         val jsonBytes = json.encodeToString(profile).toByteArray(Charsets.UTF_8)
         var fos: FileOutputStream? = null
@@ -190,6 +223,7 @@ class ProfileRepository private constructor(context: Context) {
             atomicFile.finishWrite(fos)
             profileCache[profile.id] = profile.deepCopy()
             isCacheLoaded = true
+            updateFlowLocked()
         } catch (e: Exception) {
             if (fos != null) {
                 atomicFile.failWrite(fos)
@@ -199,14 +233,17 @@ class ProfileRepository private constructor(context: Context) {
     }
 
     fun deleteProfile(id: String): Boolean {
+        if (!SAFE_ID_REGEX.matches(id)) return false
         synchronized(fileLock) {
             val existing = getProfile(id)
             if (existing?.customScreenshotPath != null) {
                 ScreenshotManager.deleteScreenshot(context, existing.customScreenshotPath)
             }
             profileCache.remove(id)
-            val file = File(profilesDir, "$id.json")
-            return file.delete()
+            val file = getProfileFile(id)
+            val deleted = file?.delete() ?: false
+            updateFlowLocked()
+            return deleted
         }
     }
 

@@ -55,12 +55,12 @@ CREATE TRIGGER IF NOT EXISTS trg_votes_update
 AFTER UPDATE OF vote_type ON votes
 BEGIN
   UPDATE profiles SET
-    likes_count = likes_count
+    likes_count = MAX(0, likes_count
       + CASE WHEN NEW.vote_type = 1 THEN 1 ELSE 0 END
-      - CASE WHEN OLD.vote_type = 1 THEN 1 ELSE 0 END,
-    dislikes_count = dislikes_count
+      - CASE WHEN OLD.vote_type = 1 THEN 1 ELSE 0 END),
+    dislikes_count = MAX(0, dislikes_count
       + CASE WHEN NEW.vote_type = -1 THEN 1 ELSE 0 END
-      - CASE WHEN OLD.vote_type = -1 THEN 1 ELSE 0 END,
+      - CASE WHEN OLD.vote_type = -1 THEN 1 ELSE 0 END),
     updated_at = NEW.voted_at
   WHERE id = NEW.profile_id;
 END;
@@ -69,8 +69,8 @@ CREATE TRIGGER IF NOT EXISTS trg_votes_delete
 AFTER DELETE ON votes
 BEGIN
   UPDATE profiles SET
-    likes_count = likes_count - CASE WHEN OLD.vote_type = 1 THEN 1 ELSE 0 END,
-    dislikes_count = dislikes_count - CASE WHEN OLD.vote_type = -1 THEN 1 ELSE 0 END,
+    likes_count = MAX(0, likes_count - CASE WHEN OLD.vote_type = 1 THEN 1 ELSE 0 END),
+    dislikes_count = MAX(0, dislikes_count - CASE WHEN OLD.vote_type = -1 THEN 1 ELSE 0 END),
     updated_at = OLD.voted_at
   WHERE id = OLD.profile_id;
 END;

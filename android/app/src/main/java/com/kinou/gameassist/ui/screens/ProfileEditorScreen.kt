@@ -57,6 +57,12 @@ fun ProfileEditorScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val hapticManager = remember(context) { HapticManager(context) }
+    DisposableEffect(hapticManager) {
+        onDispose {
+            hapticManager.release()
+        }
+    }
     var editingProfileId by remember(currentProfile?.id) { mutableStateOf(currentProfile?.id) }
     var profileToDelete by remember { mutableStateOf<GameProfile?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
@@ -104,6 +110,7 @@ fun ProfileEditorScreen(
                     canDelete = profiles.size > 1,
                     liveRx = if (isSelected) liveRx else 0f,
                     liveRy = if (isSelected) liveRy else 0f,
+                    hapticManager = hapticManager,
                     onSelect = {
                         editingProfileId = prof.id
                         onSelectProfile(prof)
@@ -237,6 +244,7 @@ fun ProfileCard(
     canDelete: Boolean,
     liveRx: Float = 0f,
     liveRy: Float = 0f,
+    hapticManager: HapticManager,
     onSelect: () -> Unit,
     onSave: () -> Unit,
     onDelete: () -> Unit,
@@ -245,12 +253,6 @@ fun ProfileCard(
     onExport: () -> Unit
 ) {
     val context = LocalContext.current
-    val hapticManager = remember(context) { HapticManager(context) }
-    DisposableEffect(hapticManager) {
-        onDispose {
-            hapticManager.release()
-        }
-    }
 
     // Sub-tab selection state (0 = Caméra, 1 = Déplacement, 2 = Touches, 3 = Haptique)
     var selectedTab by remember(profile.id) { mutableIntStateOf(0) }

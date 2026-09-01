@@ -251,6 +251,26 @@ describe('In-Memory O(1) Dual-Bucket Sliding Rate Limiter', () => {
     const freshResult = recordMemRateLimit(key, futureTime, 60_000, 3);
     expect(freshResult.blocked).toBe(false);
   });
+
+  it('ne bloque pas en mémoire les fenêtres différentes de 60_000ms (déléguées à D1 SQLite)', () => {
+    resetMemRateLimitCache();
+    const baseTime = 1_700_000_000_000;
+    const key = 'test-cooldown-or-daily';
+
+    // Règle de cooldown court (ex: 20s, max 1)
+    for (let i = 0; i < 5; i++) {
+      const res = recordMemRateLimit(key, baseTime, 20_000, 1);
+      expect(res.blocked).toBe(false);
+      expect(res.retryAfterSec).toBe(0);
+    }
+
+    // Règle de quota journalier (ex: 24h, max 5)
+    for (let i = 0; i < 10; i++) {
+      const res = recordMemRateLimit(key, baseTime, 86_400_000, 5);
+      expect(res.blocked).toBe(false);
+      expect(res.retryAfterSec).toBe(0);
+    }
+  });
 });
 
 describe('validateProfileStructure Strict Schema & Type Validation', () => {
@@ -322,11 +342,17 @@ describe('validateProfileStructure Strict Schema & Type Validation', () => {
     expect(res2.error).toContain('Joystick radius doit être un nombre valide');
   });
 
-  it('rejette les valeurs numériques hors limites dans joystick', () => {
-    const bad = { ...validProfile, joystick: { ...validProfile.joystick, deadzone: 0.9 } };
-    const res = validateProfileStructure(bad);
-    expect(res.valid).toBe(false);
-    expect(res.error).toContain('hors limites');
+  it('rejette les valeurs numériques hors limites dans joystick et camera', () => {
+    const badJoy = { ...validProfile, joystick: { ...validProfile.joystick, deadzone: 0.9 } };
+    const resJoy = validateProfileStructure(badJoy);
+    expect(resJoy.valid).toBe(false);
+    expect(resJoy.error).toContain('hors limites');
+
+    const badCam = { ...validProfile, camera: { ...validProfile.camera, max_step_pixels: 500.0 } };
+    const resCam = validateProfileStructure(badCam);
+    expect(resCam.valid).toBe(false);
+    expect(resCam.error).toContain('Camera max_step_pixels');
+    expect(resCam.error).toContain('hors limites');
   });
 
   it('rejette les types non numériques injectés dans les boutons', () => {
@@ -422,6 +448,26 @@ describe('normalizeIpForRateLimit (IPv4 & IPv6 /64 Subnet Rate Limiting)', () =>
     expect(keyA).toBe('2a01:cb19:8a00:5400::/64');
     expect(keyB).toBe('2a01:cb19:8a00:5400::/64');
     expect(keyA).toBe(keyB);
+  });
+});
+
+describe('CORS Configuration', () => {
+  it('autorise les en-têtes X-Timestamp et X-Signature lors des requêtes pré-vol (OPTIONS)', async () => {
+    const req = new Request('http://localhost/api/profiles', {
+      method: 'OPTIONS',
+      headers: {
+        'Origin': 'https://example.com',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'Content-Type, X-Timestamp, X-Signature',
+      },
+    });
+
+    const res = await app.fetch(req);
+    expect(res.status).toBe(204);
+    const allowHeaders = res.headers.get('access-control-allow-headers');
+    expect(allowHeaders).toBeDefined();
+    expect(allowHeaders).toContain('X-Timestamp');
+    expect(allowHeaders).toContain('X-Signature');
   });
 });
 

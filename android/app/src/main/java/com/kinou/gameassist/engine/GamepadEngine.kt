@@ -39,7 +39,7 @@ class GamepadEngine(
     @Volatile private var hatRight = false
 
     private val pressedRawButtons = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    private var loopJob: Job? = null
+    private var engineThread: Thread? = null
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
     @Volatile private var isSelectHeld = false
 
@@ -100,14 +100,16 @@ class GamepadEngine(
         val targetHz = hz.coerceIn(30, 240)
         val intervalNanos = 1_000_000_000L / targetHz
 
-        loopJob = scope.launch(
-            Dispatchers.Default +
-                CoroutineExceptionHandler { _, e ->
-                    android.util.Log.e("GamepadEngine", "Engine loop crashed", e)
-                }
-        ) {
+        val thread = Thread({
+            // Priorité Android temps-réel affichage : évite la préemption Linux par les jeux à 120 FPS
+            try {
+                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+            } catch (e: Exception) {
+                android.util.Log.w("GamepadEngine", "Could not set URGENT_DISPLAY priority", e)
+            }
+
             var nextFrameTimeNanos = System.nanoTime()
-            while (isActive && isRunning) {
+            while (isRunning) {
                 try {
                     val camCfg = cameraProcessor.config
                     val isFiring = rtPressed || buttonProcessor.isFireActive()
@@ -122,43 +124,40 @@ class GamepadEngine(
                     nextFrameTimeNanos += intervalNanos
                     val sleepNanos = nextFrameTimeNanos - nowNanos
 
-                    if (sleepNanos > 500_000L) {
+                    if (sleepNanos > 100_000L) {
                         highPrecisionSleep(sleepNanos)
                     } else if (sleepNanos < -intervalNanos * 2) {
                         // Reset clock if severely lagging behind
                         nextFrameTimeNanos = nowNanos
                     } else {
-                        yield()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            Thread.onSpinWait()
+                        }
                     }
-                } catch (ce: CancellationException) {
-                    throw ce
                 } catch (e: Exception) {
                     // Ne jamais laisser une frame défectueuse faire planter le process en pleine partie
                     android.util.Log.e("GamepadEngine", "Frame processing error", e)
                 }
             }
-        }
+        }, "GamepadEngineLoop")
+
+        engineThread = thread
+        thread.start()
     }
 
     /**
-     * Sommeil hybride haute précision à 3 phases pour 120 Hz / 240 Hz :
-     * 1. Sommeil grossier par Coroutine (delay) pour les intervalles > 1.5ms en libérant le thread (marge de ~800µs).
-     * 2. Micro-park nanoseconde sans consommation CPU (LockSupport.parkNanos) pour combler l'écart intermédiaire.
-     * 3. Micro-spinlock final (< 60µs) avec Thread.onSpinWait() pour la précision sub-microseconde sans surchauffe.
+     * Sommeil haute précision à 2 phases pour 120 Hz / 240 Hz sur thread dédié :
+     * 1. Micro-park nanoseconde sans consommation CPU (LockSupport.parkNanos) au niveau OS (Linux clock_nanosleep).
+     * 2. Micro-spinlock final (< 50µs) avec Thread.onSpinWait() pour la précision sub-microseconde sans surchauffe.
      */
-    private suspend fun highPrecisionSleep(targetNanos: Long) {
+    private fun highPrecisionSleep(targetNanos: Long) {
         val start = System.nanoTime()
-        // Phase 1: Coarse delay pour libérer le thread Coroutine
-        val coarseSleepMs = (targetNanos - 800_000L) / 1_000_000L
-        if (coarseSleepMs > 0) {
-            delay(coarseSleepMs)
+        // Phase 1: Micro-park haute résolution au niveau OS (Linux clock_nanosleep)
+        val parkNanos = targetNanos - 50_000L
+        if (parkNanos > 80_000L) {
+            java.util.concurrent.locks.LockSupport.parkNanos(parkNanos)
         }
-        // Phase 2: Micro-park haute résolution au niveau OS (Linux clock_nanosleep / epoll)
-        val remainingAfterDelay = targetNanos - (System.nanoTime() - start)
-        if (remainingAfterDelay > 150_000L) {
-            java.util.concurrent.locks.LockSupport.parkNanos(remainingAfterDelay - 60_000L)
-        }
-        // Phase 3: Spinlock final ultra court (< 60µs)
+        // Phase 2: Spinlock final ultra court (< 50µs)
         while (System.nanoTime() - start < targetNanos) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 Thread.onSpinWait()
@@ -167,7 +166,7 @@ class GamepadEngine(
     }
 
     fun stop() {
-        if (!isRunning && loopJob == null) return
+        if (!isRunning && engineThread == null) return
         isRunning = false
         linuxReader.stop()
         pressedRawButtons.clear()
@@ -176,22 +175,12 @@ class GamepadEngine(
         buttonProcessor.releaseAll()
         hapticManager?.release()
 
-        val job = loopJob
-        loopJob = null
+        val thread = engineThread
+        engineThread = null
+        thread?.interrupt()
 
         // Libération immédiate et inconditionnelle des pointeurs physiques
         injector.resetAllPointers()
-
-        if (job != null && scope.isActive) {
-            scope.launch(NonCancellable) {
-                try {
-                    job.cancelAndJoin()
-                } catch (_: Exception) {
-                } finally {
-                    injector.resetAllPointers()
-                }
-            }
-        }
     }
 
     /**
