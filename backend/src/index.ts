@@ -140,11 +140,40 @@ const verifySignature = async (c: any, next: any) => {
     return c.json({ error: 'Requête expirée ou horloge invalide' }, 401);
   }
 
-  // 3. Lecture du corps puis vérification stricte de la taille en octets (UTF-8)
-  const rawBody = await c.req.text();
-  const bodyByteLength = new TextEncoder().encode(rawBody).byteLength;
-  if (bodyByteLength > MAX_BODY_BYTES) {
-    return c.json({ success: false, error: 'La taille de la requête dépasse la limite autorisée (32 Ko max)' }, 413);
+  // 3. Lecture du corps en streaming borné pour éviter tout DoS mémoire sur flux chunked / sans Content-Length
+  let rawBody = '';
+  if (c.req.raw.body) {
+    const reader = c.req.raw.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let received = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          received += value.byteLength;
+          if (received > MAX_BODY_BYTES) {
+            await reader.cancel();
+            return c.json({ success: false, error: 'La taille de la requête dépasse la limite autorisée (32 Ko max)' }, 413);
+          }
+          chunks.push(value);
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const combined = new Uint8Array(received);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    rawBody = new TextDecoder().decode(combined);
+  } else {
+    rawBody = await c.req.text();
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
+      return c.json({ success: false, error: 'La taille de la requête dépasse la limite autorisée (32 Ko max)' }, 413);
+    }
   }
 
   const path = new URL(c.req.url).pathname;

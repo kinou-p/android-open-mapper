@@ -174,7 +174,14 @@ object BinaryInputParser {
         val code = parseHexInt(bytes, codeStart, codeEnd - codeStart + 1)
         if (code < 0) return false
 
-        val valueLong = parseHexLong(bytes, valueStart, valueEnd - valueStart + 1)
+        val valueLen = valueEnd - valueStart + 1
+        if (valueLen <= 0 || valueLen > 16) return false
+        var valueLong = 0L
+        for (i in 0 until valueLen) {
+            val d = hexCharToInt(bytes[valueStart + i])
+            if (d < 0) return false
+            valueLong = (valueLong shl 4) or d.toLong()
+        }
 
         // Sign extend 32-bit hex to signed Long if needed
         val signedValue = if ((valueLong and 0x80000000L) != 0L && valueLong <= 0xFFFFFFFFL) {
@@ -209,17 +216,6 @@ object BinaryInputParser {
         return result
     }
 
-    private fun parseHexLong(bytes: ByteArray, start: Int, len: Int): Long {
-        if (len <= 0 || len > 16) return 0L
-        var result = 0L
-        for (i in 0 until len) {
-            val d = hexCharToInt(bytes[start + i])
-            if (d < 0) return 0L
-            result = (result shl 4) or d.toLong()
-        }
-        return result
-    }
-
     /**
      * Converts a raw Linux gamepad stick coordinate to normalized Float [-1.0f .. +1.0f].
      *
@@ -231,7 +227,11 @@ object BinaryInputParser {
         return when {
             raw in 0L..65535L -> {
                 val delta = (raw - 32768L).toFloat()
-                (delta / 32768f).coerceIn(-1.0f, 1.0f)
+                if (delta > 0f) {
+                    (delta / 32767f).coerceIn(-1.0f, 1.0f)
+                } else {
+                    (delta / 32768f).coerceIn(-1.0f, 1.0f)
+                }
             }
             raw in -32768L..-1L -> {
                 (raw / 32768f).coerceIn(-1.0f, 1.0f)

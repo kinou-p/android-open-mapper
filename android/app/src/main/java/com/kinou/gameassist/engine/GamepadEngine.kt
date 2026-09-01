@@ -38,10 +38,16 @@ class GamepadEngine(
     @Volatile private var hatLeft = false
     @Volatile private var hatRight = false
 
+    companion object {
+        const val TRIGGER_THRESHOLD = 0.30f
+    }
+
     private val pressedRawButtons = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    private var engineThread: Thread? = null
+    @Volatile private var engineThread: Thread? = null
+    private val lifecycleLock = Any()
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
     @Volatile private var isSelectHeld = false
+    @Volatile private var selectUsedInCombo = false
 
     fun onRawButtonDown(btnName: String) {
         val normalizedName = btnName.trim().uppercase()
@@ -50,17 +56,29 @@ class GamepadEngine(
             return
         }
 
-        if (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START") {
+        val isModifier = (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START")
+        if (isModifier) {
             isSelectHeld = true
+            selectUsedInCombo = false
         }
 
-        if (isSelectHeld) {
+        if (isSelectHeld && !isModifier) {
             when (normalizedName) {
                 "DPAD_UP", "DPAD_RIGHT", "BUTTON_R1" -> {
+                    selectUsedInCombo = true
+                    // Cancel/release the modifier button in the button processor so the in-game action (e.g. Map) doesn't remain active
+                    buttonProcessor.onButtonUp("BUTTON_SELECT")
+                    buttonProcessor.onButtonUp("BUTTON_BACK")
+                    buttonProcessor.onButtonUp("BUTTON_START")
                     onHotSwitchProfile?.invoke(true)
                     return
                 }
                 "DPAD_DOWN", "DPAD_LEFT", "BUTTON_L1" -> {
+                    selectUsedInCombo = true
+                    // Cancel/release the modifier button in the button processor so the in-game action (e.g. Map) doesn't remain active
+                    buttonProcessor.onButtonUp("BUTTON_SELECT")
+                    buttonProcessor.onButtonUp("BUTTON_BACK")
+                    buttonProcessor.onButtonUp("BUTTON_START")
                     onHotSwitchProfile?.invoke(false)
                     return
                 }
@@ -74,8 +92,13 @@ class GamepadEngine(
         val normalizedName = btnName.trim().uppercase()
         pressedRawButtons.remove(normalizedName)
 
-        if (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START") {
+        val isModifier = (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START")
+        if (isModifier) {
             isSelectHeld = false
+            if (selectUsedInCombo) {
+                selectUsedInCombo = false
+                return
+            }
         }
         buttonProcessor.onButtonUp(normalizedName)
     }
@@ -91,58 +114,75 @@ class GamepadEngine(
     }
 
     fun start() {
-        if (isRunning) return
-        isRunning = true
-        injector.connect()
-        linuxReader.start()
+        synchronized(lifecycleLock) {
+            if (isRunning) return
 
-        val hz = currentProfile?.settings?.pollingRateHz ?: 120
-        val targetHz = hz.coerceIn(30, 240)
-        val intervalNanos = 1_000_000_000L / targetHz
-
-        val thread = Thread({
-            // Priorité Android temps-réel affichage : évite la préemption Linux par les jeux à 120 FPS
-            try {
-                android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
-            } catch (e: Exception) {
-                android.util.Log.w("GamepadEngine", "Could not set URGENT_DISPLAY priority", e)
-            }
-
-            var nextFrameTimeNanos = System.nanoTime()
-            while (isRunning) {
+            // Ensure previous thread is completely dead before launching a new one
+            val oldThread = engineThread
+            if (oldThread != null && oldThread.isAlive) {
                 try {
-                    val camCfg = cameraProcessor.config
-                    val isFiring = rtPressed || buttonProcessor.isFireActive()
-                    val isAds = ltPressed || buttonProcessor.isAdsActive()
-                    val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
-                    movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
-                    cameraProcessor.process(rx, ry, isAds)
-
-                    val nowNanos = System.nanoTime()
-                    buttonProcessor.processPendingTaps(nowNanos)
-
-                    nextFrameTimeNanos += intervalNanos
-                    val sleepNanos = nextFrameTimeNanos - nowNanos
-
-                    if (sleepNanos > 100_000L) {
-                        highPrecisionSleep(sleepNanos)
-                    } else if (sleepNanos < -intervalNanos * 2) {
-                        // Reset clock if severely lagging behind
-                        nextFrameTimeNanos = nowNanos
-                    } else {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            Thread.onSpinWait()
-                        }
-                    }
-                } catch (e: Exception) {
-                    // Ne jamais laisser une frame défectueuse faire planter le process en pleine partie
-                    android.util.Log.e("GamepadEngine", "Frame processing error", e)
+                    oldThread.interrupt()
+                    oldThread.join(300)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
                 }
             }
-        }, "GamepadEngineLoop")
 
-        engineThread = thread
-        thread.start()
+            if (isRunning) return
+            isRunning = true
+
+            hapticManager?.registerListener()
+            injector.connect()
+            linuxReader.start()
+
+            val hz = currentProfile?.settings?.pollingRateHz ?: 120
+            val targetHz = hz.coerceIn(30, 240)
+            val intervalNanos = 1_000_000_000L / targetHz
+
+            val thread = Thread({
+                // Priorité Android temps-réel affichage : évite la préemption Linux par les jeux à 120 FPS
+                try {
+                    android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_DISPLAY)
+                } catch (e: Exception) {
+                    android.util.Log.w("GamepadEngine", "Could not set URGENT_DISPLAY priority", e)
+                }
+
+                var nextFrameTimeNanos = System.nanoTime()
+                while (isRunning) {
+                    try {
+                        val camCfg = cameraProcessor.config
+                        val isFiring = rtPressed || buttonProcessor.isFireActive()
+                        val isAds = ltPressed || buttonProcessor.isAdsActive()
+                        val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
+                        movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
+                        cameraProcessor.process(rx, ry, isAds)
+
+                        val nowNanos = System.nanoTime()
+                        buttonProcessor.processPendingTaps(nowNanos)
+
+                        nextFrameTimeNanos += intervalNanos
+                        val sleepNanos = nextFrameTimeNanos - nowNanos
+
+                        if (sleepNanos > 100_000L) {
+                            highPrecisionSleep(sleepNanos)
+                        } else if (sleepNanos < -intervalNanos * 2) {
+                            // Reset clock if severely lagging behind
+                            nextFrameTimeNanos = nowNanos
+                        } else {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                Thread.onSpinWait()
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // Ne jamais laisser une frame défectueuse faire planter le process en pleine partie
+                        android.util.Log.e("GamepadEngine", "Frame processing error", e)
+                    }
+                }
+            }, "GamepadEngineLoop")
+
+            engineThread = thread
+            thread.start()
+        }
     }
 
     /**
@@ -166,18 +206,27 @@ class GamepadEngine(
     }
 
     fun stop() {
-        if (!isRunning && engineThread == null) return
-        isRunning = false
-        linuxReader.stop()
-        pressedRawButtons.clear()
-        movementProcessor.release()
-        cameraProcessor.release()
-        buttonProcessor.releaseAll()
-        hapticManager?.release()
+        val threadToJoin: Thread?
+        synchronized(lifecycleLock) {
+            if (!isRunning && engineThread == null) return
+            isRunning = false
+            linuxReader.stop()
+            pressedRawButtons.clear()
+            movementProcessor.release()
+            cameraProcessor.release()
+            buttonProcessor.releaseAll()
+            hapticManager?.release()
 
-        val thread = engineThread
-        engineThread = null
-        thread?.interrupt()
+            threadToJoin = engineThread
+            engineThread = null
+            threadToJoin?.interrupt()
+        }
+
+        try {
+            threadToJoin?.join(300)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
 
         // Libération immédiate et inconditionnelle des pointeurs physiques
         injector.resetAllPointers()
@@ -240,14 +289,14 @@ class GamepadEngine(
         val ltVal = maxOf(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE))
         val rtVal = maxOf(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS))
 
-        val ltNow = ltVal > 0.40f
+        val ltNow = ltVal > TRIGGER_THRESHOLD
         if (ltNow != ltPressed) {
             ltPressed = ltNow
             if (ltPressed) onRawButtonDown("BUTTON_L2")
             else onRawButtonUp("BUTTON_L2")
         }
 
-        val rtNow = rtVal > 0.40f
+        val rtNow = rtVal > TRIGGER_THRESHOLD
         if (rtNow != rtPressed) {
             rtPressed = rtNow
             if (rtPressed) onRawButtonDown("BUTTON_R2")

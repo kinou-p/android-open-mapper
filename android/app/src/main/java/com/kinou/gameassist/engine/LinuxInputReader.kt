@@ -347,9 +347,9 @@ class LinuxInputReader(
                 engine.ry = BinaryInputParser.normalizeStick(rawValue)
             }
 
-            // ABS_GAS (0x0009): RT Trigger
+            // ABS_GAS (0x0009): RT Trigger (~30% actuation threshold)
             0x0009 -> {
-                val isDown = rawValue > 30L
+                val isDown = if (rawValue > 255L) rawValue > 300L else rawValue > 76L
                 val prev = rtActive.getAndSet(isDown)
                 if (isDown != prev) {
                     if (isDown) engine.onRawButtonDown("BUTTON_R2")
@@ -357,9 +357,9 @@ class LinuxInputReader(
                 }
             }
 
-            // ABS_BRAKE (0x000a): LT Trigger
+            // ABS_BRAKE (0x000a): LT Trigger (~30% actuation threshold)
             0x000a -> {
-                val isDown = rawValue > 30L
+                val isDown = if (rawValue > 255L) rawValue > 300L else rawValue > 76L
                 val prev = ltActive.getAndSet(isDown)
                 if (isDown != prev) {
                     if (isDown) engine.onRawButtonDown("BUTTON_L2")

@@ -212,16 +212,21 @@ class ProfileRepository private constructor(context: Context) {
     }
 
     private fun saveProfileInternal(profile: GameProfile) {
-        validateAndSanitizeProfile(profile)
-        val file = getProfileFile(profile.id) ?: return
+        val sanitized = profile.deepCopy()
+        validateAndSanitizeProfile(sanitized)
+        val file = getProfileFile(sanitized.id) ?: return
         val atomicFile = AtomicFile(file)
-        val jsonBytes = json.encodeToString(profile).toByteArray(Charsets.UTF_8)
+        val jsonBytes = json.encodeToString(sanitized).toByteArray(Charsets.UTF_8)
         var fos: FileOutputStream? = null
         try {
             fos = atomicFile.startWrite()
             fos.write(jsonBytes)
+            fos.flush()
+            try {
+                fos.fd.sync()
+            } catch (_: Exception) {}
             atomicFile.finishWrite(fos)
-            profileCache[profile.id] = profile.deepCopy()
+            profileCache[sanitized.id] = sanitized.deepCopy()
             isCacheLoaded = true
             updateFlowLocked()
         } catch (e: Exception) {

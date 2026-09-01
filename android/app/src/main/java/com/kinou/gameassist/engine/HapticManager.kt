@@ -19,11 +19,60 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
 
     private val appContext: Context = context.applicationContext
     private val inputManager = appContext.getSystemService(Context.INPUT_SERVICE) as? InputManager
-    private val cachedGamepadVibrators = mutableListOf<Vibrator>()
-    private var cachedDeviceVibrator: Vibrator? = null
+    
+    @Volatile private var cachedDeviceVibrator: Vibrator? = null
+    @Volatile private var cachedGamepadVibrators: List<Vibrator> = emptyList()
+    @Volatile private var cachedAllVibrators: List<Vibrator> = emptyList()
+    @Volatile private var cachedDeviceOnlyVibrators: List<Vibrator> = emptyList()
+    @Volatile private var cachedControllerOnlyVibrators: List<Vibrator> = emptyList()
+
+    // Cached system attributes (Zero builder allocations on input events)
+    private val cachedVibrationAttributes: VibrationAttributes? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            VibrationAttributes.Builder()
+                .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
+                .build()
+        } else null
+    }
+
+    private val cachedAudioAttributes: AudioAttributes? by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
+                .build()
+        } else null
+    }
+
+    // Static waveform timings
+    private val reloadTimings = longArrayOf(0, 35, 65, 55)
+    private val profileSwitchTimings = longArrayOf(0, 45, 50, 45)
+
+    // Cached VibrationEffect singletons updated on intensity change
+    @Volatile private var cachedFireIntensity = -1
+    @Volatile private var cachedFireEffect: VibrationEffect? = null
+    @Volatile private var cachedFireEffectDefault: VibrationEffect? = null
+
+    @Volatile private var cachedReloadIntensity = -1
+    @Volatile private var cachedReloadEffect: VibrationEffect? = null
+    @Volatile private var cachedReloadEffectDefault: VibrationEffect? = null
+
+    @Volatile private var cachedSwitchIntensity = -1
+    @Volatile private var cachedSwitchEffect: VibrationEffect? = null
+    @Volatile private var cachedSwitchEffectDefault: VibrationEffect? = null
 
     init {
+        registerListener()
+    }
+
+    /**
+     * Enregistre le listener InputDeviceListener et rafraîchit le cache des vibreurs.
+     * Idempotent : peut être appelé à chaque redémarrage du moteur de jeu.
+     */
+    fun registerListener() {
         try {
+            inputManager?.unregisterInputDeviceListener(this)
             inputManager?.registerInputDeviceListener(this, null)
         } catch (_: Exception) {}
         refreshDeviceVibrator()
@@ -31,7 +80,7 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
     }
 
     private fun refreshDeviceVibrator() {
-        cachedDeviceVibrator = try {
+        val dev = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val manager = appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
                 manager?.defaultVibrator ?: (appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
@@ -42,33 +91,49 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
         } catch (_: Exception) {
             null
         }
+        cachedDeviceVibrator = dev
+        updateAggregatedVibratorLists()
     }
 
     private fun refreshGamepadVibrators() {
-        synchronized(cachedGamepadVibrators) {
-            cachedGamepadVibrators.clear()
-            try {
-                val deviceIds = InputDevice.getDeviceIds()
-                for (id in deviceIds) {
-                    val dev = InputDevice.getDevice(id) ?: continue
-                    val sources = dev.sources
-                    val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-                                    (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-                    if (isGamepad) {
-                        val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            dev.vibratorManager?.defaultVibrator ?: dev.vibrator
-                        } else {
-                            @Suppress("DEPRECATION")
-                            dev.vibrator
-                        }
-                        if (v != null && v.hasVibrator()) {
-                            cachedGamepadVibrators.add(v)
-                        }
+        val list = mutableListOf<Vibrator>()
+        try {
+            val deviceIds = InputDevice.getDeviceIds()
+            for (id in deviceIds) {
+                val dev = InputDevice.getDevice(id) ?: continue
+                val sources = dev.sources
+                val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+                                (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                if (isGamepad) {
+                    val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        dev.vibratorManager?.defaultVibrator ?: dev.vibrator
+                    } else {
+                        @Suppress("DEPRECATION")
+                        dev.vibrator
+                    }
+                    if (v != null && v.hasVibrator()) {
+                        list.add(v)
                     }
                 }
-            } catch (_: Exception) {
             }
+        } catch (_: Exception) {
         }
+        cachedGamepadVibrators = list
+        updateAggregatedVibratorLists()
+    }
+
+    private fun updateAggregatedVibratorLists() {
+        val devVib = cachedDeviceVibrator
+        val devList = if (devVib != null && devVib.hasVibrator()) listOf(devVib) else emptyList()
+        val padList = cachedGamepadVibrators
+
+        cachedDeviceOnlyVibrators = devList
+        cachedControllerOnlyVibrators = padList
+
+        val all = ArrayList<Vibrator>(devList.size + padList.size)
+        all.addAll(devList)
+        all.addAll(padList)
+        cachedAllVibrators = all
     }
 
     override fun onInputDeviceAdded(deviceId: Int) = refreshGamepadVibrators()
@@ -92,26 +157,19 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
      * Returns cached vibrators from connected physical gamepads / joysticks (zero IPC overhead).
      */
     fun getGamepadVibrators(): List<Vibrator> {
-        return synchronized(cachedGamepadVibrators) {
-            cachedGamepadVibrators.toList()
-        }
+        return cachedGamepadVibrators
     }
 
     /**
-     * Collects all target vibrators based on user configuration.
+     * Collects all target vibrators based on user configuration without any object allocation.
      */
     fun getActiveVibrators(targetDevice: Boolean = true, targetController: Boolean = true): List<Vibrator> {
-        val list = mutableListOf<Vibrator>()
-        if (targetDevice) {
-            val devVib = getDeviceVibrator()
-            if (devVib != null && devVib.hasVibrator()) {
-                list.add(devVib)
-            }
+        return when {
+            targetDevice && targetController -> cachedAllVibrators
+            targetDevice -> cachedDeviceOnlyVibrators
+            targetController -> cachedControllerOnlyVibrators
+            else -> emptyList()
         }
-        if (targetController) {
-            list.addAll(getGamepadVibrators())
-        }
-        return list
     }
 
     /**
@@ -125,11 +183,11 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
      * Checks if at least one connected controller has rumble support.
      */
     fun hasControllerVibrator(): Boolean {
-        return getGamepadVibrators().isNotEmpty()
+        return cachedGamepadVibrators.isNotEmpty()
     }
 
     /**
-     * Triggers a punchy, tactile recoil vibration for weapon shots.
+     * Triggers a punchy, tactile recoil vibration for weapon shots (zero allocation on hot path).
      */
     fun playFireHaptic(
         intensity: Float = 0.8f,
@@ -142,17 +200,26 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
         val clampedIntensity = (intensity.coerceIn(0.1f, 1.0f) * 255).toInt().coerceIn(60, 255)
         val durationMs = 50L
 
-        for (vib in targets) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val effect = if (vib.hasAmplitudeControl()) {
-                    VibrationEffect.createOneShot(durationMs, clampedIntensity)
-                } else {
-                    VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
-                }
-                vibrateSafely(vib, effect, durationMs)
-            } else {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            var effect = cachedFireEffect
+            var effectDef = cachedFireEffectDefault
+            if (cachedFireIntensity != clampedIntensity || effect == null || effectDef == null) {
+                effect = VibrationEffect.createOneShot(durationMs, clampedIntensity)
+                effectDef = VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
+                cachedFireEffect = effect
+                cachedFireEffectDefault = effectDef
+                cachedFireIntensity = clampedIntensity
+            }
+
+            for (i in targets.indices) {
+                val vib = targets[i]
+                val selectedEffect = if (vib.hasAmplitudeControl()) effect else effectDef
+                vibrateSafely(vib, selectedEffect, durationMs)
+            }
+        } else {
+            for (i in targets.indices) {
                 @Suppress("DEPRECATION")
-                vib.vibrate(durationMs)
+                targets[i].vibrate(durationMs)
             }
         }
     }
@@ -169,31 +236,39 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
         if (targets.isEmpty()) return
 
         val clampedIntensity = (intensity.coerceIn(0.1f, 1.0f) * 255).toInt().coerceIn(60, 255)
-        val timings = longArrayOf(0, 35, 65, 55)
 
-        for (vib in targets) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val effect = if (vib.hasAmplitudeControl()) {
-                    val amplitudes = intArrayOf(
-                        0,
-                        (clampedIntensity * 0.7f).toInt().coerceIn(40, 255),
-                        0,
-                        clampedIntensity
-                    )
-                    VibrationEffect.createWaveform(timings, amplitudes, -1)
-                } else {
-                    val amplitudes = intArrayOf(
-                        0,
-                        VibrationEffect.DEFAULT_AMPLITUDE,
-                        0,
-                        VibrationEffect.DEFAULT_AMPLITUDE
-                    )
-                    VibrationEffect.createWaveform(timings, amplitudes, -1)
-                }
-                vibrateSafely(vib, effect, 155L)
-            } else {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            var effect = cachedReloadEffect
+            var effectDef = cachedReloadEffectDefault
+            if (cachedReloadIntensity != clampedIntensity || effect == null || effectDef == null) {
+                val amplitudes = intArrayOf(
+                    0,
+                    (clampedIntensity * 0.7f).toInt().coerceIn(40, 255),
+                    0,
+                    clampedIntensity
+                )
+                val amplitudesDef = intArrayOf(
+                    0,
+                    VibrationEffect.DEFAULT_AMPLITUDE,
+                    0,
+                    VibrationEffect.DEFAULT_AMPLITUDE
+                )
+                effect = VibrationEffect.createWaveform(reloadTimings, amplitudes, -1)
+                effectDef = VibrationEffect.createWaveform(reloadTimings, amplitudesDef, -1)
+                cachedReloadEffect = effect
+                cachedReloadEffectDefault = effectDef
+                cachedReloadIntensity = clampedIntensity
+            }
+
+            for (i in targets.indices) {
+                val vib = targets[i]
+                val selectedEffect = if (vib.hasAmplitudeControl()) effect else effectDef
+                vibrateSafely(vib, selectedEffect, 155L)
+            }
+        } else {
+            for (i in targets.indices) {
                 @Suppress("DEPRECATION")
-                vib.vibrate(timings, -1)
+                targets[i].vibrate(reloadTimings, -1)
             }
         }
     }
@@ -210,20 +285,29 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
         if (targets.isEmpty()) return
 
         val clampedIntensity = (intensity.coerceIn(0.1f, 1.0f) * 255).toInt().coerceIn(60, 255)
-        val timings = longArrayOf(0, 45, 50, 45)
 
-        for (vib in targets) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val amplitudes = if (vib.hasAmplitudeControl()) {
-                    intArrayOf(0, clampedIntensity, 0, (clampedIntensity * 0.85f).toInt().coerceIn(40, 255))
-                } else {
-                    intArrayOf(0, VibrationEffect.DEFAULT_AMPLITUDE, 0, VibrationEffect.DEFAULT_AMPLITUDE)
-                }
-                val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
-                vibrateSafely(vib, effect, 140L)
-            } else {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            var effect = cachedSwitchEffect
+            var effectDef = cachedSwitchEffectDefault
+            if (cachedSwitchIntensity != clampedIntensity || effect == null || effectDef == null) {
+                val amplitudes = intArrayOf(0, clampedIntensity, 0, (clampedIntensity * 0.85f).toInt().coerceIn(40, 255))
+                val amplitudesDef = intArrayOf(0, VibrationEffect.DEFAULT_AMPLITUDE, 0, VibrationEffect.DEFAULT_AMPLITUDE)
+                effect = VibrationEffect.createWaveform(profileSwitchTimings, amplitudes, -1)
+                effectDef = VibrationEffect.createWaveform(profileSwitchTimings, amplitudesDef, -1)
+                cachedSwitchEffect = effect
+                cachedSwitchEffectDefault = effectDef
+                cachedSwitchIntensity = clampedIntensity
+            }
+
+            for (i in targets.indices) {
+                val vib = targets[i]
+                val selectedEffect = if (vib.hasAmplitudeControl()) effect else effectDef
+                vibrateSafely(vib, selectedEffect, 140L)
+            }
+        } else {
+            for (i in targets.indices) {
                 @Suppress("DEPRECATION")
-                vib.vibrate(timings, -1)
+                targets[i].vibrate(profileSwitchTimings, -1)
             }
         }
     }
@@ -242,7 +326,8 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
 
         val clampedIntensity = (intensity.coerceIn(0.1f, 1.0f) * 255).toInt().coerceIn(60, 255)
 
-        for (vib in targets) {
+        for (i in targets.indices) {
+            val vib = targets[i]
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val effect = if (vib.hasAmplitudeControl()) {
                     VibrationEffect.createOneShot(durationMs, clampedIntensity)
@@ -258,25 +343,21 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
     }
 
     /**
-     * Executes vibration with appropriate attributes to ensure playback from background services and overlays.
+     * Executes vibration with cached attributes to ensure zero allocation from background services and overlays.
      */
     @Suppress("DEPRECATION")
     private fun vibrateSafely(vib: Vibrator, effect: VibrationEffect, durationFallbackMs: Long) {
         val primaryResult = runCatching {
             when {
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
-                    val attributes = VibrationAttributes.Builder()
-                        .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
-                        .build()
-                    vib.vibrate(effect, attributes)
+                    val attributes = cachedVibrationAttributes
+                    if (attributes != null) vib.vibrate(effect, attributes)
+                    else vib.vibrate(effect)
                 }
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
-                    val audioAttributes = AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
-                        .build()
-                    vib.vibrate(effect, audioAttributes)
+                    val audioAttributes = cachedAudioAttributes
+                    if (audioAttributes != null) vib.vibrate(effect, audioAttributes)
+                    else vib.vibrate(effect)
                 }
                 else -> {
                     vib.vibrate(durationFallbackMs)

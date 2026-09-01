@@ -16,14 +16,14 @@ class CameraProcessor(
         const val POINTER_CAM_B = 2
     }
 
-    private var isActive = false
-    private var activePointerId = POINTER_CAM_A
+    @Volatile private var isActive = false
+    @Volatile private var activePointerId = POINTER_CAM_A
 
-    private var currentX = 0.0f
-    private var currentY = 0.0f
+    @Volatile private var currentX = 0.0f
+    @Volatile private var currentY = 0.0f
 
-    private var prevSmoothDx = 0.0f
-    private var prevSmoothDy = 0.0f
+    @Volatile private var prevSmoothDx = 0.0f
+    @Volatile private var prevSmoothDy = 0.0f
 
     fun process(rx: Float, ry: Float, isAiming: Boolean = false) {
         // Snapshot local immuable de la config pour toute la frame.
@@ -151,11 +151,13 @@ class CameraProcessor(
     }
 
     fun release() {
-        if (isActive) {
-            injector.touchUp(activePointerId, currentX, currentY)
-            isActive = false
-            prevSmoothDx = 0.0f
-            prevSmoothDy = 0.0f
+        synchronized(this) {
+            if (isActive) {
+                injector.touchUp(activePointerId, currentX, currentY)
+                isActive = false
+                prevSmoothDx = 0.0f
+                prevSmoothDy = 0.0f
+            }
         }
     }
 }

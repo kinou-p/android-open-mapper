@@ -338,7 +338,7 @@ fun CommunityScreen(
                                                         if (it.id == profileId) it.copy(downloadsCount = it.downloadsCount + 1) else it
                                                     }
 
-                                                    val imported = repository.importProfileFromJson(profileJson)
+                                                    val imported = repository.importProfileFromJsonAsync(profileJson)
                                                     if (imported != null) {
                                                         onProfileImported(imported)
                                                         Toast.makeText(context, context.getString(R.string.community_import_success, imported.name), Toast.LENGTH_SHORT).show()

@@ -3,6 +3,8 @@ package com.kinou.gameassist.data.community
 import android.content.Context
 import com.kinou.gameassist.BuildConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -40,6 +42,8 @@ class CommunityApiClient(private val context: Context) {
         private val profilesCache = java.util.concurrent.ConcurrentHashMap<String, CacheEntry<CommunityListResponse>>()
         private val profileDetailCache = java.util.concurrent.ConcurrentHashMap<String, CacheEntry<CommunityProfileDetail>>()
 
+        private val tokenMutex = Mutex()
+
         fun clearCache() {
             profilesCache.clear()
             profileDetailCache.clear()
@@ -60,14 +64,17 @@ class CommunityApiClient(private val context: Context) {
     // Token opaque émis par le serveur via /api/device/register, persisté chiffré côté client.
     private suspend fun ensureDeviceToken(): String {
         cachedDeviceToken?.let { return it }
-        DeviceTokenStore.get(context)?.let {
-            cachedDeviceToken = it
-            return it
+        return tokenMutex.withLock {
+            cachedDeviceToken?.let { return it }
+            DeviceTokenStore.get(context)?.let {
+                cachedDeviceToken = it
+                return@withLock it
+            }
+            val token = registerDevice()
+            DeviceTokenStore.save(context, token)
+            cachedDeviceToken = token
+            token
         }
-        val token = registerDevice()
-        DeviceTokenStore.save(context, token)
-        cachedDeviceToken = token
-        return token
     }
 
     private suspend fun registerDevice(): String = withContext(Dispatchers.IO) {

@@ -17,18 +17,18 @@ class MovementProcessor(
         const val BASE_AMPLITUDE_X = 0.75f
     }
 
-    private var isActive = false
-    private var ditherPhase = 0f
+    @Volatile private var isActive = false
+    @Volatile private var ditherPhase = 0f
 
     // Organic humanization state
-    private var isJigglingActive = false
-    private var currentDirection = 1 // 1 = Right, -1 = Left
-    private var halfCycleStartTime = 0L
-    private var currentHalfCycleDuration = BASE_HALF_CYCLE_MS
-    private var currentTargetAmplitudeX = BASE_AMPLITUDE_X
-    private var currentTargetDriftY = 0f
-    private var startAmplitudeX = 0f
-    private var startDriftY = 0f
+    @Volatile private var isJigglingActive = false
+    @Volatile private var currentDirection = 1 // 1 = Right, -1 = Left
+    @Volatile private var halfCycleStartTime = 0L
+    @Volatile private var currentHalfCycleDuration = BASE_HALF_CYCLE_MS
+    @Volatile private var currentTargetAmplitudeX = BASE_AMPLITUDE_X
+    @Volatile private var currentTargetDriftY = 0f
+    @Volatile private var startAmplitudeX = 0f
+    @Volatile private var startDriftY = 0f
     private val random = Random
 
     fun process(
@@ -172,18 +172,20 @@ class MovementProcessor(
     }
 
     fun release() {
-        if (isActive) {
-            val cfg = config
-            val screenW = injector.screenWidth
-            val screenH = injector.screenHeight
-            val centerX = cfg.centerX * screenW
-            val centerY = cfg.centerY * screenH
-            injector.touchUp(POINTER_JOYSTICK, centerX, centerY)
-            isActive = false
-            ditherPhase = 0f
-            isJigglingActive = false
-            startAmplitudeX = 0f
-            startDriftY = 0f
+        synchronized(this) {
+            if (isActive) {
+                val cfg = config
+                val screenW = injector.screenWidth
+                val screenH = injector.screenHeight
+                val centerX = cfg.centerX * screenW
+                val centerY = cfg.centerY * screenH
+                injector.touchUp(POINTER_JOYSTICK, centerX, centerY)
+                isActive = false
+                ditherPhase = 0f
+                isJigglingActive = false
+                startAmplitudeX = 0f
+                startDriftY = 0f
+            }
         }
     }
 }

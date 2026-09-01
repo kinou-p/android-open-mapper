@@ -106,16 +106,25 @@ class LinuxInputReaderTest {
     }
 
     @Test
+    fun testParseAsciiHexLine_InvalidHexReturnsFalse() {
+        val line = "0003 0010 zzzzzzzz\n".toByteArray(Charsets.US_ASCII)
+        val outEvent = BinaryInputParser.RawInputEvent()
+        val success = BinaryInputParser.parseAsciiHexLine(line, 0, line.size, outEvent)
+
+        assertFalse(success)
+    }
+
+    @Test
     fun testNormalizeStick() {
         // Standard Android/Linux 16-bit Unsigned (0..65535, center 32768)
-        assertEquals(0.0f, BinaryInputParser.normalizeStick(32768L), 0.001f) // Center
-        assertEquals(1.0f, BinaryInputParser.normalizeStick(65535L), 0.001f) // Max right/down
-        assertEquals(-1.0f, BinaryInputParser.normalizeStick(0L), 0.001f) // Max left/up
+        assertEquals(0.0f, BinaryInputParser.normalizeStick(32768L), 0.0001f) // Center
+        assertEquals(1.0f, BinaryInputParser.normalizeStick(65535L), 0.00001f) // Max right/down exact 1.0f
+        assertEquals(-1.0f, BinaryInputParser.normalizeStick(0L), 0.00001f) // Max left/up exact -1.0f
         assertEquals(0.5f, BinaryInputParser.normalizeStick(49152L), 0.01f) // Half right/down
         assertEquals(-0.5f, BinaryInputParser.normalizeStick(16384L), 0.01f) // Half left/up
 
         // Signed 16-bit extension
-        assertEquals(-1.0f, BinaryInputParser.normalizeStick(-32768L), 0.001f)
+        assertEquals(-1.0f, BinaryInputParser.normalizeStick(-32768L), 0.00001f)
         assertEquals(-0.5f, BinaryInputParser.normalizeStick(-16384L), 0.001f)
     }
 

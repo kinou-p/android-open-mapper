@@ -110,10 +110,6 @@ object AppUpdateManager {
                 }
             }
 
-            if (apkDownloadUrl.isEmpty()) {
-                apkDownloadUrl = htmlUrl
-            }
-
             val isNewer = isVersionNewer(remoteVersion, currentVersion.removePrefix("v").trim())
             val expectedSha256 = extractSha256FromBody(changelog)
 
@@ -147,6 +143,10 @@ object AppUpdateManager {
         expectedSha256: String? = null,
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
+        if (downloadUrl.isBlank() || (!downloadUrl.endsWith(".apk", ignoreCase = true) && !downloadUrl.contains(".apk", ignoreCase = true))) {
+            return@withContext Result.failure(IllegalArgumentException("URL de téléchargement APK invalide ou aucun package APK disponible dans la release"))
+        }
+
         var connection: HttpURLConnection? = null
         var inputStream: InputStream? = null
         var outputStream: FileOutputStream? = null
@@ -171,6 +171,12 @@ object AppUpdateManager {
                     return@withContext Result.failure(SecurityException("URL non sécurisée rejetée : $currentUrl"))
                 }
 
+                val host = (url.host ?: "").lowercase()
+                val isTrusted = trustedHostSuffixes.any { host == it || host.endsWith(".$it") }
+                if (!isTrusted) {
+                    return@withContext Result.failure(SecurityException("Hôte de téléchargement non autorisé : ${url.host}"))
+                }
+
                 connection = (url.openConnection() as HttpURLConnection).apply {
                     instanceFollowRedirects = false
                     setRequestProperty("User-Agent", "OpenMapper-Android-App")
@@ -190,12 +196,6 @@ object AppUpdateManager {
 
                     if (!targetUrl.protocol.equals("https", ignoreCase = true)) {
                         return@withContext Result.failure(SecurityException("Redirection non sécurisée bloquée : $targetUrl"))
-                    }
-
-                    val host = (targetUrl.host ?: "").lowercase()
-                    val isTrusted = trustedHostSuffixes.any { host == it || host.endsWith(".$it") }
-                    if (!isTrusted) {
-                        return@withContext Result.failure(SecurityException("Hôte de redirection non autorisé : ${targetUrl.host}"))
                     }
 
                     currentUrl = targetUrl.toString()
