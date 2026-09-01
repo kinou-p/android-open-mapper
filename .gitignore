@@ -47,10 +47,9 @@ captures/
 .idea/modules.xml
 .idea/workspace.xml
 
-# Keystore files
+# Keystore files (jamais commités)
 *.jks
 *.keystore
-!android/app/keystore/openmapper.keystore
 
 # External native build folder
 .externalNativeBuild/

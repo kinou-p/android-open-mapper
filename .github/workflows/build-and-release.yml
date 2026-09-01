@@ -18,6 +18,11 @@ jobs:
   build:
     name: Build & Test
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      APP_SECRET: ${{ secrets.APP_SECRET }}
 
     steps:
       - name: Checkout Code
@@ -37,6 +42,13 @@ jobs:
         run: |
           cd android
           ./gradlew testDebugUnitTest
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          mkdir -p android/app/keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/keystore/openmapper.keystore
 
       - name: Build Debug APK
         run: |

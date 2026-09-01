@@ -15,21 +15,21 @@ val localProperties = Properties().apply {
 
 val keystoreStorePassword = System.getenv("KEYSTORE_PASSWORD")
     ?: localProperties.getProperty("KEYSTORE_PASSWORD")
-    ?: "openmapper_android_app"
+    ?: error("KEYSTORE_PASSWORD manquant : définir via variable d'environnement ou local.properties")
 
 val keystoreKeyPassword = System.getenv("KEY_PASSWORD")
     ?: localProperties.getProperty("KEY_PASSWORD")
-    ?: "openmapper_android_app"
+    ?: keystoreStorePassword
 
 val keystoreAlias = System.getenv("KEY_ALIAS")
     ?: localProperties.getProperty("KEY_ALIAS")
     ?: "openmapper"
 
 // Secret partagé avec le backend Cloudflare (wrangler secret put APP_SECRET) pour signer
-// les requêtes POST (HMAC-SHA256). À surcharger via APP_SECRET (env ou local.properties).
+// les requêtes POST (HMAC-SHA256). Fourni via APP_SECRET (env ou local.properties), jamais en dur.
 val apiSigningSecret = System.getenv("APP_SECRET")
     ?: localProperties.getProperty("APP_SECRET")
-    ?: "openmapper_dev_secret_7f3a9c2b1e8d4a6f"
+    ?: error("APP_SECRET manquant : définir via variable d'environnement ou local.properties")
 
 android {
     namespace = "com.kinou.gameassist"
