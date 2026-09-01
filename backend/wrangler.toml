@@ -6,3 +6,7 @@ compatibility_date = "2024-12-01"
 binding = "DB"
 database_name = "openmapper-db"
 database_id = "8857c7ad-e53f-4f42-b6c1-365b7c433ccb"
+
+# Purge périodique des tables de télémétrie/rate-limiting (tous les jours à 3h UTC).
+[triggers]
+crons = ["0 3 * * *"]

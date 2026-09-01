@@ -141,13 +141,21 @@ class EdgeHandleOverlayView(
         }
     }
 
+    private fun safeUpdateViewLayout() {
+        if (isAttachedToWindow) {
+            try {
+                windowManager.updateViewLayout(this, params)
+            } catch (e: Exception) {
+                android.util.Log.w("EdgeHandleOverlayView", "updateViewLayout failed: ${e.message}")
+            }
+        }
+    }
+
     private fun ensureWindowSize(w: Int, h: Int) {
         if (params.width != w || params.height != h) {
             params.width = w
             params.height = h
-            try {
-                windowManager.updateViewLayout(this, params)
-            } catch (_: Exception) {}
+            safeUpdateViewLayout()
         }
     }
 
@@ -186,6 +194,15 @@ class EdgeHandleOverlayView(
             })
             start()
         }
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        mainHandler.removeCallbacksAndMessages(null)
+        alphaAnimator?.cancel()
+        alphaAnimator = null
+        menuAnimator?.cancel()
+        menuAnimator = null
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -495,9 +512,7 @@ class EdgeHandleOverlayView(
                     // 2. Update Y position
                     val newY = (event.rawY - restingHeight / 2f).toInt().coerceIn(0, max(0, screenHeight - restingHeight))
                     params.y = newY
-                    try {
-                        windowManager.updateViewLayout(this, params)
-                    } catch (_: Exception) {}
+                    safeUpdateViewLayout()
                     menuProgress = 0f
                 } else if (isSlidingToOpen) {
                     pullDistance = if (currentEdge == ScreenEdge.LEFT) max(0f, dxRaw) else max(0f, -dxRaw)

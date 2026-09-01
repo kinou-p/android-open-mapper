@@ -3,12 +3,12 @@ package com.kinou.gameassist.data.community
 import com.google.gson.annotations.SerializedName
 
 data class CommunityProfileSummary(
-    val id: String,
-    val title: String,
+    val id: String?,
+    val title: String?,
     val description: String?,
-    @SerializedName("game_name") val gameName: String,
-    @SerializedName("package_name") val packageName: String,
-    @SerializedName("author_name") val authorName: String,
+    @SerializedName("game_name") val gameName: String?,
+    @SerializedName("package_name") val packageName: String?,
+    @SerializedName("author_name") val authorName: String?,
     @SerializedName("controller_type") val controllerType: String = "Universal",
     @SerializedName("likes_count") var likesCount: Int = 0,
     @SerializedName("dislikes_count") var dislikesCount: Int = 0,
@@ -19,14 +19,14 @@ data class CommunityProfileSummary(
 )
 
 data class CommunityProfileDetail(
-    val id: String,
-    val title: String,
+    val id: String?,
+    val title: String?,
     val description: String?,
-    @SerializedName("game_name") val gameName: String,
-    @SerializedName("package_name") val packageName: String,
-    @SerializedName("author_name") val authorName: String,
+    @SerializedName("game_name") val gameName: String?,
+    @SerializedName("package_name") val packageName: String?,
+    @SerializedName("author_name") val authorName: String?,
     @SerializedName("controller_type") val controllerType: String = "Universal",
-    @SerializedName("profile_json") val profileJson: String,
+    @SerializedName("profile_json") val profileJson: String?,
     @SerializedName("likes_count") val likesCount: Int = 0,
     @SerializedName("dislikes_count") val dislikesCount: Int = 0,
     @SerializedName("downloads_count") val downloadsCount: Int = 0,

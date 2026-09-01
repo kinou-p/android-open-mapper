@@ -205,7 +205,7 @@
     <string name="overlay_notif_text">Profile: %1$s • Tap to configure</string>
     <string name="overlay_service_started">Mapping service started</string>
     <string name="overlay_service_stopped">Mapping service stopped</string>
-    <string name="overlay_btn_peek">Peek</string>
+    <string name="overlay_btn_details">📋 Details</string>
     <string name="overlay_btn_opacity">Opacity %1$d%%</string>
     <string name="overlay_btn_assign">🎮 Assign</string>
     <string name="overlay_btn_size_inc">➕ Size</string>
@@ -258,4 +258,22 @@
     <string name="visual_editor_hint">Move, resize, and align controls directly over your game\'s on-screen buttons.</string>
     <string name="visual_editor_no_screenshot_hint">📸 Tap « Import Screenshot » to load an in-game screenshot and layout your controls over it!</string>
     <string name="visual_editor_bg_opacity">BG: %1$d%%</string>
+
+    <!-- Community Screen -->
+    <string name="nav_community">Communauté</string>
+    <string name="community_title">Communauté</string>
+    <string name="community_share">Partager</string>
+    <string name="community_refresh">Actualiser</string>
+    <string name="community_search_placeholder">Rechercher un profil, jeu, créateur...</string>
+    <string name="community_filter_all">Tous</string>
+    <string name="community_sort_popular">🔥 Populaires</string>
+    <string name="community_sort_recent">🆕 Récents</string>
+    <string name="community_sort_downloads">📥 Téléchargés</string>
+    <string name="community_empty_title">Aucun profil trouvé pour ce filtre.</string>
+    <string name="community_empty_desc">Soyez le premier à partager votre configuration !</string>
+    <string name="community_retry">Réessayer</string>
+    <string name="community_import_success">Profil \"%1$s\" importé avec succès !</string>
+    <string name="community_import_error">Erreur lors du décodage du profil</string>
+    <string name="community_download_error">Erreur téléchargement: %1$s</string>
+    <string name="community_vote_error">Erreur de vote: %1$s</string>
 </resources>

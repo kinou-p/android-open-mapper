@@ -1,79 +1,223 @@
 package com.kinou.gameassist.data.repository
 
 import android.content.Context
+import androidx.core.util.AtomicFile
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.kinou.gameassist.data.model.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 
-class ProfileRepository(private val context: Context) {
+class ProfileRepository private constructor(context: Context) {
+    private val context: Context = context.applicationContext
     private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
-    private val profilesDir: File = File(context.filesDir, "profiles")
+    private val profilesDir: File = File(this.context.filesDir, "profiles")
+    private val fileLock = Any()
+    private val profileCache = mutableMapOf<String, GameProfile>()
+    @Volatile
+    private var isCacheLoaded = false
+
+    companion object {
+        @Volatile
+        private var instance: ProfileRepository? = null
+
+        /**
+         * Retourne l'instance Singleton de ProfileRepository.
+         * Utiliser cette méthode depuis MainActivity, OverlayService et CommunityScreen
+         * pour garantir un cache partagé unique entre tous les composants de l'application.
+         */
+        fun getInstance(context: Context): ProfileRepository {
+            return instance ?: synchronized(this) {
+                instance ?: ProfileRepository(context.applicationContext).also { instance = it }
+            }
+        }
+
+        fun validateAndSanitizeProfile(p: GameProfile): Boolean {
+            if (p.name.isBlank()) p.name = "Custom Profile"
+            if (p.packageName.isBlank()) p.packageName = "com.game.app"
+
+            // Défense contre un JSON local corrompu où un sous-objet serait null
+            // (Gson contourne la null-safety Kotlin par réflexion).
+            @Suppress("SENSELESS_COMPARISON")
+            if (p.joystick == null) p.joystick = JoystickConfig()
+            @Suppress("SENSELESS_COMPARISON")
+            if (p.camera == null) p.camera = CameraConfig()
+            @Suppress("SENSELESS_COMPARISON")
+            if (p.buttons == null) p.buttons = mutableListOf()
+            @Suppress("SENSELESS_COMPARISON")
+            if (p.settings == null) p.settings = GameSettings()
+
+            // Sanitize Joystick
+            val joy = p.joystick
+            if (!joy.centerX.isFinite()) joy.centerX = 0.18f else joy.centerX = joy.centerX.coerceIn(-0.5f, 1.5f)
+            if (!joy.centerY.isFinite()) joy.centerY = 0.72f else joy.centerY = joy.centerY.coerceIn(-0.5f, 1.5f)
+            if (!joy.radius.isFinite() || joy.radius <= 0f) joy.radius = 0.13f else joy.radius = joy.radius.coerceIn(0.01f, 1.0f)
+            if (!joy.deadzone.isFinite() || joy.deadzone < 0f) joy.deadzone = 0.10f else joy.deadzone = joy.deadzone.coerceIn(0.0f, 0.5f)
+            if (!joy.outerDeadzone.isFinite() || joy.outerDeadzone <= 0f) joy.outerDeadzone = 0.95f else joy.outerDeadzone = joy.outerDeadzone.coerceIn(0.5f, 1.0f)
+            if (!joy.sprintThreshold.isFinite()) joy.sprintThreshold = 0.82f else joy.sprintThreshold = joy.sprintThreshold.coerceIn(0.2f, 1.0f)
+
+            // Sanitize Camera
+            val cam = p.camera
+            if (!cam.rectX1.isFinite()) cam.rectX1 = 0.48f else cam.rectX1 = cam.rectX1.coerceIn(-0.5f, 1.5f)
+            if (!cam.rectY1.isFinite()) cam.rectY1 = 0.12f else cam.rectY1 = cam.rectY1.coerceIn(-0.5f, 1.5f)
+            if (!cam.rectX2.isFinite()) cam.rectX2 = 0.98f else cam.rectX2 = cam.rectX2.coerceIn(-0.5f, 1.5f)
+            if (!cam.rectY2.isFinite()) cam.rectY2 = 0.92f else cam.rectY2 = cam.rectY2.coerceIn(-0.5f, 1.5f)
+            if (!cam.sensitivityX.isFinite() || cam.sensitivityX <= 0f) cam.sensitivityX = 1.45f else cam.sensitivityX = cam.sensitivityX.coerceIn(0.05f, 10.0f)
+            if (!cam.sensitivityY.isFinite() || cam.sensitivityY <= 0f) cam.sensitivityY = 1.15f else cam.sensitivityY = cam.sensitivityY.coerceIn(0.05f, 10.0f)
+            if (!cam.deadzone.isFinite() || cam.deadzone < 0f) cam.deadzone = 0.08f else cam.deadzone = cam.deadzone.coerceIn(0.0f, 0.5f)
+            if (!cam.smoothing.isFinite()) cam.smoothing = 0.22f else cam.smoothing = cam.smoothing.coerceIn(0.0f, 1.0f)
+            if (!cam.acceleration.isFinite()) cam.acceleration = 1.25f else cam.acceleration = cam.acceleration.coerceIn(0.5f, 5.0f)
+            if (!cam.flickBoost.isFinite()) cam.flickBoost = 2.0f else cam.flickBoost = cam.flickBoost.coerceIn(1.0f, 5.0f)
+            if (!cam.flickThreshold.isFinite()) cam.flickThreshold = 0.80f else cam.flickThreshold = cam.flickThreshold.coerceIn(0.5f, 1.0f)
+            if (!cam.adsSensitivityMultiplier.isFinite()) cam.adsSensitivityMultiplier = 0.70f else cam.adsSensitivityMultiplier = cam.adsSensitivityMultiplier.coerceIn(0.1f, 3.0f)
+
+            // Sanitize Buttons
+            if (p.buttons.size > 50) {
+                p.buttons = p.buttons.take(50).toMutableList()
+            }
+            for (btn in p.buttons) {
+                if (!btn.x.isFinite()) btn.x = 0.5f else btn.x = btn.x.coerceIn(-0.5f, 1.5f)
+                if (!btn.y.isFinite()) btn.y = 0.5f else btn.y = btn.y.coerceIn(-0.5f, 1.5f)
+                if (!btn.radius.isFinite() || btn.radius <= 0f) btn.radius = 0.045f else btn.radius = btn.radius.coerceIn(0.01f, 0.5f)
+                if (btn.label.length > 100) btn.label = btn.label.take(100)
+                if (btn.gamepadButton.length > 50) btn.gamepadButton = btn.gamepadButton.take(50)
+            }
+            return true
+        }
+    }
 
     init {
-        if (!profilesDir.exists()) {
-            profilesDir.mkdirs()
-            initializeDefaultProfiles()
+        synchronized(fileLock) {
+            if (!profilesDir.exists()) {
+                profilesDir.mkdirs()
+                initializeDefaultProfiles()
+            }
         }
     }
 
     private fun initializeDefaultProfiles() {
         val codmMp = createDefaultCodmProfile()
-        saveProfile(codmMp)
-
+        saveProfileInternal(codmMp)
         val codmBr = createDefaultCodmBrProfile()
-        saveProfile(codmBr)
+        saveProfileInternal(codmBr)
+    }
+
+    suspend fun getAllProfilesAsync(): List<GameProfile> = withContext(Dispatchers.IO) {
+        getAllProfiles()
     }
 
     fun getAllProfiles(): List<GameProfile> {
-        val list = mutableListOf<GameProfile>()
-        val files = profilesDir.listFiles { file -> file.extension == "json" } ?: return list
-
-        for (f in files) {
-            try {
-                val json = f.readText()
-                val p = gson.fromJson(json, GameProfile::class.java)
-                if (p != null) {
-                    ensureRolesMigrated(p)
-                    list.add(p)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+        synchronized(fileLock) {
+            if (isCacheLoaded && profileCache.isNotEmpty()) {
+                return profileCache.values.map { it.deepCopy() }
             }
+            val list = mutableListOf<GameProfile>()
+            val files = profilesDir.listFiles { file -> file.extension == "json" } ?: return list
+            profileCache.clear()
+            for (f in files) {
+                try {
+                    val json = f.readText()
+                    val p = gson.fromJson(json, GameProfile::class.java)
+                    if (p != null) {
+                        ensureRolesMigrated(p)
+                        validateAndSanitizeProfile(p)
+                        list.add(p)
+                        profileCache[p.id] = p
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            if (list.isEmpty()) {
+                val def = createDefaultCodmProfile()
+                saveProfileInternal(def)
+                list.add(def)
+                profileCache[def.id] = def
+            }
+            isCacheLoaded = true
+            return list.map { it.deepCopy() }
         }
-        if (list.isEmpty()) {
-            val def = createDefaultCodmProfile()
-            saveProfile(def)
-            list.add(def)
-        }
-        return list
+    }
+
+    suspend fun getProfileAsync(id: String): GameProfile? = withContext(Dispatchers.IO) {
+        getProfile(id)
     }
 
     fun getProfile(id: String): GameProfile? {
-        val file = File(profilesDir, "$id.json")
-        if (!file.exists()) return null
-        return try {
-            val p = gson.fromJson(file.readText(), GameProfile::class.java)
-            p?.let { ensureRolesMigrated(it) }
-            p
-        } catch (e: Exception) {
-            null
+        synchronized(fileLock) {
+            profileCache[id]?.let { return it.deepCopy() }
+
+            val file = File(profilesDir, "$id.json")
+            if (!file.exists()) return null
+            return try {
+                val p = gson.fromJson(file.readText(), GameProfile::class.java)
+                p?.let {
+                    ensureRolesMigrated(it)
+                    validateAndSanitizeProfile(it)
+                    profileCache[it.id] = it
+                    it.deepCopy()
+                }
+            } catch (e: Exception) {
+                null
+            }
         }
+    }
+
+    suspend fun saveProfileAsync(profile: GameProfile) = withContext(Dispatchers.IO) {
+        saveProfile(profile)
+    }
+
+    suspend fun deleteProfileAsync(id: String): Boolean = withContext(Dispatchers.IO) {
+        deleteProfile(id)
+    }
+
+    suspend fun duplicateProfileAsync(profile: GameProfile): GameProfile = withContext(Dispatchers.IO) {
+        duplicateProfile(profile)
+    }
+
+    suspend fun importProfileFromJsonAsync(json: String): GameProfile? = withContext(Dispatchers.IO) {
+        importProfileFromJson(json)
     }
 
     fun saveProfile(profile: GameProfile) {
+        synchronized(fileLock) {
+            saveProfileInternal(profile)
+        }
+    }
+
+    private fun saveProfileInternal(profile: GameProfile) {
+        validateAndSanitizeProfile(profile)
         val file = File(profilesDir, "${profile.id}.json")
-        file.writeText(gson.toJson(profile))
+        val atomicFile = AtomicFile(file)
+        val jsonBytes = gson.toJson(profile).toByteArray(Charsets.UTF_8)
+        var fos: FileOutputStream? = null
+        try {
+            fos = atomicFile.startWrite()
+            fos.write(jsonBytes)
+            atomicFile.finishWrite(fos)
+            profileCache[profile.id] = profile.deepCopy()
+            isCacheLoaded = true
+        } catch (e: Exception) {
+            if (fos != null) {
+                atomicFile.failWrite(fos)
+            }
+            e.printStackTrace()
+        }
     }
 
     fun deleteProfile(id: String): Boolean {
-        val existing = getProfile(id)
-        if (existing?.customScreenshotPath != null) {
-            ScreenshotManager.deleteScreenshot(existing.customScreenshotPath)
+        synchronized(fileLock) {
+            val existing = getProfile(id)
+            if (existing?.customScreenshotPath != null) {
+                ScreenshotManager.deleteScreenshot(existing.customScreenshotPath)
+            }
+            profileCache.remove(id)
+            val file = File(profilesDir, "$id.json")
+            return file.delete()
         }
-        val file = File(profilesDir, "$id.json")
-        return file.delete()
     }
 
     fun exportProfileToJson(profile: GameProfile): String {
@@ -85,6 +229,9 @@ class ProfileRepository(private val context: Context) {
             val imported = gson.fromJson(json, GameProfile::class.java)
             if (imported != null) {
                 ensureRolesMigrated(imported)
+                if (!validateAndSanitizeProfile(imported)) {
+                    return null
+                }
                 // Ensure unique ID if imported
                 if (getProfile(imported.id) != null) {
                     imported.id = "profile_${UUID.randomUUID().toString().take(8)}"
@@ -99,6 +246,7 @@ class ProfileRepository(private val context: Context) {
         }
     }
 
+
     private fun ensureRolesMigrated(p: GameProfile) {
         for (btn in p.buttons) {
             @Suppress("SENSELESS_COMPARISON")
@@ -110,19 +258,22 @@ class ProfileRepository(private val context: Context) {
                     else -> ButtonRole.NORMAL
                 }
             }
+            @Suppress("SENSELESS_COMPARISON")
+            if ((btn.mode as ButtonMode?) == null) {
+                btn.mode = ButtonMode.HOLD
+            }
         }
     }
 
     fun duplicateProfile(profile: GameProfile): GameProfile {
         val newId = "profile_${UUID.randomUUID().toString().take(8)}"
         val newScreenshotPath = ScreenshotManager.duplicateScreenshot(context, newId, profile.customScreenshotPath)
-        val copy = profile.copy(
+        val copy = profile.deepCopy().copy(
             id = newId,
             name = "${profile.name} (Copie)",
             customScreenshotPath = newScreenshotPath,
             buttons = profile.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
         )
-        val isFr = com.kinou.gameassist.data.language.LanguageManager.isFrench(context)
         saveProfile(copy)
         return copy
     }

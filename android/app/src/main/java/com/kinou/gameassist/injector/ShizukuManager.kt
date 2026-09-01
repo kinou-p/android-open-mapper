@@ -35,11 +35,27 @@ object ShizukuManager {
             }
         }
 
+    private var isInitialized = false
+
     fun init() {
-        Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
-        Shizuku.addBinderDeadListener(binderDeadListener)
-        Shizuku.addRequestPermissionResultListener(requestPermissionResultListener)
+        if (!isInitialized) {
+            isInitialized = true
+            Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
+            Shizuku.addBinderDeadListener(binderDeadListener)
+            Shizuku.addRequestPermissionResultListener(requestPermissionResultListener)
+        }
         checkStatus()
+    }
+
+    fun destroy() {
+        if (isInitialized) {
+            try {
+                Shizuku.removeBinderReceivedListener(binderReceivedListener)
+                Shizuku.removeBinderDeadListener(binderDeadListener)
+                Shizuku.removeRequestPermissionResultListener(requestPermissionResultListener)
+            } catch (_: Exception) {}
+            isInitialized = false
+        }
     }
 
     fun checkStatus() {

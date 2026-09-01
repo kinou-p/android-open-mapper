@@ -1,6 +1,7 @@
 package com.kinou.gameassist.engine
 
 import android.content.Context
+import android.hardware.input.InputManager
 import android.media.AudioAttributes
 import android.os.Build
 import android.os.VibrationAttributes
@@ -12,54 +13,88 @@ import android.view.InputDevice
 /**
  * Manages tactile haptic feedback for gaming events (Weapon fire recoil & magazine reload pulses).
  * Supports both internal smartphone vibrators and connected physical gamepads (Xbox, PlayStation, etc.).
+ * Uses cached vibrators with InputDeviceListener to prevent synchronous IPC Binder overhead in hot loops.
  */
-class HapticManager(private val context: Context) {
+class HapticManager(context: Context) : InputManager.InputDeviceListener {
 
-    /**
-     * Returns the phone's internal vibrator.
-     */
-    @Suppress("DEPRECATION")
-    fun getDeviceVibrator(): Vibrator? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-            manager?.defaultVibrator ?: (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
-        } else {
-            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+    private val appContext: Context = context.applicationContext
+    private val inputManager = appContext.getSystemService(Context.INPUT_SERVICE) as? InputManager
+    private val cachedGamepadVibrators = mutableListOf<Vibrator>()
+    private var cachedDeviceVibrator: Vibrator? = null
+
+    init {
+        try {
+            inputManager?.registerInputDeviceListener(this, null)
+        } catch (_: Exception) {}
+        refreshDeviceVibrator()
+        refreshGamepadVibrators()
+    }
+
+    private fun refreshDeviceVibrator() {
+        cachedDeviceVibrator = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val manager = appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                manager?.defaultVibrator ?: (appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)
+            } else {
+                @Suppress("DEPRECATION")
+                appContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 
-    /**
-     * Discovers all vibrators from connected physical gamepads / joysticks.
-     */
-    @Suppress("DEPRECATION")
-    fun getGamepadVibrators(): List<Vibrator> {
-        val vibrators = mutableListOf<Vibrator>()
-        try {
-            val deviceIds = InputDevice.getDeviceIds()
-            for (id in deviceIds) {
-                val dev = InputDevice.getDevice(id) ?: continue
-                val sources = dev.sources
-                val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-                                (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-                if (isGamepad) {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        val vm = dev.vibratorManager
-                        val v = vm?.defaultVibrator ?: dev.vibrator
-                        if (v != null && v.hasVibrator()) {
-                            vibrators.add(v)
+    private fun refreshGamepadVibrators() {
+        synchronized(cachedGamepadVibrators) {
+            cachedGamepadVibrators.clear()
+            try {
+                val deviceIds = InputDevice.getDeviceIds()
+                for (id in deviceIds) {
+                    val dev = InputDevice.getDevice(id) ?: continue
+                    val sources = dev.sources
+                    val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+                                    (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                    if (isGamepad) {
+                        val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            dev.vibratorManager?.defaultVibrator ?: dev.vibrator
+                        } else {
+                            @Suppress("DEPRECATION")
+                            dev.vibrator
                         }
-                    } else {
-                        val v = dev.vibrator
                         if (v != null && v.hasVibrator()) {
-                            vibrators.add(v)
+                            cachedGamepadVibrators.add(v)
                         }
                     }
                 }
+            } catch (_: Exception) {
             }
-        } catch (e: Exception) {
-            // Non-fatal if input device vibrators query fails
         }
-        return vibrators
+    }
+
+    override fun onInputDeviceAdded(deviceId: Int) = refreshGamepadVibrators()
+    override fun onInputDeviceRemoved(deviceId: Int) = refreshGamepadVibrators()
+    override fun onInputDeviceChanged(deviceId: Int) = refreshGamepadVibrators()
+
+    fun release() {
+        try {
+            inputManager?.unregisterInputDeviceListener(this)
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Returns the phone's internal vibrator (cached).
+     */
+    fun getDeviceVibrator(): Vibrator? {
+        return cachedDeviceVibrator
+    }
+
+    /**
+     * Returns cached vibrators from connected physical gamepads / joysticks (zero IPC overhead).
+     */
+    fun getGamepadVibrators(): List<Vibrator> {
+        return synchronized(cachedGamepadVibrators) {
+            cachedGamepadVibrators.toList()
+        }
     }
 
     /**

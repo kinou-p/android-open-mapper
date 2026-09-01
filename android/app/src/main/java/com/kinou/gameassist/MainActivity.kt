@@ -99,7 +99,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         LanguageManager.init(this)
-        repository = ProfileRepository(this)
+        repository = ProfileRepository.getInstance(this)
         ShizukuManager.init()
 
         // Anonymous telemetry heartbeat on app launch
@@ -112,9 +112,17 @@ class MainActivity : AppCompatActivity() {
         setContent {
             GameAssistTheme {
                 var currentScreen by remember { mutableStateOf(Screen.HOME) }
-                var profiles by remember { mutableStateOf(repository.getAllProfiles()) }
-                var selectedProfile by remember { mutableStateOf(profiles.firstOrNull()) }
+                var profiles by remember { mutableStateOf<List<GameProfile>>(emptyList()) }
+                var selectedProfile by remember { mutableStateOf<GameProfile?>(null) }
                 val isServiceRunning by OverlayService.isServiceRunningFlow.collectAsState()
+
+                LaunchedEffect(Unit) {
+                    val loadedProfiles = repository.getAllProfilesAsync()
+                    profiles = loadedProfiles
+                    if (selectedProfile == null) {
+                        selectedProfile = loadedProfiles.firstOrNull()
+                    }
+                }
 
                 BackHandler(enabled = currentScreen != Screen.HOME) {
                     currentScreen = if (currentScreen == Screen.VISUAL_HUD_EDITOR) Screen.PROFILES else Screen.HOME
@@ -159,8 +167,8 @@ class MainActivity : AppCompatActivity() {
                                 NavigationBarItem(
                                     selected = currentScreen == Screen.COMMUNITY,
                                     onClick = { currentScreen = Screen.COMMUNITY },
-                                    icon = { Icon(Icons.Default.Public, contentDescription = "Communauté") },
-                                    label = { Text("Communauté", fontSize = 10.sp, fontWeight = if (currentScreen == Screen.COMMUNITY) FontWeight.Bold else FontWeight.Normal) },
+                                    icon = { Icon(Icons.Default.Public, contentDescription = stringResource(R.string.nav_community)) },
+                                    label = { Text(stringResource(R.string.nav_community), fontSize = 10.sp, fontWeight = if (currentScreen == Screen.COMMUNITY) FontWeight.Bold else FontWeight.Normal) },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = DarkBackground,
                                         selectedTextColor = NeonCyan,
@@ -225,7 +233,7 @@ class MainActivity : AppCompatActivity() {
                                     selectedProfile?.let { prof ->
                                         prof.joystick.deadzone = deadzoneLS
                                         prof.camera.deadzone = deadzoneRS
-                                        repository.saveProfile(prof)
+                                        lifecycleScope.launch { repository.saveProfileAsync(prof) }
                                         OverlayService.updateLiveProfile(prof)
                                     }
                                 },
@@ -233,7 +241,7 @@ class MainActivity : AppCompatActivity() {
                                     selectedProfile?.let { prof ->
                                         prof.joystick.outerDeadzone = outerLS
                                         prof.camera.outerDeadzone = outerRS
-                                        repository.saveProfile(prof)
+                                        lifecycleScope.launch { repository.saveProfileAsync(prof) }
                                         OverlayService.updateLiveProfile(prof)
                                     }
                                 }
@@ -247,26 +255,37 @@ class MainActivity : AppCompatActivity() {
                                     OverlayService.updateLiveProfile(it)
                                 },
                                 onSaveProfile = { prof ->
-                                    repository.saveProfile(prof)
+                                    lifecycleScope.launch { repository.saveProfileAsync(prof) }
                                     OverlayService.updateLiveProfile(prof)
                                 },
                                 onDeleteProfile = { id ->
-                                    repository.deleteProfile(id)
-                                    profiles = repository.getAllProfiles()
-                                    selectedProfile = profiles.firstOrNull()
+                                    lifecycleScope.launch {
+                                        repository.deleteProfileAsync(id)
+                                        val all = repository.getAllProfilesAsync()
+                                        profiles = all
+                                        selectedProfile = all.firstOrNull()
+                                    }
                                 },
                                 onDuplicateProfile = { prof ->
-                                    val copy = repository.duplicateProfile(prof)
-                                    profiles = repository.getAllProfiles()
-                                    selectedProfile = copy
+                                    lifecycleScope.launch {
+                                        val copy = repository.duplicateProfileAsync(prof)
+                                        val all = repository.getAllProfilesAsync()
+                                        profiles = all
+                                        selectedProfile = copy
+                                    }
                                 },
-                                onImportProfile = { json ->
-                                    val imp = repository.importProfileFromJson(json)
-                                    if (imp != null) {
-                                        profiles = repository.getAllProfiles()
-                                        selectedProfile = imp
-                                        true
-                                    } else false
+                                onImportProfile = { json, onResult ->
+                                    lifecycleScope.launch {
+                                        val imp = repository.importProfileFromJsonAsync(json)
+                                        if (imp != null) {
+                                            val all = repository.getAllProfilesAsync()
+                                            profiles = all
+                                            selectedProfile = imp
+                                            onResult(true)
+                                        } else {
+                                            onResult(false)
+                                        }
+                                    }
                                 },
                                 onOpenVisualEditor = { prof ->
                                     selectedProfile = prof
@@ -282,9 +301,11 @@ class MainActivity : AppCompatActivity() {
                                     VisualHudEditorScreen(
                                         profile = prof,
                                         onSaveProfile = { updated ->
-                                            repository.saveProfile(updated)
+                                            lifecycleScope.launch {
+                                                repository.saveProfileAsync(updated)
+                                                profiles = repository.getAllProfilesAsync()
+                                            }
                                             OverlayService.updateLiveProfile(updated)
-                                            profiles = repository.getAllProfiles()
                                         },
                                         onBack = { currentScreen = Screen.PROFILES }
                                     )
@@ -297,8 +318,10 @@ class MainActivity : AppCompatActivity() {
                                 repository = repository,
                                 localProfiles = profiles,
                                 onProfileImported = { imp ->
-                                    profiles = repository.getAllProfiles()
-                                    selectedProfile = imp
+                                    lifecycleScope.launch {
+                                        profiles = repository.getAllProfilesAsync()
+                                        selectedProfile = imp
+                                    }
                                     OverlayService.updateLiveProfile(imp)
                                 }
                             )
@@ -427,5 +450,12 @@ class MainActivity : AppCompatActivity() {
             return true
         }
         return super.dispatchGenericMotionEvent(event)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Ne pas appeler ShizukuManager.destroy() ici : les listeners Shizuku sont globaux
+        // et doivent rester actifs tant qu'OverlayService tourne en arrière-plan pendant le jeu.
+        // ShizukuManager est un object singleton dont le cycle de vie doit survivre à MainActivity.
     }
 }

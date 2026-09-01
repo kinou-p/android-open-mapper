@@ -51,4 +51,55 @@ class ProfileRepositoryTest {
         val deserialized = gson.fromJson(json, com.kinou.gameassist.data.model.ButtonConfig::class.java)
         assertEquals(com.kinou.gameassist.data.model.ButtonRole.FIRE, deserialized.role)
     }
+
+    @Test
+    fun testProfileSanitizationWithNaNAndOutOfBounds() {
+        val badProfile = GameProfile(
+            id = "bad_profile",
+            name = "",
+            packageName = "",
+            joystick = com.kinou.gameassist.data.model.JoystickConfig(
+                centerX = Float.NaN,
+                centerY = 50.0f,
+                radius = -2.0f,
+                deadzone = 0.99f
+            ),
+            camera = com.kinou.gameassist.data.model.CameraConfig(
+                sensitivityX = Float.POSITIVE_INFINITY,
+                sensitivityY = -5.0f,
+                deadzone = Float.NaN
+            ),
+            buttons = mutableListOf(
+                com.kinou.gameassist.data.model.ButtonConfig(
+                    id = "btn_1",
+                    label = "A".repeat(200),
+                    gamepadButton = "BUTTON_A",
+                    x = Float.NaN,
+                    y = -10.0f,
+                    radius = -1.0f
+                )
+            )
+        )
+
+        val valid = ProfileRepository.validateAndSanitizeProfile(badProfile)
+        assertTrue(valid)
+
+        // Assert sanitized values
+        assertEquals("Custom Profile", badProfile.name)
+        assertEquals("com.game.app", badProfile.packageName)
+        assertEquals(0.18f, badProfile.joystick.centerX, 0.001f) // NaN fallback
+        assertEquals(1.5f, badProfile.joystick.centerY, 0.001f) // Clamped from 50.0
+        assertEquals(0.13f, badProfile.joystick.radius, 0.001f) // Negative fallback
+        assertEquals(0.50f, badProfile.joystick.deadzone, 0.001f) // Clamped to 0.5
+
+        assertEquals(1.45f, badProfile.camera.sensitivityX, 0.001f) // Infinity fallback
+        assertEquals(1.15f, badProfile.camera.sensitivityY, 0.001f) // Negative fallback to default
+        assertEquals(0.08f, badProfile.camera.deadzone, 0.001f) // NaN fallback
+
+        val btn = badProfile.buttons.first()
+        assertEquals(100, btn.label.length)
+        assertEquals(0.5f, btn.x, 0.001f) // NaN fallback
+        assertEquals(-0.5f, btn.y, 0.001f) // Clamped to -0.5
+        assertEquals(0.045f, btn.radius, 0.001f) // Negative fallback
+    }
 }

@@ -205,7 +205,7 @@
     <string name="overlay_notif_text">Profile: %1$s • Tap to configure</string>
     <string name="overlay_service_started">Mapping service started</string>
     <string name="overlay_service_stopped">Mapping service stopped</string>
-    <string name="overlay_btn_peek">Peek</string>
+    <string name="overlay_btn_details">📋 Details</string>
     <string name="overlay_btn_opacity">Opacity %1$d%%</string>
     <string name="overlay_btn_assign">🎮 Assign</string>
     <string name="overlay_btn_size_inc">➕ Size</string>
@@ -256,6 +256,23 @@
     <string name="screenshot_removed_toast">Screenshot removed</string>
     <string name="screenshot_import_error">Could not load selected image</string>
     <string name="visual_editor_hint">Move, resize, and align controls directly over your game\'s on-screen buttons.</string>
-    <string name="visual_editor_no_screenshot_hint">📸 Tap « Import Screenshot » to load an in-game screenshot and layout your controls over it!</string>
     <string name="visual_editor_bg_opacity">BG: %1$d%%</string>
+
+    <!-- Community Screen -->
+    <string name="nav_community">Community</string>
+    <string name="community_title">Community</string>
+    <string name="community_share">Share</string>
+    <string name="community_refresh">Refresh</string>
+    <string name="community_search_placeholder">Search profile, game, author...</string>
+    <string name="community_filter_all">All</string>
+    <string name="community_sort_popular">🔥 Popular</string>
+    <string name="community_sort_recent">🆕 Recent</string>
+    <string name="community_sort_downloads">📥 Downloads</string>
+    <string name="community_empty_title">No profiles found for this filter.</string>
+    <string name="community_empty_desc">Be the first to share your configuration!</string>
+    <string name="community_retry">Retry</string>
+    <string name="community_import_success">Profile \"%1$s\" imported successfully!</string>
+    <string name="community_import_error">Error decoding profile</string>
+    <string name="community_download_error">Download error: %1$s</string>
+    <string name="community_vote_error">Vote error: %1$s</string>
 </resources>

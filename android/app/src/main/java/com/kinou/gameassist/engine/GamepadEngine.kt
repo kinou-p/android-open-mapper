@@ -18,35 +18,43 @@ class GamepadEngine(
     val linuxReader = LinuxInputReader(this, scope)
 
     private var currentProfile: GameProfile? = null
+    @Volatile
     private var isRunning = false
 
-    // Stick states
-    var lx = 0.0f
-    var ly = 0.0f
-    var rx = 0.0f
-    var ry = 0.0f
+    // Stick states (accessed concurrently by LinuxInputReader IO threads & engine loop)
+    @Volatile var lx = 0.0f
+    @Volatile var ly = 0.0f
+    @Volatile var rx = 0.0f
+    @Volatile var ry = 0.0f
 
     // Trigger states
-    private var ltPressed = false
-    private var rtPressed = false
+    @Volatile private var ltPressed = false
+    @Volatile private var rtPressed = false
 
     // DPad Hat states
-    private var hatUp = false
-    private var hatDown = false
-    private var hatLeft = false
-    private var hatRight = false
+    @Volatile private var hatUp = false
+    @Volatile private var hatDown = false
+    @Volatile private var hatLeft = false
+    @Volatile private var hatRight = false
 
+    private val pressedRawButtons = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     private var loopJob: Job? = null
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
-    private var isSelectHeld = false
+    @Volatile private var isSelectHeld = false
 
     fun onRawButtonDown(btnName: String) {
-        if (btnName == "BUTTON_SELECT" || btnName == "BUTTON_BACK" || btnName == "BUTTON_START") {
+        val normalizedName = btnName.trim().uppercase()
+        if (!pressedRawButtons.add(normalizedName)) {
+            // Already down - ignore duplicate dispatch
+            return
+        }
+
+        if (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START") {
             isSelectHeld = true
         }
 
         if (isSelectHeld) {
-            when (btnName) {
+            when (normalizedName) {
                 "DPAD_UP", "DPAD_RIGHT", "BUTTON_R1" -> {
                     onHotSwitchProfile?.invoke(true)
                     return
@@ -58,14 +66,17 @@ class GamepadEngine(
             }
         }
 
-        buttonProcessor.onButtonDown(btnName)
+        buttonProcessor.onButtonDown(normalizedName)
     }
 
     fun onRawButtonUp(btnName: String) {
-        if (btnName == "BUTTON_SELECT" || btnName == "BUTTON_BACK" || btnName == "BUTTON_START") {
+        val normalizedName = btnName.trim().uppercase()
+        pressedRawButtons.remove(normalizedName)
+
+        if (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START") {
             isSelectHeld = false
         }
-        buttonProcessor.onButtonUp(btnName)
+        buttonProcessor.onButtonUp(normalizedName)
     }
 
     fun setProfile(profile: GameProfile) {
@@ -83,16 +94,44 @@ class GamepadEngine(
         linuxReader.start()
 
         val hz = currentProfile?.settings?.pollingRateHz ?: 120
-        val intervalMs = (1000L / hz.coerceIn(30, 240))
+        val targetHz = hz.coerceIn(30, 240)
+        val intervalNanos = 1_000_000_000L / targetHz
 
-        loopJob = scope.launch(Dispatchers.Default) {
+        loopJob = scope.launch(
+            Dispatchers.Default +
+                CoroutineExceptionHandler { _, e ->
+                    android.util.Log.e("GamepadEngine", "Engine loop crashed", e)
+                }
+        ) {
+            var nextFrameTimeNanos = System.nanoTime()
             while (isActive && isRunning) {
-                val isFiring = rtPressed || buttonProcessor.isFireActive()
-                val isAds = ltPressed || buttonProcessor.isAdsActive()
-                val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > cameraProcessor.config.deadzone)
-                movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
-                cameraProcessor.process(rx, ry, isAds)
-                delay(intervalMs)
+                try {
+                    val isFiring = rtPressed || buttonProcessor.isFireActive()
+                    val isAds = ltPressed || buttonProcessor.isAdsActive()
+                    val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > cameraProcessor.config.deadzone)
+                    movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
+                    cameraProcessor.process(rx, ry, isAds)
+
+                    val nowNanos = System.nanoTime()
+                    buttonProcessor.processPendingTaps(nowNanos)
+
+                    nextFrameTimeNanos += intervalNanos
+                    val sleepNanos = nextFrameTimeNanos - nowNanos
+
+                    if (sleepNanos > 1_000_000L) {
+                        delay(sleepNanos / 1_000_000L)
+                    } else if (sleepNanos < -intervalNanos * 2) {
+                        // Reset clock if severely lagging behind
+                        nextFrameTimeNanos = nowNanos
+                    } else {
+                        yield()
+                    }
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (e: Exception) {
+                    // Ne jamais laisser une frame défectueuse faire planter le process en pleine partie
+                    android.util.Log.e("GamepadEngine", "Frame processing error", e)
+                }
             }
         }
     }
@@ -100,11 +139,15 @@ class GamepadEngine(
     fun stop() {
         isRunning = false
         linuxReader.stop()
-        loopJob?.cancel()
+        // Attend la fin de la frame en cours pour éviter qu'un touchDown soit injecté
+        // après resetAllPointers (doigt fantôme).
+        loopJob?.let { runBlocking { it.cancelAndJoin() } }
+        pressedRawButtons.clear()
         movementProcessor.release()
         cameraProcessor.release()
         buttonProcessor.releaseAll()
         injector.resetAllPointers()
+        hapticManager?.release()
     }
 
     fun handleKeyEvent(event: KeyEvent): Boolean {

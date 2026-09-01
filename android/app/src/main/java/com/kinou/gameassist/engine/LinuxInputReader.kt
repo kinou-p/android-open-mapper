@@ -1,5 +1,6 @@
 package com.kinou.gameassist.engine
 
+import android.os.Build
 import kotlinx.coroutines.*
 import rikka.shizuku.Shizuku
 import java.io.File
@@ -58,12 +59,30 @@ class LinuxInputReader(
         }
     }
 
+    /**
+     * Tue les processus `cat /dev/input/event*` / `getevent -q` orphelins laissés par une
+     * session précédente (crash / kill sans stop()). Leur père étant shizuku_server,
+     * ils survivraient sinon indéfiniment tant que la manette est au repos.
+     */
+    private fun cleanupStaleProcesses() {
+        try {
+            val proc = spawnShizukuProcess(
+                arrayOf("sh", "-c", "pkill -f 'cat /dev/input/event' 2>/dev/null; pkill -f 'getevent -q' 2>/dev/null")
+            ) ?: return
+            try {
+                proc.waitFor(1000, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (_: Exception) {}
+            closeProcessQuietly(proc)
+        } catch (_: Exception) {}
+    }
+
     fun start() {
         if (isRunning) return
         isRunning = true
 
         readerJob = scope.launch(Dispatchers.IO) {
             try {
+                cleanupStaleProcesses()
                 val gamepadNodes = findGamepadEventNodes()
                 val is64Bit = isKernel64Bit()
 
@@ -80,8 +99,11 @@ class LinuxInputReader(
                             try {
                                 runBinaryStream(inStream, is64Bit)
                             } finally {
-                                try { inStream.close() } catch (_: Exception) {}
-                                try { proc.destroy() } catch (_: Exception) {}
+                                synchronized(processLock) {
+                                    activeProcesses.remove(proc)
+                                    activeStreams.remove(inStream)
+                                }
+                                closeProcessQuietly(proc, inStream)
                             }
                         }
                     }
@@ -96,8 +118,11 @@ class LinuxInputReader(
                     try {
                         runAsciiHexStream(inStream)
                     } finally {
-                        try { inStream.close() } catch (_: Exception) {}
-                        try { proc.destroy() } catch (_: Exception) {}
+                        synchronized(processLock) {
+                            activeProcesses.remove(proc)
+                            activeStreams.remove(inStream)
+                        }
+                        closeProcessQuietly(proc, inStream)
                     }
                 }
             } catch (e: Exception) {
@@ -118,15 +143,25 @@ class LinuxInputReader(
             activeStreams.clear()
 
             for (proc in activeProcesses) {
-                try {
-                    proc.outputStream?.close()
-                } catch (_: Exception) {}
-                try {
-                    proc.destroy()
-                } catch (_: Exception) {}
+                closeProcessQuietly(proc)
             }
             activeProcesses.clear()
         }
+    }
+
+    private fun closeProcessQuietly(proc: Process?, inStream: InputStream? = null) {
+        try { inStream?.close() } catch (_: Exception) {}
+        try { proc?.inputStream?.close() } catch (_: Exception) {}
+        try { proc?.outputStream?.close() } catch (_: Exception) {}
+        try { proc?.errorStream?.close() } catch (_: Exception) {}
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                proc?.destroyForcibly()
+                proc?.waitFor(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } else {
+                proc?.destroy()
+            }
+        } catch (_: Exception) {}
     }
 
     /**
@@ -137,23 +172,31 @@ class LinuxInputReader(
         val buf = ByteArray(structSize)
         val rawEvent = BinaryInputParser.RawInputEvent()
 
-        while (isRunning) {
-            var bytesRead = 0
-            while (bytesRead < structSize && isRunning) {
-                val count = inStream.read(buf, bytesRead, structSize - bytesRead)
-                if (count == -1) return
-                bytesRead += count
-            }
-            if (bytesRead == structSize) {
-                val ok = if (is64Bit) {
-                    BinaryInputParser.parseBinaryEvent64(buf, 0, rawEvent)
-                } else {
-                    BinaryInputParser.parseBinaryEvent32(buf, 0, rawEvent)
+        try {
+            while (isRunning) {
+                var bytesRead = 0
+                while (bytesRead < structSize && isRunning) {
+                    val count = inStream.read(buf, bytesRead, structSize - bytesRead)
+                    if (count == -1) return
+                    bytesRead += count
                 }
-                if (ok) {
-                    dispatchRawEvent(rawEvent)
+                if (bytesRead == structSize && isRunning) {
+                    val ok = if (is64Bit) {
+                        BinaryInputParser.parseBinaryEvent64(buf, 0, rawEvent)
+                    } else {
+                        BinaryInputParser.parseBinaryEvent32(buf, 0, rawEvent)
+                    }
+                    if (ok) {
+                        dispatchRawEvent(rawEvent)
+                    }
                 }
             }
+        } catch (_: java.io.IOException) {
+            // Normal termination when stream is closed by stop()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            try { inStream.close() } catch (_: Exception) {}
         }
     }
 
@@ -166,28 +209,36 @@ class LinuxInputReader(
         var linePos = 0
         val rawEvent = BinaryInputParser.RawInputEvent()
 
-        while (isRunning) {
-            val count = inStream.read(readBuffer)
-            if (count == -1) break
+        try {
+            while (isRunning) {
+                val count = inStream.read(readBuffer)
+                if (count == -1) break
 
-            for (i in 0 until count) {
-                val b = readBuffer[i]
-                if (b == '\n'.code.toByte()) {
-                    if (linePos > 0) {
-                        if (BinaryInputParser.parseAsciiHexLine(lineBuffer, 0, linePos, rawEvent)) {
-                            dispatchRawEvent(rawEvent)
+                for (i in 0 until count) {
+                    val b = readBuffer[i]
+                    if (b == '\n'.code.toByte()) {
+                        if (linePos > 0) {
+                            if (BinaryInputParser.parseAsciiHexLine(lineBuffer, 0, linePos, rawEvent)) {
+                                dispatchRawEvent(rawEvent)
+                            }
+                            linePos = 0
                         }
-                        linePos = 0
-                    }
-                } else {
-                    if (linePos < lineBuffer.size) {
-                        lineBuffer[linePos++] = b
                     } else {
-                        // Reset if line is anomalously long
-                        linePos = 0
+                        if (linePos < lineBuffer.size) {
+                            lineBuffer[linePos++] = b
+                        } else {
+                            // Reset if line is anomalously long
+                            linePos = 0
+                        }
                     }
                 }
             }
+        } catch (_: java.io.IOException) {
+            // Normal termination when stream is closed by stop()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            try { inStream.close() } catch (_: Exception) {}
         }
     }
 
@@ -289,14 +340,35 @@ class LinuxInputReader(
     }
 
     /**
-     * Inspects `/proc/bus/input/devices` to locate the event nodes corresponding to controllers.
+     * Inspects `/proc/bus/input/devices` (via Shizuku UID 2000 process to bypass SELinux restrictions)
+     * to locate the event nodes corresponding to physical controllers.
      */
     private fun findGamepadEventNodes(): List<String> {
         val nodes = mutableListOf<String>()
         try {
-            val f = File("/proc/bus/input/devices")
-            if (f.exists() && f.canRead()) {
-                val content = f.readText()
+            var content: String? = null
+
+            // 1. Primary: Use Shizuku process (UID 2000 ADB) to bypass untrusted_app SELinux limitations
+            try {
+                val proc = spawnShizukuProcess(arrayOf("cat", "/proc/bus/input/devices"))
+                if (proc != null) {
+                    try {
+                        content = proc.inputStream.bufferedReader().use { it.readText() }
+                    } finally {
+                        closeProcessQuietly(proc)
+                    }
+                }
+            } catch (_: Exception) {}
+
+            // 2. Secondary fallback: Direct file reading (for rooted environments or non-restricted SELinux)
+            if (content.isNullOrBlank()) {
+                val f = File("/proc/bus/input/devices")
+                if (f.exists() && f.canRead()) {
+                    content = f.readText()
+                }
+            }
+
+            if (!content.isNullOrBlank()) {
                 val blocks = content.split("\n\n")
                 for (block in blocks) {
                     val isVirtualOrInternal = block.contains("uinput", ignoreCase = true) ||

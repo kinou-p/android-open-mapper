@@ -205,7 +205,7 @@
     <string name="overlay_notif_text">Perfil: %1$s • Toque para configurar</string>
     <string name="overlay_service_started">Serviço de mapeamento iniciado</string>
     <string name="overlay_service_stopped">Serviço de mapeamento parado</string>
-    <string name="overlay_btn_peek">Peek</string>
+    <string name="overlay_btn_details">📋 Detalhes</string>
     <string name="overlay_btn_opacity">Opacidade %1$d%%</string>
     <string name="overlay_btn_assign">🎮 Atribuir</string>
     <string name="overlay_btn_size_inc">➕ Tamanho</string>
@@ -256,6 +256,23 @@
     <string name="screenshot_removed_toast">Captura de tela removida</string>
     <string name="screenshot_import_error">Não foi possível carregar a imagem selecionada</string>
     <string name="visual_editor_hint">Mova, redimensione e alinhe seus controles diretamente sobre os botões do jogo.</string>
-    <string name="visual_editor_no_screenshot_hint">📸 Toque em « Importar Captura » para carregar uma captura de tela do seu jogo e posicionar seus botões nela!</string>
     <string name="visual_editor_bg_opacity">Fundo: %1$d%%</string>
+
+    <!-- Community Screen -->
+    <string name="nav_community">Comunidade</string>
+    <string name="community_title">Comunidade</string>
+    <string name="community_share">Compartilhar</string>
+    <string name="community_refresh">Atualizar</string>
+    <string name="community_search_placeholder">Buscar perfil, jogo, criador...</string>
+    <string name="community_filter_all">Todos</string>
+    <string name="community_sort_popular">🔥 Populares</string>
+    <string name="community_sort_recent">🆕 Recentes</string>
+    <string name="community_sort_downloads">📥 Downloads</string>
+    <string name="community_empty_title">Nenhum perfil encontrado para este filtro.</string>
+    <string name="community_empty_desc">Seja o primeiro a compartilhar sua configuração!</string>
+    <string name="community_retry">Tentar novamente</string>
+    <string name="community_import_success">Perfil \"%1$s\" importado com sucesso!</string>
+    <string name="community_import_error">Erro ao decodificar o perfil</string>
+    <string name="community_download_error">Erro de download: %1$s</string>
+    <string name="community_vote_error">Erro ao votar: %1$s</string>
 </resources>

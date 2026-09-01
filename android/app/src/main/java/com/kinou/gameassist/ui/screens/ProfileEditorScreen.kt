@@ -49,7 +49,7 @@ fun ProfileEditorScreen(
     onSaveProfile: (GameProfile) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onDuplicateProfile: (GameProfile) -> Unit,
-    onImportProfile: (String) -> Boolean,
+    onImportProfile: (String, (Boolean) -> Unit) -> Unit,
     onOpenVisualEditor: (GameProfile) -> Unit,
     liveRx: Float = 0f,
     liveRy: Float = 0f,
@@ -204,12 +204,13 @@ fun ProfileEditorScreen(
                     Button(
                         onClick = {
                             if (importJsonText.isNotBlank()) {
-                                val ok = onImportProfile(importJsonText.trim())
-                                if (ok) {
-                                    Toast.makeText(context, context.getString(R.string.profile_imported_toast), Toast.LENGTH_SHORT).show()
-                                    showImportDialog = false
-                                } else {
-                                    Toast.makeText(context, context.getString(R.string.profile_import_error), Toast.LENGTH_LONG).show()
+                                onImportProfile(importJsonText.trim()) { ok ->
+                                    if (ok) {
+                                        Toast.makeText(context, context.getString(R.string.profile_imported_toast), Toast.LENGTH_SHORT).show()
+                                        showImportDialog = false
+                                    } else {
+                                        Toast.makeText(context, context.getString(R.string.profile_import_error), Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },
@@ -244,7 +245,12 @@ fun ProfileCard(
     onExport: () -> Unit
 ) {
     val context = LocalContext.current
-    val hapticManager = remember { HapticManager(context) }
+    val hapticManager = remember(context) { HapticManager(context) }
+    DisposableEffect(hapticManager) {
+        onDispose {
+            hapticManager.release()
+        }
+    }
 
     // Sub-tab selection state (0 = Caméra, 1 = Déplacement, 2 = Touches, 3 = Haptique)
     var selectedTab by remember(profile.id) { mutableIntStateOf(0) }
@@ -565,8 +571,8 @@ fun ProfileCard(
                                     onValueChange = {
                                         flickThreshold = it
                                         profile.camera.flickThreshold = it
-                                        onSave()
-                                    }
+                                    },
+                                    onValueChangeFinished = { onSave() }
                                 )
 
                                 SliderSetting(
@@ -577,8 +583,8 @@ fun ProfileCard(
                                     onValueChange = {
                                         flickBoost = it
                                         profile.camera.flickBoost = it
-                                        onSave()
-                                    }
+                                    },
+                                    onValueChangeFinished = { onSave() }
                                 )
 
                                 Row(
@@ -617,8 +623,8 @@ fun ProfileCard(
                                 onValueChange = {
                                     acceleration = it
                                     profile.camera.acceleration = it
-                                    onSave()
-                                }
+                                },
+                                onValueChangeFinished = { onSave() }
                             )
                         }
 
@@ -632,8 +638,8 @@ fun ProfileCard(
                             onValueChange = {
                                 sensX = it
                                 profile.camera.sensitivityX = it
-                                onSave()
-                            }
+                            },
+                            onValueChangeFinished = { onSave() }
                         )
 
                         SliderSetting(
@@ -644,8 +650,8 @@ fun ProfileCard(
                             onValueChange = {
                                 sensY = it
                                 profile.camera.sensitivityY = it
-                                onSave()
-                            }
+                            },
+                            onValueChangeFinished = { onSave() }
                         )
 
                         SliderSetting(
@@ -656,8 +662,8 @@ fun ProfileCard(
                             onValueChange = {
                                 deadzoneCam = it
                                 profile.camera.deadzone = it
-                                onSave()
-                            }
+                            },
+                            onValueChangeFinished = { onSave() }
                         )
 
                         SliderSetting(
@@ -668,8 +674,8 @@ fun ProfileCard(
                             onValueChange = {
                                 smoothing = it
                                 profile.camera.smoothing = it
-                                onSave()
-                            }
+                            },
+                            onValueChangeFinished = { onSave() }
                         )
 
                         HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
@@ -719,8 +725,8 @@ fun ProfileCard(
                                     onValueChange = {
                                         adsMultiplier = it
                                         profile.camera.adsSensitivityMultiplier = it
-                                        onSave()
-                                    }
+                                    },
+                                    onValueChangeFinished = { onSave() }
                                 )
                             }
                         }
@@ -829,8 +835,8 @@ fun ProfileCard(
                             onValueChange = {
                                 deadzoneJoy = it
                                 profile.joystick.deadzone = it
-                                onSave()
-                            }
+                            },
+                            onValueChangeFinished = { onSave() }
                         )
 
                         // RAA Keep-Alive Switch
@@ -926,8 +932,8 @@ fun ProfileCard(
                                         onValueChange = {
                                             jiggleRandomness = it
                                             profile.joystick.jiggleRandomness = it
-                                            onSave()
-                                        }
+                                        },
+                                        onValueChangeFinished = { onSave() }
                                     )
                                 }
 
@@ -939,8 +945,8 @@ fun ProfileCard(
                                     onValueChange = {
                                         jiggleSpeed = it
                                         profile.joystick.jiggleSpeed = it
-                                        onSave()
-                                    }
+                                    },
+                                    onValueChangeFinished = { onSave() }
                                 )
                             }
                         }
@@ -1113,8 +1119,8 @@ fun ProfileCard(
                                     onValueChange = {
                                         hapticIntensity = it
                                         profile.settings.hapticIntensity = it
-                                        onSave()
-                                    }
+                                    },
+                                    onValueChangeFinished = { onSave() }
                                 )
                             }
                         }
@@ -1459,7 +1465,8 @@ fun SliderSetting(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     displayText: String,
-    onValueChange: (Float) -> Unit
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: (() -> Unit)? = null
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(
@@ -1472,6 +1479,7 @@ fun SliderSetting(
         Slider(
             value = value,
             onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
             valueRange = range,
             colors = SliderDefaults.colors(
                 thumbColor = NeonCyan,

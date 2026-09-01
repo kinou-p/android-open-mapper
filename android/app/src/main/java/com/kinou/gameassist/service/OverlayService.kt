@@ -8,6 +8,7 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.util.DisplayMetrics
 import android.view.*
 import android.widget.FrameLayout
@@ -17,15 +18,22 @@ import androidx.lifecycle.lifecycleScope
 import com.kinou.gameassist.MainActivity
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.model.GameProfile
+import com.kinou.gameassist.data.model.deepCopy
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.engine.GamepadEngine
+import com.kinou.gameassist.injector.ShizukuManager
+import com.kinou.gameassist.injector.ShizukuStatus
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import com.kinou.gameassist.ui.overlay.EdgeHandleOverlayView
 import com.kinou.gameassist.ui.overlay.HudEditorOverlayView
 
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 class OverlayService : LifecycleService() {
 
@@ -39,15 +47,12 @@ class OverlayService : LifecycleService() {
         private val _isServiceRunning = MutableStateFlow(false)
         val isServiceRunningFlow: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
         val isServiceRunning: Boolean get() = _isServiceRunning.value
-        var instance: OverlayService? = null
+
+        private val _liveProfileUpdateFlow = MutableStateFlow<GameProfile?>(null)
+        val liveProfileUpdateFlow: StateFlow<GameProfile?> = _liveProfileUpdateFlow.asStateFlow()
 
         fun updateLiveProfile(profile: GameProfile) {
-            instance?.let { service ->
-                if (service.currentProfile?.id == profile.id) {
-                    service.currentProfile = profile
-                    service.engine.setProfile(profile)
-                }
-            }
+            _liveProfileUpdateFlow.value = profile
         }
     }
 
@@ -68,9 +73,8 @@ class OverlayService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
-        instance = this
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        repository = ProfileRepository(this)
+        repository = ProfileRepository.getInstance(this)
         injector = ShizukuTouchInjector()
         hapticManager = com.kinou.gameassist.engine.HapticManager(this)
         engine = GamepadEngine(injector, lifecycleScope, hapticManager)
@@ -79,12 +83,54 @@ class OverlayService : LifecycleService() {
             cycleProfile(forward)
         }
 
+        lifecycleScope.launch {
+            liveProfileUpdateFlow.collect { profile ->
+                if (profile != null && currentProfile?.id == profile.id) {
+                    currentProfile = profile
+                    engine.setProfile(profile)
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            ShizukuManager.status.collect { status ->
+                if (status == ShizukuStatus.RUNNING_AUTHORIZED) {
+                    injector.connect()
+                    // Détacher l'intercepteur si Shizuku vient d'être autorisé après le démarrage
+                    // (cas : service lancé avant autorisation, puis l'utilisateur accepte dans Shizuku).
+                    // Sans ce détachement, la vue 1×1 reste attachée indéfiniment.
+                    val interceptor = inputInterceptorView
+                    if (interceptor != null) {
+                        safeRemoveView(interceptor)
+                        inputInterceptorView = null
+                    }
+                } else if (_isServiceRunning.value && status == ShizukuStatus.DEAD) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(
+                            applicationContext,
+                            "⚠️ Connexion Shizuku perdue. Vérifiez l'application Shizuku.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
+        }
+
         updateScreenMetrics()
         createNotificationChannel()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+
+        // Garde critique : ne jamais ajouter de vue overlay sans la permission SYSTEM_ALERT_WINDOW.
+        // En cas de redémarrage START_STICKY après révocation de la permission (MIUI/EMUI),
+        // windowManager.addView() lèverait une BadTokenException et crasherait l'app en pleine partie.
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         val action = intent?.action
 
         if (action == ACTION_STOP) {
@@ -104,7 +150,9 @@ class OverlayService : LifecycleService() {
         }
 
         showEdgeHandle()
-        attachInputInterceptor()
+        if (!ShizukuManager.isAuthorized()) {
+            attachInputInterceptor()
+        }
 
         return START_STICKY
     }
@@ -132,7 +180,7 @@ class OverlayService : LifecycleService() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -294,27 +342,65 @@ class OverlayService : LifecycleService() {
             y = 0
         }
 
-        editorView = HudEditorOverlayView(
-            this, prof,
+        // Copie défensive : l'éditeur mutera sa propre copie. Le profil actif (utilisé en jeu)
+        // ne change qu'au moment de la sauvegarde, rendant l'annulation logique possible.
+        val editorProfile = prof.deepCopy()
+
+        val newEditor = HudEditorOverlayView(
+            this, editorProfile,
             onSave = { updatedProfile ->
-                repository.saveProfile(updatedProfile)
+                currentProfile = updatedProfile
                 engine.setProfile(updatedProfile)
                 closeHudEditor()
+                updateLiveProfile(updatedProfile)
+                lifecycleScope.launch {
+                    repository.saveProfileAsync(updatedProfile)
+                }
             },
             onClose = {
                 closeHudEditor()
             }
         )
 
+        // Load screenshot asynchronously without blocking main UI thread
+        if (editorProfile.customScreenshotPath != null) {
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val bmp = com.kinou.gameassist.data.repository.ScreenshotManager.loadScreenshotBitmapAsync(editorProfile.customScreenshotPath)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (editorView == newEditor) {
+                        newEditor.setScreenshot(bmp)
+                    }
+                }
+            }
+        }
+
         edgeHandleView?.visibility = View.GONE
-        windowManager.addView(editorView, params)
-        editorView?.requestFocus()
+        try {
+            windowManager.addView(newEditor, params)
+            editorView = newEditor
+            newEditor.requestFocus()
+        } catch (e: Exception) {
+            // En cas d'échec d'ajout de la fenêtre, restaurer la poignée pour ne pas laisser l'UI verrouillée
+            edgeHandleView?.visibility = View.VISIBLE
+        }
+    }
+
+    private fun safeRemoveView(view: View?) {
+        if (view != null) {
+            try {
+                if (view.isAttachedToWindow) {
+                    windowManager.removeViewImmediate(view)
+                }
+            } catch (_: Exception) {
+                // Ignore if view was already removed or detached by system
+            }
+        }
     }
 
     private fun closeHudEditor() {
         editorView?.let {
             it.releaseBitmap()
-            windowManager.removeView(it)
+            safeRemoveView(it)
             editorView = null
         }
         edgeHandleView?.visibility = View.VISIBLE
@@ -322,20 +408,24 @@ class OverlayService : LifecycleService() {
     }
 
     fun cycleProfile(forward: Boolean = true) {
-        val allProfiles = repository.getAllProfiles()
-        if (allProfiles.isEmpty()) return
-        val currentIndex = allProfiles.indexOfFirst { it.id == currentProfile?.id }
-        val nextIndex = if (forward) {
-            if (currentIndex < 0) 0 else (currentIndex + 1) % allProfiles.size
-        } else {
-            if (currentIndex <= 0) allProfiles.size - 1 else currentIndex - 1
+        lifecycleScope.launch {
+            val allProfiles = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                repository.getAllProfiles()
+            }
+            if (allProfiles.isEmpty()) return@launch
+            val currentIndex = allProfiles.indexOfFirst { it.id == currentProfile?.id }
+            val nextIndex = if (forward) {
+                if (currentIndex < 0) 0 else (currentIndex + 1) % allProfiles.size
+            } else {
+                if (currentIndex <= 0) allProfiles.size - 1 else currentIndex - 1
+            }
+            val nextProfile = allProfiles[nextIndex]
+            currentProfile = nextProfile
+            engine.setProfile(nextProfile)
+            hapticManager.playProfileSwitchHaptic()
+            showHotSwitchToast(nextProfile.name)
+            updateNotification()
         }
-        val nextProfile = allProfiles[nextIndex]
-        currentProfile = nextProfile
-        engine.setProfile(nextProfile)
-        hapticManager.playProfileSwitchHaptic()
-        showHotSwitchToast(nextProfile.name)
-        updateNotification()
     }
 
     private fun showHotSwitchToast(profileName: String) {
@@ -365,13 +455,17 @@ class OverlayService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         _isServiceRunning.value = false
-        if (instance == this) instance = null
         engine.stop()
 
-        edgeHandleView?.let { windowManager.removeView(it); edgeHandleView = null }
-        editorView?.let { windowManager.removeView(it); editorView = null }
-        inputInterceptorView?.let { windowManager.removeView(it); inputInterceptorView = null }
+        editorView?.releaseBitmap()
+        safeRemoveView(edgeHandleView)
+        edgeHandleView = null
+        safeRemoveView(editorView)
+        editorView = null
+        safeRemoveView(inputInterceptorView)
+        inputInterceptorView = null
+
+        super.onDestroy()
     }
 }

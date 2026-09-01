@@ -18,14 +18,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.gson.Gson
+import com.kinou.gameassist.R
 import com.kinou.gameassist.data.community.*
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.ui.theme.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -53,22 +56,40 @@ fun CommunityScreen(
 
     var showPublishDialog by remember { mutableStateOf(false) }
 
-    val gameFilters = listOf(
-        "Tous" to null,
-        "CoD Mobile" to "com.activision.callofduty.shooter",
-        "Warzone" to "warzone",
-        "PUBG" to "pubg",
-        "Genshin" to "genshin"
-    )
+    // Gardes anti double-submit (vote / import / publication)
+    var votingId by remember { mutableStateOf<String?>(null) }
+    var importingId by remember { mutableStateOf<String?>(null) }
+    var isPublishing by remember { mutableStateOf(false) }
 
-    val sortOptions = listOf(
-        "🔥 Populaires" to "popular",
-        "🆕 Récents" to "recent",
-        "📥 Téléchargés" to "downloads"
-    )
+    val filterAllLabel = stringResource(R.string.community_filter_all)
+    val sortPopularLabel = stringResource(R.string.community_sort_popular)
+    val sortRecentLabel = stringResource(R.string.community_sort_recent)
+    val sortDownloadsLabel = stringResource(R.string.community_sort_downloads)
+
+    val gameFilters = remember(filterAllLabel) {
+        listOf(
+            filterAllLabel to null,
+            "CoD Mobile" to "com.activision.callofduty.shooter",
+            "Warzone" to "warzone",
+            "PUBG" to "pubg",
+            "Genshin" to "genshin"
+        )
+    }
+
+    val sortOptions = remember(sortPopularLabel, sortRecentLabel, sortDownloadsLabel) {
+        listOf(
+            sortPopularLabel to "popular",
+            sortRecentLabel to "recent",
+            sortDownloadsLabel to "downloads"
+        )
+    }
+
+    var loadJob by remember { mutableStateOf<Job?>(null) }
 
     fun loadProfiles(forceRefresh: Boolean = false) {
-        scope.launch {
+        // Annule toute requête en cours pour éviter qu'une réponse obsolète n'écrase la nouvelle.
+        loadJob?.cancel()
+        loadJob = scope.launch {
             if (profiles.isEmpty() || forceRefresh) {
                 isLoading = true
             }
@@ -103,12 +124,12 @@ fun CommunityScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Public, contentDescription = null, tint = NeonCyan)
-                        Text("Communauté", fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.community_title), fontWeight = FontWeight.Bold)
                     }
                 },
                 actions = {
                     IconButton(onClick = { loadProfiles(forceRefresh = true) }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Actualiser", tint = TextPrimary)
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.community_refresh), tint = TextPrimary)
                     }
                     Button(
                         onClick = { showPublishDialog = true },
@@ -119,7 +140,7 @@ fun CommunityScreen(
                     ) {
                         Icon(Icons.Default.CloudUpload, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Partager", color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text(stringResource(R.string.community_share), color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -143,14 +164,14 @@ fun CommunityScreen(
                 onValueChange = {
                     searchQuery = it
                 },
-                placeholder = { Text("Rechercher un profil, jeu, créateur...", color = TextSecondary, fontSize = 13.sp) },
+                placeholder = { Text(stringResource(R.string.community_search_placeholder), color = TextSecondary, fontSize = 13.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = {
                             searchQuery = ""
                         }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Effacer", tint = TextSecondary)
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondary)
                         }
                     }
                 },
@@ -243,7 +264,7 @@ fun CommunityScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                             shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Réessayer", color = DarkBackground, fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.community_retry), color = DarkBackground, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -251,8 +272,8 @@ fun CommunityScreen(
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Inbox, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
-                        Text("Aucun profil trouvé pour ce filtre.", color = TextSecondary, fontSize = 14.sp)
-                        Text("Soyez le premier à partager votre configuration !", color = NeonCyan, fontSize = 12.sp)
+                        Text(stringResource(R.string.community_empty_title), color = TextSecondary, fontSize = 14.sp)
+                        Text(stringResource(R.string.community_empty_desc), color = NeonCyan, fontSize = 12.sp)
                     }
                 }
             } else {
@@ -260,38 +281,67 @@ fun CommunityScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(profiles, key = { it.id }) { item ->
+                    items(profiles, key = { it.id ?: "" }) { item ->
                         CommunityProfileCard(
                             profile = item,
                             onVote = { voteVal ->
-                                scope.launch {
-                                    val res = apiClient.vote(item.id, voteVal)
-                                    res.onSuccess { voteRes ->
-                                        item.likesCount = voteRes.likes
-                                        item.dislikesCount = voteRes.dislikes
-                                        item.userVote = voteRes.currentVote
-                                        // trigger UI recomposition
-                                        profiles = profiles.toList()
+                                item.id?.let { profileId ->
+                                    if (votingId == null) {
+                                        votingId = profileId
+                                        scope.launch {
+                                            try {
+                                                val res = apiClient.vote(profileId, voteVal)
+                                                res.onSuccess { voteRes ->
+                                                    item.likesCount = voteRes.likes
+                                                    item.dislikesCount = voteRes.dislikes
+                                                    item.userVote = voteRes.currentVote
+                                                    // trigger UI recomposition
+                                                    profiles = profiles.toList()
+                                                }.onFailure { ex ->
+                                                    Toast.makeText(
+                                                        context,
+                                                        context.getString(R.string.community_vote_error, ex.localizedMessage ?: ""),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            } finally {
+                                                votingId = null
+                                            }
+                                        }
                                     }
                                 }
                             },
                             onImport = {
-                                scope.launch {
-                                    val detailRes = apiClient.getProfileDetail(item.id)
-                                    detailRes.onSuccess { detail ->
-                                        apiClient.trackDownload(item.id)
-                                        item.downloadsCount += 1
-                                        profiles = profiles.toList()
+                                item.id?.let { profileId ->
+                                    if (importingId == null) {
+                                        importingId = profileId
+                                        scope.launch {
+                                            try {
+                                                val detailRes = apiClient.getProfileDetail(profileId)
+                                                detailRes.onSuccess { detail ->
+                                                    val profileJson = detail.profileJson
+                                                    if (profileJson.isNullOrBlank()) {
+                                                        Toast.makeText(context, context.getString(R.string.community_import_error), Toast.LENGTH_SHORT).show()
+                                                        return@onSuccess
+                                                    }
+                                                    apiClient.trackDownload(profileId)
+                                                    item.downloadsCount += 1
+                                                    profiles = profiles.toList()
 
-                                        val imported = repository.importProfileFromJson(detail.profileJson)
-                                        if (imported != null) {
-                                            onProfileImported(imported)
-                                            Toast.makeText(context, "Profil \"${imported.name}\" importé avec succès !", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Erreur lors du décodage du profil", Toast.LENGTH_SHORT).show()
+                                                    val imported = repository.importProfileFromJson(profileJson)
+                                                    if (imported != null) {
+                                                        onProfileImported(imported)
+                                                        Toast.makeText(context, context.getString(R.string.community_import_success, imported.name), Toast.LENGTH_SHORT).show()
+                                                    } else {
+                                                        Toast.makeText(context, context.getString(R.string.community_import_error), Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }.onFailure { ex ->
+                                                    Toast.makeText(context, context.getString(R.string.community_download_error, ex.message ?: ""), Toast.LENGTH_SHORT).show()
+                                                }
+                                            } finally {
+                                                importingId = null
+                                            }
                                         }
-                                    }.onFailure { ex ->
-                                        Toast.makeText(context, "Erreur téléchargement: ${ex.message}", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -307,14 +357,21 @@ fun CommunityScreen(
                 localProfiles = localProfiles,
                 onDismiss = { showPublishDialog = false },
                 onPublish = { req ->
-                    scope.launch {
-                        val res = apiClient.publishProfile(req)
-                        res.onSuccess {
-                            Toast.makeText(context, "Profil publié sur le Hub Communautaire !", Toast.LENGTH_LONG).show()
-                            showPublishDialog = false
-                            loadProfiles(forceRefresh = true)
-                        }.onFailure { ex ->
-                            Toast.makeText(context, "Erreur: ${ex.message}", Toast.LENGTH_LONG).show()
+                    if (!isPublishing) {
+                        isPublishing = true
+                        scope.launch {
+                            try {
+                                val res = apiClient.publishProfile(req)
+                                res.onSuccess {
+                                    Toast.makeText(context, "Profil publié sur le Hub Communautaire !", Toast.LENGTH_LONG).show()
+                                    showPublishDialog = false
+                                    loadProfiles(forceRefresh = true)
+                                }.onFailure { ex ->
+                                    Toast.makeText(context, "Erreur: ${ex.message}", Toast.LENGTH_LONG).show()
+                                }
+                            } finally {
+                                isPublishing = false
+                            }
                         }
                     }
                 }
@@ -348,7 +405,7 @@ fun CommunityProfileCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(profile.title, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 15.sp)
+                    Text(profile.title ?: "", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 15.sp)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -359,7 +416,7 @@ fun CommunityProfileCard(
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
-                                profile.gameName,
+                                profile.gameName ?: "",
                                 color = NeonCyan,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -407,7 +464,7 @@ fun CommunityProfileCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Par ${profile.authorName}", color = TextSecondary, fontSize = 11.sp)
+                    Text("Par ${profile.authorName ?: ""}", color = TextSecondary, fontSize = 11.sp)
                     if (dateStr.isNotEmpty()) {
                         Text("• $dateStr", color = TextSecondary.copy(alpha = 0.6f), fontSize = 11.sp)
                     }
@@ -556,7 +613,10 @@ fun PublishProfileDialog(
                             PublishProfileRequest(
                                 title = title.trim(),
                                 description = description.trim(),
-                                gameName = prof.name,
+                                gameName = when (prof.packageName) {
+                                    "com.activision.callofduty.shooter" -> "CoD Mobile"
+                                    else -> prof.packageName.substringAfterLast('.', prof.packageName)
+                                },
                                 packageName = prof.packageName,
                                 authorName = authorName.trim(),
                                 controllerType = controllerType.trim(),

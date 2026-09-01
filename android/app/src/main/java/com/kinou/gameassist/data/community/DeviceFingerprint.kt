@@ -13,15 +13,30 @@ object DeviceFingerprint {
         cachedHash?.let { return it }
 
         val rawId = try {
-            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "openmapper_generic_device"
+            val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            if (!androidId.isNullOrBlank() && androidId != "9774d56d682e549c" && androidId != "0000000000000000") {
+                androidId
+            } else {
+                getOrCreateInstallId(context)
+            }
         } catch (e: Exception) {
-            "openmapper_generic_device"
+            getOrCreateInstallId(context)
         }
 
         val salt = "openmapper_community_salt_2026"
         val hash = sha256("$rawId:$salt")
         cachedHash = hash
         return hash
+    }
+
+    private fun getOrCreateInstallId(context: Context): String {
+        val prefs = context.applicationContext.getSharedPreferences("openmapper_device_prefs", Context.MODE_PRIVATE)
+        var installId = prefs.getString("install_device_uuid", null)
+        if (installId.isNullOrBlank()) {
+            installId = java.util.UUID.randomUUID().toString()
+            prefs.edit().putString("install_device_uuid", installId).apply()
+        }
+        return installId
     }
 
     private fun sha256(input: String): String {

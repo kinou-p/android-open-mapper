@@ -1,12 +1,19 @@
 package com.kinou.gameassist.injector
 
+import android.os.DeadObjectException
+import android.os.RemoteException
 import android.os.SystemClock
+import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 class ShizukuTouchInjector {
+    companion object {
+        private const val TAG = "ShizukuTouchInjector"
+    }
+
     private var helper: IInputManagerHelper? = null
     private val pointerPool = PointerPool()
     private val lock = ReentrantLock()
@@ -25,6 +32,20 @@ class ShizukuTouchInjector {
 
     fun isConnected(): Boolean = helper != null
 
+    private fun handleInjectionError(e: Throwable) {
+        if (e is DeadObjectException || e is RemoteException) {
+            Log.e(TAG, "Shizuku input binder died or was lost: ${e.message}")
+            helper = null
+            ShizukuManager.checkStatus()
+        } else if (e is SecurityException) {
+            Log.e(TAG, "SecurityException during input injection: ${e.message}")
+            helper = null
+            ShizukuManager.checkStatus()
+        } else {
+            Log.w(TAG, "Non-fatal error injecting input event: ${e.message}")
+        }
+    }
+
     fun setScreenResolution(w: Int, h: Int) {
         lock.withLock {
             screenWidth = maxOf(w, h)
@@ -35,6 +56,7 @@ class ShizukuTouchInjector {
     fun touchDown(pointerId: Int, x: Float, y: Float, pressure: Float? = null) {
         lock.withLock {
             val h = helper ?: return
+
             val clampedX = x.coerceIn(0f, screenWidth.toFloat())
             val clampedY = y.coerceIn(0f, screenHeight.toFloat())
 
@@ -70,8 +92,15 @@ class ShizukuTouchInjector {
                 0
             )
 
-            h.injectInputEvent(event, 0)
-            event.recycle()
+            // Injection sous le verrou pour sérialiser le flux DOWN/MOVE/UP entre
+            // les producteurs concurrents (boucle engine, main thread, lecteur /dev/input).
+            try {
+                h.injectInputEvent(event, 0)
+            } catch (e: Throwable) {
+                handleInjectionError(e)
+            } finally {
+                event.recycle()
+            }
         }
     }
 
@@ -105,8 +134,13 @@ class ShizukuTouchInjector {
                 0
             )
 
-            h.injectInputEvent(event, 0)
-            event.recycle()
+            try {
+                h.injectInputEvent(event, 0)
+            } catch (e: Throwable) {
+                handleInjectionError(e)
+            } finally {
+                event.recycle()
+            }
         }
     }
 
@@ -149,23 +183,32 @@ class ShizukuTouchInjector {
                 0
             )
 
-            h.injectInputEvent(event, 0)
-            event.recycle()
-
             pointerPool.remove(pointerId)
+
+            try {
+                h.injectInputEvent(event, 0)
+            } catch (e: Throwable) {
+                handleInjectionError(e)
+            } finally {
+                event.recycle()
+            }
         }
     }
 
     fun releaseAll() {
+        val event: MotionEvent
+        val h: IInputManagerHelper
+
         lock.withLock {
-            val h = helper ?: return
+            val helperInstance = helper ?: return
             if (pointerPool.getActiveCount() == 0) return
+            h = helperInstance
 
             val eventTime = SystemClock.uptimeMillis()
             pointerPool.populatePointerBuffers(-1)
             val count = pointerPool.getActiveCount()
 
-            val event = MotionEvent.obtain(
+            event = MotionEvent.obtain(
                 downTime,
                 eventTime,
                 MotionEvent.ACTION_CANCEL,
@@ -182,9 +225,15 @@ class ShizukuTouchInjector {
                 0
             )
 
-            h.injectInputEvent(event, 0)
-            event.recycle()
             pointerPool.clear()
+        }
+
+        try {
+            h.injectInputEvent(event, 0)
+        } catch (e: Throwable) {
+            handleInjectionError(e)
+        } finally {
+            event.recycle()
         }
     }
 

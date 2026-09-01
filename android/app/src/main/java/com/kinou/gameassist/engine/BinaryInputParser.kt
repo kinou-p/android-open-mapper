@@ -221,17 +221,19 @@ object BinaryInputParser {
     }
 
     /**
-     * Universal stick normalization supporting standard Android evdev 16-bit ranges:
-     * - Unsigned range (0..65535, center 32768)
-     * - Signed negative range (-32768..-1)
+     * Converts a raw Linux gamepad stick coordinate to normalized Float [-1.0f .. +1.0f].
+     *
+     * Linux / Android Gamepad Drivers (ABS_X, ABS_Y, ABS_Z, ABS_RZ, etc.):
+     * - Standard 16-bit Unsigned (0..65535): Center = 32768 (0x8000), Min = 0 (-1.0f), Max = 65535 (+1.0f)
+     * - Signed 16-bit extension (-32768..-1): Negative offset mapping
      */
     fun normalizeStick(raw: Long): Float {
         return when {
-            raw in 0..65535 -> {
-                val delta = (raw - 32768).toFloat()
+            raw in 0L..65535L -> {
+                val delta = (raw - 32768L).toFloat()
                 (delta / 32768f).coerceIn(-1.0f, 1.0f)
             }
-            raw in -32768..-1 -> {
+            raw in -32768L..-1L -> {
                 (raw / 32768f).coerceIn(-1.0f, 1.0f)
             }
             else -> 0.0f

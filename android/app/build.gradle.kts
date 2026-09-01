@@ -1,8 +1,35 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val localProperties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) {
+        load(localFile.inputStream())
+    }
+}
+
+val keystoreStorePassword = System.getenv("KEYSTORE_PASSWORD")
+    ?: localProperties.getProperty("KEYSTORE_PASSWORD")
+    ?: "openmapper_android_app"
+
+val keystoreKeyPassword = System.getenv("KEY_PASSWORD")
+    ?: localProperties.getProperty("KEY_PASSWORD")
+    ?: "openmapper_android_app"
+
+val keystoreAlias = System.getenv("KEY_ALIAS")
+    ?: localProperties.getProperty("KEY_ALIAS")
+    ?: "openmapper"
+
+// Secret partagé avec le backend Cloudflare (wrangler secret put APP_SECRET) pour signer
+// les requêtes POST (HMAC-SHA256). À surcharger via APP_SECRET (env ou local.properties).
+val apiSigningSecret = System.getenv("APP_SECRET")
+    ?: localProperties.getProperty("APP_SECRET")
+    ?: "openmapper_dev_secret_7f3a9c2b1e8d4a6f"
 
 android {
     namespace = "com.kinou.gameassist"
@@ -15,6 +42,8 @@ android {
         versionCode = 7
         versionName = "1.1.4"
 
+        buildConfigField("String", "API_SIGNING_SECRET", "\"$apiSigningSecret\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -23,10 +52,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("keystore/openmapper.keystore")
-            storePassword = "openmapper_android_app"
-            keyAlias = "openmapper"
-            keyPassword = "openmapper_android_app"
+            storeFile = file(System.getenv("KEYSTORE_PATH") ?: localProperties.getProperty("KEYSTORE_PATH") ?: "keystore/openmapper.keystore")
+            storePassword = keystoreStorePassword
+            keyAlias = keystoreAlias
+            keyPassword = keystoreKeyPassword
         }
     }
 
@@ -35,7 +64,8 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

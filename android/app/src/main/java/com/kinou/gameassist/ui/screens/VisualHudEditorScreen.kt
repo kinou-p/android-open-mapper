@@ -19,6 +19,7 @@ import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ScreenshotManager
 import com.kinou.gameassist.ui.overlay.HudEditorOverlayView
 import com.kinou.gameassist.ui.theme.DarkBackground
+import kotlinx.coroutines.launch
 
 @Composable
 fun VisualHudEditorScreen(
@@ -28,9 +29,18 @@ fun VisualHudEditorScreen(
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
+    val scope = rememberCoroutineScope()
 
+    // Chargement asynchrone du Bitmap HUD sur IO pour éviter un stall de 80-250ms sur le Main Thread.
+    // On commence avec null (affichage vide) puis on met à jour dès que le chargement IO est terminé.
     var screenshotBitmap by remember(profile.id, profile.customScreenshotPath) {
-        mutableStateOf(ScreenshotManager.loadScreenshotBitmap(profile.customScreenshotPath))
+        mutableStateOf<android.graphics.Bitmap?>(null)
+    }
+    LaunchedEffect(profile.id, profile.customScreenshotPath) {
+        val loaded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            ScreenshotManager.loadScreenshotBitmap(profile.customScreenshotPath)
+        }
+        screenshotBitmap = loaded
     }
 
     var editorViewRef by remember { mutableStateOf<HudEditorOverlayView?>(null) }
@@ -41,9 +51,13 @@ fun VisualHudEditorScreen(
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         onDispose {
             activity?.requestedOrientation = previousOrientation
-            screenshotBitmap?.recycle()
-            screenshotBitmap = null
             editorViewRef?.releaseBitmap()
+            screenshotBitmap?.let { bmp ->
+                if (!bmp.isRecycled) {
+                    bmp.recycle()
+                }
+            }
+            screenshotBitmap = null
         }
     }
 
@@ -52,17 +66,27 @@ fun VisualHudEditorScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         if (uri != null) {
-            val savedPath = ScreenshotManager.saveScreenshotFromUri(context, profile.id, uri)
-            if (savedPath != null) {
-                profile.customScreenshotPath = savedPath
-                screenshotBitmap?.recycle()
-                val newBmp = ScreenshotManager.loadScreenshotBitmap(savedPath)
-                screenshotBitmap = newBmp
-                editorViewRef?.setScreenshot(newBmp)
-                onSaveProfile(profile)
-                Toast.makeText(context, context.getString(R.string.screenshot_imported_toast), Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(context, context.getString(R.string.screenshot_import_error), Toast.LENGTH_SHORT).show()
+            scope.launch {
+                val savedPath = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    ScreenshotManager.saveScreenshotFromUri(context, profile.id, uri)
+                }
+                if (savedPath != null) {
+                    profile.customScreenshotPath = savedPath
+                    onSaveProfile(profile)
+
+                    val newBmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        ScreenshotManager.loadScreenshotBitmap(savedPath)
+                    }
+                    val oldBmp = screenshotBitmap
+                    editorViewRef?.setScreenshot(newBmp)
+                    screenshotBitmap = newBmp
+                    if (oldBmp != null && !oldBmp.isRecycled && oldBmp != newBmp) {
+                        oldBmp.recycle()
+                    }
+                    Toast.makeText(context, context.getString(R.string.screenshot_imported_toast), Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, context.getString(R.string.screenshot_import_error), Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -97,9 +121,10 @@ fun VisualHudEditorScreen(
                     onRemoveScreenshot = {
                         ScreenshotManager.deleteScreenshot(profile.customScreenshotPath)
                         profile.customScreenshotPath = null
-                        screenshotBitmap?.recycle()
-                        screenshotBitmap = null
+                        val oldBmp = screenshotBitmap
                         editorViewRef?.setScreenshot(null)
+                        screenshotBitmap = null
+                        oldBmp?.recycle()
                         onSaveProfile(profile)
                         Toast.makeText(ctx, ctx.getString(R.string.screenshot_removed_toast), Toast.LENGTH_SHORT).show()
                     }

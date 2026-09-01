@@ -60,12 +60,12 @@ class HudEditorOverlayView(
     private var dragOffsetY = 0f
     var isLearning = false
 
-    // Opacity & Peek Mode
+    // Opacity & Details Bar
     private val opacitySteps = floatArrayOf(0.40f, 0.65f, 0.15f, 0.0f)
     private var opacityIndex = 0
-    var isPeeking = false
+    var showDetails = true
     private val currentBgAlpha: Float
-        get() = if (isPeeking) 0.0f else opacitySteps[opacityIndex]
+        get() = opacitySteps[opacityIndex]
 
     // Gamepad Live State
     private val activeGamepadKeys = mutableSetOf<String>()
@@ -180,13 +180,122 @@ class HudEditorOverlayView(
         strokeWidth = 2.5f
     }
 
+    // Reusable Paints (Zero allocation onDraw)
+    private val crossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFAA00.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 4f
+    }
+    private val selectRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00F0FF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 5f
+    }
+    private val stickLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xAA00FF66.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 6f
+    }
+    private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00FF66.toInt()
+        style = Paint.Style.FILL
+    }
+    private val livePulseRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00FF66.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 8f
+    }
+    private val selectionRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00FF66.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 5f
+    }
+    private val subTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        textSize = 15f
+        textAlign = Paint.Align.CENTER
+    }
+    private val badgeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val badgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF000000.toInt()
+        textSize = 13f
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+    private val roleBadgeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val roleBadgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.BLACK
+        textSize = 11f * density
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+    private val showBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xE60D131D.toInt()
+        style = Paint.Style.FILL
+    }
+    private val showStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00F0FF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * density
+    }
+    private val showTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00F0FF.toInt()
+        textSize = 14f * density
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+    private val bannerBgPaint = Paint().apply {
+        color = 0xEEFF0055.toInt()
+        style = Paint.Style.FILL
+    }
+    private val bannerTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 14f * density
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+    private val barBgPaint = Paint().apply {
+        color = 0xF20A0E14.toInt()
+        style = Paint.Style.FILL
+    }
+    private val uiBtnBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val uiBtnStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.2f * density
+    }
+    private val uiBtnTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+    private val contextCardBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xF20F151F.toInt()
+        style = Paint.Style.FILL
+    }
+    private val contextCardStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00F0FF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * density
+    }
+    private val contextLabelPaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.LEFT
+        textSize = 14f * density
+        color = 0xFF00F0FF.toInt()
+        isFakeBoldText = true
+    }
+
     // Top Bar Visibility & Action Button Bounds
     var isTopBarHidden = false
     private val btnCloseRect = RectF()
     private val btnSaveRect = RectF()
     private val btnHideRect = RectF()
     private val btnOpacRect = RectF()
-    private val btnPeekRect = RectF()
+    private val btnDetailsRect = RectF()
     private val btnAddRect = RectF()
     private val btnShotRect = RectF()
     private val btnRemRect = RectF()
@@ -229,9 +338,6 @@ class HudEditorOverlayView(
             )
         }
 
-        if (screenshotBitmap == null && profile.customScreenshotPath != null) {
-            screenshotBitmap = ScreenshotManager.loadScreenshotBitmap(profile.customScreenshotPath)
-        }
     }
 
     override fun onAttachedToWindow() {
@@ -250,15 +356,15 @@ class HudEditorOverlayView(
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
 
-        // 1. Background Screenshot (if present and not peeking)
+        // 1. Background Screenshot (if present)
         val bmp = screenshotBitmap
-        if (!isPeeking && bmp != null && !bmp.isRecycled) {
+        if (bmp != null && !bmp.isRecycled) {
             bitmapSrcRect.set(0, 0, bmp.width, bmp.height)
             bitmapDstRect.set(0f, 0f, w, h)
             canvas.drawBitmap(bmp, bitmapSrcRect, bitmapDstRect, bitmapPaint)
         }
 
-        // 2. Background tint (respects opacity & peek mode)
+        // 2. Background tint (respects opacity)
         if (currentBgAlpha > 0.01f) {
             bgPaint.color = (currentBgAlpha * 255).toInt().shl(24)
             canvas.drawRect(0f, 0f, w, h, bgPaint)
@@ -300,11 +406,6 @@ class HudEditorOverlayView(
                 val reticleX = (cx1 + cx2) / 2f + liveRsX * ((cx2 - cx1) / 2f) * 0.75f
                 val reticleY = (cy1 + cy2) / 2f + liveRsY * ((cy2 - cy1) / 2f) * 0.75f
 
-                val crossPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xFFFFAA00.toInt()
-                    style = Paint.Style.STROKE
-                    strokeWidth = 4f
-                }
                 canvas.drawCircle(reticleX, reticleY, 20f * density, crossPaint)
                 canvas.drawLine(reticleX - 30f, reticleY, reticleX + 30f, reticleY, crossPaint)
                 canvas.drawLine(reticleX, reticleY - 30f, reticleX, reticleY + 30f, crossPaint)
@@ -323,12 +424,7 @@ class HudEditorOverlayView(
             canvas.drawCircle(jx, jy, jr * joy.sprintThreshold, joyStroke)
 
             if (isJoystickSelected) {
-                val selectRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xFF00F0FF.toInt()
-                    style = Paint.Style.STROKE
-                    strokeWidth = 5f
-                }
-                canvas.drawCircle(jx, jy, jr + 10f, selectRing)
+                canvas.drawCircle(jx, jy, jr + 10f, selectRingPaint)
             }
 
             canvas.drawText(context.getString(R.string.overlay_joystick_zone), jx, jy + 10f, textPaint)
@@ -338,17 +434,7 @@ class HudEditorOverlayView(
                 val thumbX = jx + liveLsX * jr * 0.75f
                 val thumbY = jy + liveLsY * jr * 0.75f
 
-                val stickLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xAA00FF66.toInt()
-                    style = Paint.Style.STROKE
-                    strokeWidth = 6f
-                }
                 canvas.drawLine(jx, jy, thumbX, thumbY, stickLinePaint)
-
-                val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xFF00FF66.toInt()
-                    style = Paint.Style.FILL
-                }
                 canvas.drawCircle(thumbX, thumbY, 18f * density, thumbPaint)
                 canvas.drawCircle(thumbX, thumbY, 18f * density, strokePaint)
             }
@@ -373,25 +459,13 @@ class HudEditorOverlayView(
             canvas.drawCircle(bx, by, br, strokePaint)
 
             if (isLivePressed) {
-                val livePulseRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xFF00FF66.toInt()
-                    style = Paint.Style.STROKE
-                    strokeWidth = 8f
-                }
-                canvas.drawCircle(bx, by, br + 12f, livePulseRing)
+                canvas.drawCircle(bx, by, br + 12f, livePulseRingPaint)
             } else if (isSelected) {
-                val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xFF00FF66.toInt()
-                    style = Paint.Style.STROKE
-                    strokeWidth = 5f
-                }
-                canvas.drawCircle(bx, by, br + 8f, ringPaint)
+                canvas.drawCircle(bx, by, br + 8f, selectionRingPaint)
             }
 
             val displayKey = b.gamepadButton.replace("BUTTON_", "").replace("TRIGGER_", "")
             canvas.drawText(displayKey, bx, by - 6f, textPaint)
-
-            val subTextPaint = Paint(textPaint).apply { textSize = 15f; isFakeBoldText = false }
             canvas.drawText(b.label, bx, by + 18f, subTextPaint)
 
             // Mode badge (HOLD or TAP)
@@ -399,15 +473,12 @@ class HudEditorOverlayView(
                 ButtonMode.HOLD -> "HOLD"
                 ButtonMode.TAP -> "TAP"
             }
-            val badgePaint = Paint().apply {
-                color = when (b.mode) {
-                    ButtonMode.HOLD -> 0xCC00F0FF.toInt()
-                    ButtonMode.TAP -> 0xCCFFAA00.toInt()
-                }
+            badgeBgPaint.color = when (b.mode) {
+                ButtonMode.HOLD -> 0xCC00F0FF.toInt()
+                ButtonMode.TAP -> 0xCCFFAA00.toInt()
             }
-            canvas.drawRoundRect(bx - 32f, by + br + 4f, bx + 32f, by + br + 22f, 6f, 6f, badgePaint)
-            val badgeText = Paint(textPaint).apply { color = 0xFF000000.toInt(); textSize = 13f }
-            canvas.drawText(modeBadge, bx, by + br + 18f, badgeText)
+            canvas.drawRoundRect(bx - 32f, by + br + 4f, bx + 32f, by + br + 22f, 6f, 6f, badgeBgPaint)
+            canvas.drawText(modeBadge, bx, by + br + 18f, badgeTextPaint)
 
             // Role badge (if not normal)
             if (b.role != ButtonRole.NORMAL) {
@@ -417,21 +488,20 @@ class HudEditorOverlayView(
                     ButtonRole.ADS -> "🎯 ADS" to 0xEE00FF66.toInt()
                     ButtonRole.NORMAL -> "" to 0
                 }
-                val roleBadgePaint = Paint().apply { color = roleBgColor }
+                roleBadgeBgPaint.color = roleBgColor
                 val badgeW = 34f * density
                 val badgeH = 16f * density
                 val topY = by - br - badgeH - 2f
-                canvas.drawRoundRect(bx - badgeW, topY, bx + badgeW, topY + badgeH, 6f, 6f, roleBadgePaint)
-                val roleBadgeText = Paint(textPaint).apply { color = Color.BLACK; textSize = 11f * density }
-                canvas.drawText(roleTextStr, bx, topY + badgeH - 3.5f * density, roleBadgeText)
+                canvas.drawRoundRect(bx - badgeW, topY, bx + badgeW, topY + badgeH, 6f, 6f, roleBadgeBgPaint)
+                canvas.drawText(roleTextStr, bx, topY + badgeH - 3.5f * density, roleBadgeTextPaint)
             }
         }
 
         // 6. Top Bar UI Controls
         drawTopBar(canvas, w)
 
-        // 7. Bottom Contextual Bar (when an item is selected)
-        if (selectedItem != null && !isPeeking) {
+        // 7. Bottom Contextual Bar (when an item is selected and details are enabled)
+        if (selectedItem != null && showDetails) {
             drawBottomContextBar(canvas, w, h)
         }
     }
@@ -444,7 +514,7 @@ class HudEditorOverlayView(
             btnSaveRect.setEmpty()
             btnHideRect.setEmpty()
             btnOpacRect.setEmpty()
-            btnPeekRect.setEmpty()
+            btnDetailsRect.setEmpty()
             btnAddRect.setEmpty()
             btnShotRect.setEmpty()
             btnRemRect.setEmpty()
@@ -470,19 +540,13 @@ class HudEditorOverlayView(
 
             btnShowRect.set(centerX - showW / 2f, centerY - showH / 2f, centerX + showW / 2f, centerY + showH / 2f)
 
-            val showBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xE60D131D.toInt(); style = Paint.Style.FILL }
-            val showStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00F0FF.toInt(); style = Paint.Style.STROKE; strokeWidth = 2f * density }
-            val showTextPaint = Paint(textPaint).apply { color = 0xFF00F0FF.toInt(); textSize = 14f * density }
-
             canvas.drawRoundRect(btnShowRect, 12f * density, 12f * density, showBgPaint)
             canvas.drawRoundRect(btnShowRect, 12f * density, 12f * density, showStrokePaint)
             canvas.drawText(context.getString(R.string.overlay_btn_show_bar), btnShowRect.centerX(), btnShowRect.centerY() + 5f * density, showTextPaint)
 
             if (isLearning && selectedButton != null) {
                 val bannerH = 40f * density
-                val bannerPaint = Paint().apply { color = 0xEEFF0055.toInt() }
-                canvas.drawRect(0f, 0f, w, bannerH, bannerPaint)
-                val bannerTextPaint = Paint(textPaint).apply { textSize = 14f * density }
+                canvas.drawRect(0f, 0f, w, bannerH, bannerBgPaint)
                 canvas.drawText(
                     context.getString(R.string.overlay_learning_banner, selectedButton?.label ?: ""),
                     w / 2f, bannerH / 2f + 5f * density, bannerTextPaint
@@ -500,89 +564,92 @@ class HudEditorOverlayView(
         val btnRadius = 10f * density
         val btnSpacing = 8f * density
 
-        val barPaint = Paint().apply { color = 0xF20A0E14.toInt() }
-        canvas.drawRect(0f, 0f, w, barH, barPaint)
+        canvas.drawRect(0f, 0f, w, barH, barBgPaint)
 
         // 1. Button: 👁️ Masquer (on the far left)
         val hideLabel = context.getString(R.string.overlay_btn_hide_bar)
-        val hideText = Paint(textPaint).apply { color = 0xFF00F0FF.toInt(); textSize = 14f * density }
-        val hideW = max(88f * density, hideText.measureText(hideLabel) + 20f * density)
+        uiBtnTextPaint.color = 0xFF00F0FF.toInt()
+        uiBtnTextPaint.textSize = 14f * density
+        val hideW = max(88f * density, uiBtnTextPaint.measureText(hideLabel) + 20f * density)
         val hideLeft = 16f * density
         btnHideRect.set(hideLeft, btnTop, hideLeft + hideW, btnBottom)
-        val hidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1E2838.toInt() }
-        val hideStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00F0FF.toInt(); style = Paint.Style.STROKE; strokeWidth = 1.2f * density }
-        canvas.drawRoundRect(btnHideRect, btnRadius, btnRadius, hidePaint)
-        canvas.drawRoundRect(btnHideRect, btnRadius, btnRadius, hideStroke)
-        canvas.drawText(hideLabel, btnHideRect.centerX(), btnHideRect.centerY() + 5f * density, hideText)
+        uiBtnBgPaint.color = 0xFF1E2838.toInt()
+        uiBtnStrokePaint.color = 0xFF00F0FF.toInt()
+        canvas.drawRoundRect(btnHideRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawRoundRect(btnHideRect, btnRadius, btnRadius, uiBtnStrokePaint)
+        canvas.drawText(hideLabel, btnHideRect.centerX(), btnHideRect.centerY() + 5f * density, uiBtnTextPaint)
 
         // Right-aligned Buttons
         var curRight = w - 16f * density
 
         // 2. Button: ✖ Fermer
         val closeLabel = context.getString(R.string.overlay_btn_close)
-        val closeText = Paint(textPaint).apply { color = Color.WHITE; textSize = 14.5f * density }
-        val closeW = max(78f * density, closeText.measureText(closeLabel) + 20f * density)
+        uiBtnTextPaint.color = Color.WHITE
+        uiBtnTextPaint.textSize = 14.5f * density
+        val closeW = max(78f * density, uiBtnTextPaint.measureText(closeLabel) + 20f * density)
         btnCloseRect.set(curRight - closeW, btnTop, curRight, btnBottom)
-        val closePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF333D4D.toInt() }
-        canvas.drawRoundRect(btnCloseRect, btnRadius, btnRadius, closePaint)
-        canvas.drawText(closeLabel, btnCloseRect.centerX(), btnCloseRect.centerY() + 5f * density, closeText)
+        uiBtnBgPaint.color = 0xFF333D4D.toInt()
+        canvas.drawRoundRect(btnCloseRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawText(closeLabel, btnCloseRect.centerX(), btnCloseRect.centerY() + 5f * density, uiBtnTextPaint)
         curRight -= (closeW + btnSpacing)
 
         // 3. Button: 💾 Sauvegarder
         val saveLabel = context.getString(R.string.overlay_btn_save)
-        val saveText = Paint(textPaint).apply { color = Color.BLACK; textSize = 14.5f * density }
-        val saveW = max(84f * density, saveText.measureText(saveLabel) + 20f * density)
+        uiBtnTextPaint.color = Color.BLACK
+        uiBtnTextPaint.textSize = 14.5f * density
+        val saveW = max(84f * density, uiBtnTextPaint.measureText(saveLabel) + 20f * density)
         btnSaveRect.set(curRight - saveW, btnTop, curRight, btnBottom)
-        val savePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00FF66.toInt() }
-        canvas.drawRoundRect(btnSaveRect, btnRadius, btnRadius, savePaint)
-        canvas.drawText(saveLabel, btnSaveRect.centerX(), btnSaveRect.centerY() + 5f * density, saveText)
+        uiBtnBgPaint.color = 0xFF00FF66.toInt()
+        canvas.drawRoundRect(btnSaveRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawText(saveLabel, btnSaveRect.centerX(), btnSaveRect.centerY() + 5f * density, uiBtnTextPaint)
         curRight -= (saveW + btnSpacing)
 
         // 4. Button: 🎨 Opacité Toggle
         val opacPercent = (opacitySteps[opacityIndex] * 100).toInt()
         val opacLabel = context.getString(R.string.overlay_btn_opacity, opacPercent)
-        val opacText = Paint(textPaint).apply { color = Color.WHITE; textSize = 13.5f * density }
-        val opacW = max(80f * density, opacText.measureText(opacLabel) + 20f * density)
+        uiBtnTextPaint.color = Color.WHITE
+        uiBtnTextPaint.textSize = 13.5f * density
+        val opacW = max(80f * density, uiBtnTextPaint.measureText(opacLabel) + 20f * density)
         btnOpacRect.set(curRight - opacW, btnTop, curRight, btnBottom)
-        val opacPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1E2633.toInt() }
-        canvas.drawRoundRect(btnOpacRect, btnRadius, btnRadius, opacPaint)
-        canvas.drawText(opacLabel, btnOpacRect.centerX(), btnOpacRect.centerY() + 5f * density, opacText)
+        uiBtnBgPaint.color = 0xFF1E2633.toInt()
+        canvas.drawRoundRect(btnOpacRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawText(opacLabel, btnOpacRect.centerX(), btnOpacRect.centerY() + 5f * density, uiBtnTextPaint)
         curRight -= (opacW + btnSpacing)
 
-        // 5. Button: Peek Mode Toggle (without eye icon)
-        val peekLabel = context.getString(R.string.overlay_btn_peek)
-        val peekText = Paint(textPaint).apply {
-            color = if (isPeeking) Color.BLACK else 0xFF00F0FF.toInt()
-            textSize = 14f * density
-        }
-        val peekW = max(64f * density, peekText.measureText(peekLabel) + 20f * density)
-        btnPeekRect.set(curRight - peekW, btnTop, curRight, btnBottom)
-        val peekPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (isPeeking) 0xFF00FF66.toInt() else 0xFF243040.toInt() }
-        canvas.drawRoundRect(btnPeekRect, btnRadius, btnRadius, peekPaint)
-        canvas.drawText(peekLabel, btnPeekRect.centerX(), btnPeekRect.centerY() + 5f * density, peekText)
-        curRight -= (peekW + btnSpacing)
+        // 5. Button: Details Bar Toggle
+        val detailsLabel = context.getString(R.string.overlay_btn_details)
+        uiBtnTextPaint.color = if (showDetails) 0xFF00F0FF.toInt() else 0xFF708090.toInt()
+        uiBtnTextPaint.textSize = 14f * density
+        val detailsW = max(64f * density, uiBtnTextPaint.measureText(detailsLabel) + 20f * density)
+        btnDetailsRect.set(curRight - detailsW, btnTop, curRight, btnBottom)
+        uiBtnBgPaint.color = if (showDetails) 0xFF243040.toInt() else 0xFF18202A.toInt()
+        canvas.drawRoundRect(btnDetailsRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawText(detailsLabel, btnDetailsRect.centerX(), btnDetailsRect.centerY() + 5f * density, uiBtnTextPaint)
+        curRight -= (detailsW + btnSpacing)
 
         // 6. Button: ➕ Ajouter Bouton
         val addLabel = context.getString(R.string.overlay_btn_add)
-        val addText = Paint(textPaint).apply { color = Color.BLACK; textSize = 14.5f * density }
-        val addW = max(80f * density, addText.measureText(addLabel) + 20f * density)
+        uiBtnTextPaint.color = Color.BLACK
+        uiBtnTextPaint.textSize = 14.5f * density
+        val addW = max(80f * density, uiBtnTextPaint.measureText(addLabel) + 20f * density)
         btnAddRect.set(curRight - addW, btnTop, curRight, btnBottom)
-        val addPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00F0FF.toInt() }
-        canvas.drawRoundRect(btnAddRect, btnRadius, btnRadius, addPaint)
-        canvas.drawText(addLabel, btnAddRect.centerX(), btnAddRect.centerY() + 5f * density, addText)
+        uiBtnBgPaint.color = 0xFF00F0FF.toInt()
+        canvas.drawRoundRect(btnAddRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawText(addLabel, btnAddRect.centerX(), btnAddRect.centerY() + 5f * density, uiBtnTextPaint)
         curRight -= (addW + btnSpacing)
 
         // 7. Button: 📸 Capture / Screenshot (si callback présent)
         if (onOpenGallery != null) {
             val shotLabel = if (screenshotBitmap != null) context.getString(R.string.btn_change_screenshot) else context.getString(R.string.btn_import_screenshot)
-            val shotText = Paint(textPaint).apply { color = 0xFF00F0FF.toInt(); textSize = 13.5f * density }
-            val shotW = max(95f * density, shotText.measureText(shotLabel) + 22f * density)
+            uiBtnTextPaint.color = 0xFF00F0FF.toInt()
+            uiBtnTextPaint.textSize = 13.5f * density
+            val shotW = max(95f * density, uiBtnTextPaint.measureText(shotLabel) + 22f * density)
             btnShotRect.set(curRight - shotW, btnTop, curRight, btnBottom)
-            val shotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1E2838.toInt() }
-            val shotStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00F0FF.toInt(); style = Paint.Style.STROKE; strokeWidth = 1.2f * density }
-            canvas.drawRoundRect(btnShotRect, btnRadius, btnRadius, shotPaint)
-            canvas.drawRoundRect(btnShotRect, btnRadius, btnRadius, shotStroke)
-            canvas.drawText(shotLabel, btnShotRect.centerX(), btnShotRect.centerY() + 5f * density, shotText)
+            uiBtnBgPaint.color = 0xFF1E2838.toInt()
+            uiBtnStrokePaint.color = 0xFF00F0FF.toInt()
+            canvas.drawRoundRect(btnShotRect, btnRadius, btnRadius, uiBtnBgPaint)
+            canvas.drawRoundRect(btnShotRect, btnRadius, btnRadius, uiBtnStrokePaint)
+            canvas.drawText(shotLabel, btnShotRect.centerX(), btnShotRect.centerY() + 5f * density, uiBtnTextPaint)
             curRight -= (shotW + btnSpacing)
         } else {
             btnShotRect.setEmpty()
@@ -591,14 +658,15 @@ class HudEditorOverlayView(
         // 8. Button: 🗑️ Retirer Fond (si capture chargée et callback présent)
         if (screenshotBitmap != null && onRemoveScreenshot != null) {
             val remLabel = context.getString(R.string.btn_remove_screenshot)
-            val remText = Paint(textPaint).apply { color = 0xFFFF0055.toInt(); textSize = 13.5f * density }
-            val remW = max(86f * density, remText.measureText(remLabel) + 22f * density)
+            uiBtnTextPaint.color = 0xFFFF0055.toInt()
+            uiBtnTextPaint.textSize = 13.5f * density
+            val remW = max(86f * density, uiBtnTextPaint.measureText(remLabel) + 22f * density)
             btnRemRect.set(curRight - remW, btnTop, curRight, btnBottom)
-            val remPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33FF0055.toInt() }
-            val remStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFF0055.toInt(); style = Paint.Style.STROKE; strokeWidth = 1.2f * density }
-            canvas.drawRoundRect(btnRemRect, btnRadius, btnRadius, remPaint)
-            canvas.drawRoundRect(btnRemRect, btnRadius, btnRadius, remStroke)
-            canvas.drawText(remLabel, btnRemRect.centerX(), btnRemRect.centerY() + 5f * density, remText)
+            uiBtnBgPaint.color = 0x33FF0055.toInt()
+            uiBtnStrokePaint.color = 0xFFFF0055.toInt()
+            canvas.drawRoundRect(btnRemRect, btnRadius, btnRadius, uiBtnBgPaint)
+            canvas.drawRoundRect(btnRemRect, btnRadius, btnRadius, uiBtnStrokePaint)
+            canvas.drawText(remLabel, btnRemRect.centerX(), btnRemRect.centerY() + 5f * density, uiBtnTextPaint)
             curRight -= (remW + btnSpacing)
         } else {
             btnRemRect.setEmpty()
@@ -606,9 +674,7 @@ class HudEditorOverlayView(
 
         if (isLearning && selectedButton != null) {
             val bannerH = 40f * density
-            val bannerPaint = Paint().apply { color = 0xEEFF0055.toInt() }
-            canvas.drawRect(0f, barH, w, barH + bannerH, bannerPaint)
-            val bannerTextPaint = Paint(textPaint).apply { textSize = 14f * density }
+            canvas.drawRect(0f, barH, w, barH + bannerH, bannerBgPaint)
             canvas.drawText(
                 context.getString(R.string.overlay_learning_banner, selectedButton?.label ?: ""),
                 w / 2f, barH + bannerH / 2f + 5f * density, bannerTextPaint
@@ -627,15 +693,9 @@ class HudEditorOverlayView(
         val btnRadius = 8f * density
         val btnSpacing = 6f * density
 
-        val bgCard = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xF20F151F.toInt() }
-        val strokeCard = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFF00F0FF.toInt()
-            style = Paint.Style.STROKE
-            strokeWidth = 2f * density
-        }
         val cardRect = RectF(barLeft, barTop, barRight, barBottom)
-        canvas.drawRoundRect(cardRect, 14f * density, 14f * density, bgCard)
-        canvas.drawRoundRect(cardRect, 14f * density, 14f * density, strokeCard)
+        canvas.drawRoundRect(cardRect, 14f * density, 14f * density, contextCardBgPaint)
+        canvas.drawRoundRect(cardRect, 14f * density, 14f * density, contextCardStrokePaint)
 
         var rightX = barRight - 12f * density
 
@@ -643,10 +703,11 @@ class HudEditorOverlayView(
         if (selectedButton != null) {
             val delW = 84f * density
             btnDelRect.set(rightX - delW, btnTop, rightX, btnBottom)
-            val delPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFF0055.toInt() }
-            canvas.drawRoundRect(btnDelRect, btnRadius, btnRadius, delPaint)
-            val delText = Paint(textPaint).apply { color = Color.WHITE; textSize = 13.5f * density }
-            canvas.drawText("🗑️ Suppr", btnDelRect.centerX(), btnDelRect.centerY() + 5f * density, delText)
+            uiBtnBgPaint.color = 0xFFFF0055.toInt()
+            canvas.drawRoundRect(btnDelRect, btnRadius, btnRadius, uiBtnBgPaint)
+            uiBtnTextPaint.color = Color.WHITE
+            uiBtnTextPaint.textSize = 13.5f * density
+            canvas.drawText("🗑️ Suppr", btnDelRect.centerX(), btnDelRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (delW + btnSpacing)
         } else {
             btnDelRect.setEmpty()
@@ -662,27 +723,29 @@ class HudEditorOverlayView(
         )
         for ((rect, arrow) in arrows) {
             rect.set(rightX - nudgeW, btnTop, rightX, btnBottom)
-            val btnPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1B2433.toInt() }
-            canvas.drawRoundRect(rect, btnRadius, btnRadius, btnPaint)
-            val btnStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF00F0FF.toInt(); style = Paint.Style.STROKE; strokeWidth = 1.2f * density }
-            canvas.drawRoundRect(rect, btnRadius, btnRadius, btnStroke)
-            val arrowText = Paint(textPaint).apply { color = Color.WHITE; textSize = 14f * density }
-            canvas.drawText(arrow, rect.centerX(), rect.centerY() + 5f * density, arrowText)
+            uiBtnBgPaint.color = 0xFF1B2433.toInt()
+            uiBtnStrokePaint.color = 0xFF00F0FF.toInt()
+            canvas.drawRoundRect(rect, btnRadius, btnRadius, uiBtnBgPaint)
+            canvas.drawRoundRect(rect, btnRadius, btnRadius, uiBtnStrokePaint)
+            uiBtnTextPaint.color = Color.WHITE
+            uiBtnTextPaint.textSize = 14f * density
+            canvas.drawText(arrow, rect.centerX(), rect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (nudgeW + btnSpacing)
         }
 
         // 3. Size Buttons (+ / -)
         val sizeW = 44f * density
         btnSizeIncRect.set(rightX - sizeW, btnTop, rightX, btnBottom)
-        val sizePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF243040.toInt() }
-        canvas.drawRoundRect(btnSizeIncRect, btnRadius, btnRadius, sizePaint)
-        val sizeText = Paint(textPaint).apply { color = 0xFF00F0FF.toInt(); textSize = 16f * density }
-        canvas.drawText("➕", btnSizeIncRect.centerX(), btnSizeIncRect.centerY() + 5f * density, sizeText)
+        uiBtnBgPaint.color = 0xFF243040.toInt()
+        canvas.drawRoundRect(btnSizeIncRect, btnRadius, btnRadius, uiBtnBgPaint)
+        uiBtnTextPaint.color = 0xFF00F0FF.toInt()
+        uiBtnTextPaint.textSize = 16f * density
+        canvas.drawText("➕", btnSizeIncRect.centerX(), btnSizeIncRect.centerY() + 5f * density, uiBtnTextPaint)
         rightX -= (sizeW + btnSpacing)
 
         btnSizeDecRect.set(rightX - sizeW, btnTop, rightX, btnBottom)
-        canvas.drawRoundRect(btnSizeDecRect, btnRadius, btnRadius, sizePaint)
-        canvas.drawText("➖", btnSizeDecRect.centerX(), btnSizeDecRect.centerY() + 5f * density, sizeText)
+        canvas.drawRoundRect(btnSizeDecRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawText("➖", btnSizeDecRect.centerX(), btnSizeDecRect.centerY() + 5f * density, uiBtnTextPaint)
         rightX -= (sizeW + btnSpacing + 4f * density)
 
         // 4. Button-specific actions: Role, Mode & Assign
@@ -696,20 +759,18 @@ class HudEditorOverlayView(
                 ButtonRole.ADS -> "🎯 ADS"
                 ButtonRole.NORMAL -> "Normal"
             }
-            val rolePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = when (btn.role) {
-                    ButtonRole.FIRE -> 0xFFFF0055.toInt()
-                    ButtonRole.RELOAD -> 0xFFFFAA00.toInt()
-                    ButtonRole.ADS -> 0xFF00FF66.toInt()
-                    ButtonRole.NORMAL -> 0xFF243040.toInt()
-                }
+            uiBtnBgPaint.color = when (btn.role) {
+                ButtonRole.FIRE -> 0xFFFF0055.toInt()
+                ButtonRole.RELOAD -> 0xFFFFAA00.toInt()
+                ButtonRole.ADS -> 0xFF00FF66.toInt()
+                ButtonRole.NORMAL -> 0xFF243040.toInt()
             }
             val roleW = 86f * density
             btnRoleRect.set(rightX - roleW, btnTop, rightX, btnBottom)
-            canvas.drawRoundRect(btnRoleRect, btnRadius, btnRadius, rolePaint)
-            val roleTextColor = if (btn.role == ButtonRole.NORMAL) 0xFF00F0FF.toInt() else Color.BLACK
-            val roleText = Paint(textPaint).apply { color = roleTextColor; textSize = 12.5f * density }
-            canvas.drawText("Rôle: $roleLabel", btnRoleRect.centerX(), btnRoleRect.centerY() + 5f * density, roleText)
+            canvas.drawRoundRect(btnRoleRect, btnRadius, btnRadius, uiBtnBgPaint)
+            uiBtnTextPaint.color = if (btn.role == ButtonRole.NORMAL) 0xFF00F0FF.toInt() else Color.BLACK
+            uiBtnTextPaint.textSize = 12.5f * density
+            canvas.drawText("Rôle: $roleLabel", btnRoleRect.centerX(), btnRoleRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (roleW + btnSpacing)
 
             // Mode Toggle
@@ -717,29 +778,26 @@ class HudEditorOverlayView(
                 ButtonMode.HOLD -> "HOLD"
                 ButtonMode.TAP -> "TAP"
             }
-            val modePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = when (btn.mode) {
-                    ButtonMode.HOLD -> 0xFF00F0FF.toInt()
-                    ButtonMode.TAP -> 0xFFFFAA00.toInt()
-                }
+            uiBtnBgPaint.color = when (btn.mode) {
+                ButtonMode.HOLD -> 0xFF00F0FF.toInt()
+                ButtonMode.TAP -> 0xFFFFAA00.toInt()
             }
             val modeW = 86f * density
             btnModeRect.set(rightX - modeW, btnTop, rightX, btnBottom)
-            canvas.drawRoundRect(btnModeRect, btnRadius, btnRadius, modePaint)
-            val modeText = Paint(textPaint).apply { color = Color.BLACK; textSize = 13f * density }
-            canvas.drawText("Mode: $modeLabel", btnModeRect.centerX(), btnModeRect.centerY() + 5f * density, modeText)
+            canvas.drawRoundRect(btnModeRect, btnRadius, btnRadius, uiBtnBgPaint)
+            uiBtnTextPaint.color = Color.BLACK
+            uiBtnTextPaint.textSize = 13f * density
+            canvas.drawText("Mode: $modeLabel", btnModeRect.centerX(), btnModeRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (modeW + btnSpacing)
 
             // Assign Button (🎮 Assigner)
-            val assignPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (isLearning) 0xEEFF0055.toInt() else 0xFF00F0FF.toInt() }
+            uiBtnBgPaint.color = if (isLearning) 0xEEFF0055.toInt() else 0xFF00F0FF.toInt()
             val assignW = 96f * density
             btnAssignRect.set(rightX - assignW, btnTop, rightX, btnBottom)
-            canvas.drawRoundRect(btnAssignRect, btnRadius, btnRadius, assignPaint)
-            val assignText = Paint(textPaint).apply {
-                color = if (isLearning) Color.WHITE else Color.BLACK
-                textSize = 13.5f * density
-            }
-            canvas.drawText(if (isLearning) "⏳ Touche..." else "🎮 Assigner", btnAssignRect.centerX(), btnAssignRect.centerY() + 5f * density, assignText)
+            canvas.drawRoundRect(btnAssignRect, btnRadius, btnRadius, uiBtnBgPaint)
+            uiBtnTextPaint.color = if (isLearning) Color.WHITE else Color.BLACK
+            uiBtnTextPaint.textSize = 13.5f * density
+            canvas.drawText(if (isLearning) "⏳ Touche..." else "🎮 Assigner", btnAssignRect.centerX(), btnAssignRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (assignW + btnSpacing)
         } else {
             btnRoleRect.setEmpty()
@@ -756,19 +814,14 @@ class HudEditorOverlayView(
                 "CAMERA" -> "🎥 Zone Caméra RS"
                 else -> ""
             }
-            val labelPaint = Paint(textPaint).apply {
-                textAlign = Paint.Align.LEFT
-                textSize = 14f * density
-                color = 0xFF00F0FF.toInt()
-            }
             val availableLabelW = rightX - titleLeft - 8f * density
             val ellipTitle = android.text.TextUtils.ellipsize(
                 title,
-                android.text.TextPaint(labelPaint),
+                contextLabelPaint,
                 availableLabelW,
                 android.text.TextUtils.TruncateAt.END
             ).toString()
-            canvas.drawText(ellipTitle, titleLeft, cardRect.centerY() + 5f * density, labelPaint)
+            canvas.drawText(ellipTitle, titleLeft, cardRect.centerY() + 5f * density, contextLabelPaint)
         }
     }
 
@@ -829,9 +882,9 @@ class HudEditorOverlayView(
                         return true
                     }
 
-                    // 👁️ Peek Mode
-                    if (btnPeekRect.contains(tx, ty)) {
-                        isPeeking = !isPeeking
+                    // 📋 Details Mode
+                    if (btnDetailsRect.contains(tx, ty)) {
+                        showDetails = !showDetails
                         performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                         invalidate()
                         return true
@@ -877,8 +930,8 @@ class HudEditorOverlayView(
                     }
                 }
 
-                // 2. Check Bottom Context Bar clicks (if active and not peeking)
-                if (selectedItem != null && !isPeeking) {
+                // 2. Check Bottom Context Bar clicks (if active and details enabled)
+                if (selectedItem != null && showDetails) {
                     // Delete
                     if (selectedButton != null && btnDelRect.contains(tx, ty)) {
                         profile.buttons.remove(selectedButton)
@@ -1285,17 +1338,13 @@ class HudEditorOverlayView(
     }
 
     fun releaseBitmap() {
-        screenshotBitmap?.let {
-            if (!it.isRecycled) {
-                it.recycle()
-            }
-        }
         screenshotBitmap = null
         invalidate()
     }
 
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        releaseBitmap()
+        // Do not recycle bitmap on detach; ownership is managed by parent container
+        screenshotBitmap = null
     }
 }

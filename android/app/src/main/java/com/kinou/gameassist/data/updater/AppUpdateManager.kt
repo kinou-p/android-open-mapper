@@ -7,7 +7,9 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.google.gson.JsonParser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
@@ -137,9 +139,10 @@ object AppUpdateManager {
         var connection: HttpURLConnection? = null
         var inputStream: InputStream? = null
         var outputStream: FileOutputStream? = null
+        var outputFile: File? = null
         try {
             val updateDir = File(context.cacheDir, "updates").apply { mkdirs() }
-            val outputFile = File(updateDir, targetFileName)
+            outputFile = File(updateDir, targetFileName)
             if (outputFile.exists()) {
                 outputFile.delete()
             }
@@ -166,7 +169,7 @@ object AppUpdateManager {
                     status == 307 || status == 308) {
                     val newUrl = connection.getHeaderField("Location")
                     if (newUrl != null) {
-                        currentUrl = newUrl
+                        currentUrl = URL(URL(currentUrl), newUrl).toString()
                         redirectCount++
                         connection.disconnect()
                         continue
@@ -193,6 +196,9 @@ object AppUpdateManager {
                 outputStream.write(buffer, 0, bytesRead)
                 downloadedBytes += bytesRead
 
+                // Annulation coopérative : interrompt réellement le téléchargement.
+                ensureActive()
+
                 val now = System.currentTimeMillis()
                 if (now - lastReportTime > 60 || downloadedBytes == totalBytes) {
                     lastReportTime = now
@@ -202,7 +208,10 @@ object AppUpdateManager {
             }
 
             outputStream.flush()
-            Result.success(outputFile)
+            Result.success(outputFile!!)
+        } catch (e: CancellationException) {
+            outputFile?.delete()
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(e)
@@ -284,11 +293,18 @@ object AppUpdateManager {
 
     /**
      * Triggers the Android package installer for the downloaded APK using FileProvider.
+     * Validates that the APK archive is valid and uncorrupted before initiating installation.
      */
     fun installApk(context: Context, apkFile: File): Result<Unit> {
         return try {
-            if (!apkFile.exists()) {
-                return Result.failure(FileNotFoundException("Fichier APK introuvable"))
+            if (!apkFile.exists() || apkFile.length() <= 0L) {
+                return Result.failure(FileNotFoundException("Fichier APK introuvable ou incomplet"))
+            }
+
+            // Verify that the APK is structurally valid before launching package installer
+            val archiveInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+            if (archiveInfo == null || archiveInfo.packageName.isNullOrBlank()) {
+                return Result.failure(IllegalStateException("Le fichier APK téléchargé est corrompu ou incomplet"))
             }
 
             val apkUri = FileProvider.getUriForFile(
@@ -307,6 +323,25 @@ object AppUpdateManager {
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Calculates the SHA-256 checksum of a file for integrity verification.
+     */
+    fun calculateFileSha256(file: File): String {
+        return try {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { stream ->
+                val buffer = ByteArray(16 * 1024)
+                var bytesRead: Int
+                while (stream.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
+                }
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            ""
         }
     }
 

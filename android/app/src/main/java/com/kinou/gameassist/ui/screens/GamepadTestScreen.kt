@@ -68,7 +68,12 @@ fun GamepadTestScreen(
     onApplyOuterDeadzones: (outerLS: Float, outerRS: Float) -> Unit = { _, _ -> }
 ) {
     val context = LocalContext.current
-    val hapticManager = remember { HapticManager(context) }
+    val hapticManager = remember(context) { HapticManager(context) }
+    DisposableEffect(hapticManager) {
+        onDispose {
+            hapticManager.release()
+        }
+    }
     var selectedTab by remember { mutableStateOf(TestTab.VISUALIZER) }
 
     // Track the last pressed button for live feedback

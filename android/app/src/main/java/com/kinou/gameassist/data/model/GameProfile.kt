@@ -53,3 +53,15 @@ data class GameProfile(
     @SerializedName("custom_screenshot_path")
     var customScreenshotPath: String? = null
 )
+
+/**
+ * Copie profonde d'un profil (sous-objets et liste de boutons inclus).
+ * Évite que le cache, l'UI et l'éditeur HUD ne partagent les mêmes références mutables,
+ * ce qui provoquerait des mutations croisées et des rollbacks impossibles.
+ */
+fun GameProfile.deepCopy(): GameProfile = copy(
+    joystick = joystick.copy(),
+    camera = camera.copy(),
+    buttons = buttons.map { it.copy() }.toMutableList(),
+    settings = settings.copy()
+)
