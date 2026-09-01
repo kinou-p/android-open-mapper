@@ -52,9 +52,7 @@ timeline
     2026-08-31 : v1.0.1 - v1.1.0 : Télémétrie, Courbes Accélération, Diagnostics Manette, Zero-Alloc PointerPool, Éditeur Visuel HUD
     2026-08-31 : v1.1.1 - v1.1.3 : FileProvider In-App Updater, Migration WindowInsets, Cache APK cloisonné
     2026-09-01 : v1.1.4 : Renommage libre des profils, responsive UI, stabilisation
-    2026-09-01 (Majeur) : Sécurité & Secrets : Retrait des keystores du VCS, secrets par variables d'environnement
-    2026-09-01 (Majeur) : Identité d'Appareil : Remplacement ANDROID_ID par Device Token serveur opaque (256-bit) & EncryptedSharedPreferences
-    2026-09-01 (Majeur) : Refonte Moteur Temps Réel : Thread natif prioritaire, Anti-Rejeu HMAC, StateFlow réactif, Anti-Path Traversal
+    2026-09-01 : v1.2.0 (Majeure) : Durcissement sécurité HMAC & Device Token, Jiggle Strafe & RAA Keep-Alive, 63 Tests Unitaires, CI/CD Cloudflare & Release automatique, Calibrage Gâchettes LT/RT
 ```
 
 ### Détail des Phases de Développement :

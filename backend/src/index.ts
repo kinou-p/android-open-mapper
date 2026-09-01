@@ -670,7 +670,7 @@ async function checkMultiRateLimits(
 app.get('/', (c) => {
   return c.json({
     name: 'OpenMapper Community API',
-    version: '1.1.4',
+    version: '1.2.0',
     status: 'online',
     endpoints: [
       'GET /api/profiles',
