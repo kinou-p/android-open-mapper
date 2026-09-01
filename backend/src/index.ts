@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { generateDeviceToken, normalizeDeviceToken } from './device-identity';
 
 type Bindings = {
   DB: D1Database;
@@ -805,7 +806,54 @@ app.post('/api/profiles/:id/download', verifySignature, async (c) => {
   }
 });
 
-// 6. Telemetry Ping (Anonymous Unique Devices & Rate-Limited Batch Update)
+// 6. Enregistrement d'appareil : émet un token opaque (une seule fois) — identité non dérivable depuis ANDROID_ID
+app.post('/api/device/register', verifySignature, async (c) => {
+  const clientIp = getClientIp(c);
+  try {
+    let body: any;
+    try {
+      body = JSON.parse(c.get('rawBody'));
+    } catch {
+      return c.json({ success: false, error: 'Corps JSON invalide' }, 400);
+    }
+
+    if (!body || typeof body !== 'object') {
+      return c.json({ success: false, error: 'Corps de requête invalide' }, 400);
+    }
+
+    // Anti-abus : cooldown 30s puis plafond 5/h par IP
+    const regLimits = await checkMultiRateLimits(c.env.DB, [
+      { key: `ip:register_cd:${clientIp}`, maxRequests: 1, windowMs: 30_000, errorMessage: 'Trop de tentatives. Réessayez dans un instant.' },
+      { key: `ip:register:${clientIp}`, maxRequests: 5, windowMs: 3600_000, errorMessage: 'Nombre maximal d\'enregistrements atteint pour cette adresse IP (5 par heure).' }
+    ], c.executionCtx);
+
+    if (!regLimits.allowed) {
+      const retryMsg = regLimits.retryAfterSec ? ` (Réessayez dans ${regLimits.retryAfterSec}s)` : '';
+      return c.json({ success: false, error: `${regLimits.error}${retryMsg}` }, 429);
+    }
+
+    const rawToken = generateDeviceToken();
+    const tokenHash = await normalizeDeviceToken(rawToken);
+    if (!tokenHash) {
+      return c.json({ success: false, error: 'Erreur interne de génération d\'identité.' }, 500);
+    }
+    const now = Date.now();
+    const version = typeof body.appVersion === 'string' ? body.appVersion.slice(0, 20) : '1.0.0';
+
+    await c.env.DB.prepare(`
+      INSERT INTO devices (device_hash, first_seen, last_seen, app_version, launch_count)
+      VALUES (?, ?, ?, ?, 1)
+      ON CONFLICT(device_hash) DO NOTHING
+    `).bind(tokenHash, now, now, version).run();
+
+    return c.json({ success: true, deviceToken: rawToken });
+  } catch (err: any) {
+    console.error('[API Error] POST /api/device/register:', err);
+    return c.json({ success: false, error: 'Une erreur interne est survenue sur le serveur.' }, 500);
+  }
+});
+
+// 7. Telemetry Ping (Anonymous Unique Devices & Rate-Limited Batch Update)
 app.post('/api/telemetry/ping', verifySignature, async (c) => {
   const clientIp = getClientIp(c);
   try {
@@ -867,7 +915,7 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
   }
 });
 
-// 7. Global Statistics & Time-Series History
+// 8. Global Statistics & Time-Series History
 app.get('/api/stats', async (c) => {
   const clientIp = getClientIp(c);
   try {
