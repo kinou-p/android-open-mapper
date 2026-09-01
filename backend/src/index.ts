@@ -189,19 +189,39 @@ const verifySignature = async (c: any, next: any) => {
     return c.json({ error: 'Signature déjà utilisée (Replay Attack détectée)' }, 401);
   }
 
+  // Échelon 1.5 : pré-filtre mémoire anti-DoS par IP avant toute écriture D1
+  // Plafonne à 60 requêtes signées/min par IP en mémoire pour empêcher tout épuisement de quota D1
+  const clientIp = getClientIp(c);
+  const ipMemCheck = recordMemRateLimit(`mw:ip:${normalizeIpForRateLimit(clientIp)}`, Date.now(), 60_000, 60);
+  if (ipMemCheck.blocked) {
+    return c.json({ success: false, error: 'Trop de requêtes signées (veuillez patienter)' }, 429);
+  }
+
   // Échelon 2 : barrière atomique multi-régions persistée dans la base D1
   if (c.env.DB) {
     try {
+      const nowMs = Date.now();
       const sigKey = `sig:${signature}`;
       const replayCheck = await c.env.DB.prepare(`
         INSERT INTO rate_limits (key, last_seen, request_count, window_start)
         VALUES (?1, ?2, 1, ?2)
         ON CONFLICT(key) DO NOTHING
         RETURNING key
-      `).bind(sigKey, Date.now()).first();
+      `).bind(sigKey, nowMs).first();
 
       if (!replayCheck) {
         return c.json({ error: 'Signature déjà utilisée (Replay Attack détectée)' }, 401);
+      }
+
+      // Purge probabiliste des signatures expirées (TTL 300s = 5 min)
+      if (Math.random() < 0.05) {
+        const expiredSigThreshold = nowMs - 300_000;
+        const purgePromise = c.env.DB.prepare(
+          "DELETE FROM rate_limits WHERE key LIKE 'sig:%' AND window_start < ?"
+        ).bind(expiredSigThreshold).run().catch(() => {});
+        if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
+          c.executionCtx.waitUntil(purgePromise);
+        }
       }
     } catch (dbErr: any) {
       console.error('[Anti-Replay] Erreur vérification D1:', dbErr);
@@ -1290,12 +1310,13 @@ export default {
       const activityDate = new Date(now - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const devicesCutoff = now - 365 * 24 * 60 * 60 * 1000;
       const rateLimitCutoff = now - 24 * 60 * 60 * 1000;
+      const sigCutoff = now - 300 * 1000; // 5 min TTL pour les signatures HMAC
 
       await env.DB.batch([
         env.DB.prepare('DELETE FROM daily_activity WHERE date < ?').bind(activityDate),
         env.DB.prepare('DELETE FROM daily_downloads WHERE date < ?').bind(activityDate),
         env.DB.prepare('DELETE FROM devices WHERE last_seen < ?').bind(devicesCutoff),
-        env.DB.prepare('DELETE FROM rate_limits WHERE window_start < ?').bind(rateLimitCutoff),
+        env.DB.prepare("DELETE FROM rate_limits WHERE (key LIKE 'sig:%' AND window_start < ?1) OR window_start < ?2").bind(sigCutoff, rateLimitCutoff),
       ]);
       console.log('[Cron] cleanup effectué:', controller.cron);
     } catch (err) {

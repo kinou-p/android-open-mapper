@@ -11,6 +11,8 @@ import java.io.FileOutputStream
 
 object ScreenshotManager {
 
+    private val SAFE_ID_REGEX = Regex("^[a-zA-Z0-9_-]{1,64}$")
+
     fun getScreenshotsDir(context: Context): File {
         val dir = File(context.filesDir, "screenshots")
         if (!dir.exists()) {
@@ -36,6 +38,7 @@ object ScreenshotManager {
     }
 
     fun saveScreenshotFromUri(context: Context, profileId: String, uri: Uri): String? {
+        if (!SAFE_ID_REGEX.matches(profileId)) return null
         return try {
             val dir = getScreenshotsDir(context)
             val targetFile = File(dir, "${profileId}_hud.jpg")
@@ -115,6 +118,7 @@ object ScreenshotManager {
     }
 
     fun duplicateScreenshot(context: Context, newProfileId: String, sourcePath: String?): String? {
+        if (!SAFE_ID_REGEX.matches(newProfileId)) return null
         if (!isPathInScreenshotsDir(context, sourcePath)) return null
         val sourceFile = File(sourcePath!!)
         if (!sourceFile.exists()) return null

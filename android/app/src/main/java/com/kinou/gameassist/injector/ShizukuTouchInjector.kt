@@ -233,11 +233,116 @@ class ShizukuTouchInjector {
         }
     }
 
+    /**
+     * Atomically executes a dual-pointer handoff (touchDown on nextPointer + touchUp on oldPointer)
+     * within a single lock critical section, eliminating race conditions during continuous 360° camera rotation.
+     */
+    fun handoff(
+        downPointerId: Int, downX: Float, downY: Float,
+        upPointerId: Int, upX: Float, upY: Float,
+        downPressure: Float? = null
+    ) {
+        lock.withLock {
+            val h = helper ?: return
+            val eventTime = SystemClock.uptimeMillis()
+
+            // 1. Touch DOWN new pointer at center
+            val clampedDownX = downX.coerceIn(0f, screenWidth.toFloat())
+            val clampedDownY = downY.coerceIn(0f, screenHeight.toFloat())
+
+            val isFirstPointer = pointerPool.getActiveCount() == 0
+            if (isFirstPointer) {
+                downTime = eventTime
+            }
+
+            pointerPool.addOrUpdate(downPointerId, clampedDownX, clampedDownY, downPressure)
+            val downTargetIndex = pointerPool.populatePointerBuffers(downPointerId)
+            val downCount = pointerPool.getActiveCount()
+
+            val downAction = if (isFirstPointer) {
+                MotionEvent.ACTION_DOWN
+            } else {
+                MotionEvent.ACTION_POINTER_DOWN or (downTargetIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+            }
+
+            val downEvent = MotionEvent.obtain(
+                downTime,
+                eventTime,
+                downAction,
+                downCount,
+                pointerPool.cachedProperties,
+                pointerPool.cachedCoords,
+                0,
+                0,
+                1.0f,
+                1.0f,
+                0,
+                0,
+                InputDevice.SOURCE_TOUCHSCREEN,
+                0
+            )
+
+            try {
+                h.injectInputEvent(downEvent, 0)
+            } catch (e: Throwable) {
+                handleInjectionError(e)
+            } finally {
+                downEvent.recycle()
+            }
+
+            // 2. Touch UP old pointer at current edge
+            if (pointerPool.contains(upPointerId)) {
+                val clampedUpX = upX.coerceIn(0f, screenWidth.toFloat())
+                val clampedUpY = upY.coerceIn(0f, screenHeight.toFloat())
+
+                pointerPool.addOrUpdate(upPointerId, clampedUpX, clampedUpY, 0.0f)
+
+                val isLastPointer = pointerPool.getActiveCount() == 1
+                val upTargetIndex = pointerPool.populatePointerBuffers(upPointerId)
+                val upCount = pointerPool.getActiveCount()
+
+                val upAction = if (isLastPointer) {
+                    MotionEvent.ACTION_UP
+                } else {
+                    MotionEvent.ACTION_POINTER_UP or (upTargetIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+                }
+
+                val upEvent = MotionEvent.obtain(
+                    downTime,
+                    eventTime,
+                    upAction,
+                    upCount,
+                    pointerPool.cachedProperties,
+                    pointerPool.cachedCoords,
+                    0,
+                    0,
+                    1.0f,
+                    1.0f,
+                    0,
+                    0,
+                    InputDevice.SOURCE_TOUCHSCREEN,
+                    0
+                )
+
+                pointerPool.remove(upPointerId)
+
+                try {
+                    h.injectInputEvent(upEvent, 0)
+                } catch (e: Throwable) {
+                    handleInjectionError(e)
+                } finally {
+                    upEvent.recycle()
+                }
+            }
+        }
+    }
+
     fun resetAllPointers() {
         lock.withLock {
             val h = helper ?: return
             val now = SystemClock.uptimeMillis()
             for (id in 0..9) {
+                var ev: MotionEvent? = null
                 try {
                     val prop = MotionEvent.PointerProperties().apply {
                         this.id = id
@@ -248,7 +353,7 @@ class ShizukuTouchInjector {
                         this.y = screenHeight / 2f
                         this.pressure = 0f
                     }
-                    val ev = MotionEvent.obtain(
+                    ev = MotionEvent.obtain(
                         now - 100,
                         now,
                         MotionEvent.ACTION_CANCEL,
@@ -265,8 +370,10 @@ class ShizukuTouchInjector {
                         0
                     )
                     h.injectInputEvent(ev, 0)
-                    ev.recycle()
-                } catch (e: Throwable) {}
+                } catch (e: Throwable) {
+                } finally {
+                    try { ev?.recycle() } catch (_: Throwable) {}
+                }
             }
             pointerPool.clear()
         }

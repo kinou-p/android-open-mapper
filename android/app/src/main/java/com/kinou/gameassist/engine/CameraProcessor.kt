@@ -125,16 +125,11 @@ class CameraProcessor(
                              currentY <= y1 + marginY || currentY >= y2 - marginY)
 
             if (hitBorder) {
-                // Dual-Pointer Interlaced Handoff for 100% stutter-free 360° rotation
+                // Dual-Pointer Interlaced Handoff for 100% stutter-free 360° rotation (Atomic Transaction)
                 val nextPointerId = if (activePointerId == POINTER_CAM_A) POINTER_CAM_B else POINTER_CAM_A
 
-                // 1. Touch DOWN new pointer at center
-                injector.touchDown(nextPointerId, origX, origY)
+                injector.handoff(nextPointerId, origX, origY, activePointerId, currentX, currentY)
 
-                // 2. Touch UP old pointer at current edge
-                injector.touchUp(activePointerId, currentX, currentY)
-
-                // 3. Switch active pointer to new one
                 activePointerId = nextPointerId
                 currentX = origX
                 currentY = origY

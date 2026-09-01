@@ -312,8 +312,9 @@ flowchart LR
     ROUTE -->|POST Protégées| SIG_MW["verifySignature (HMAC-SHA256)"]
     
     SIG_MW --> REPLAY_MEM["Cache Anti-Rejeu Mémoire (300s TTL)"]
-    REPLAY_MEM --> REPLAY_D1["Barrière Anti-Rejeu D1 (rate_limits)"]
-    REPLAY_D1 --> PARSER["JSON Parser & Validation Schéma (16KB Max)"]
+    REPLAY_MEM --> REPLAY_IP["Pré-Filtre Mémoire IP (60 req/min)"]
+    REPLAY_IP --> REPLAY_D1["Barrière Anti-Rejeu D1 (TTL 300s)"]
+    REPLAY_D1 --> PARSER["JSON Parser & Validation (Corps 32KB / Profil 16KB Max)"]
     PARSER --> DEV_ID["Normalisation Device Token (SHA-256)"]
     DEV_ID --> RL_BATCH["Rate Limiter Multi-Clés (IP /64 + Device)"]
     RL_BATCH --> D1_EXEC["Exécution D1 SQLite (Triggers Atomiques)"]
@@ -324,9 +325,11 @@ flowchart LR
   $$\text{canonical} = \text{METHOD} + "\backslash n" + \text{PATH} + "\backslash n" + \text{TIMESTAMP} + "\backslash n" + \text{SHA256}(\text{RAW\_BODY})$$
 - **Signature attendue** : $\text{HMAC-SHA256}(\text{APP\_SECRET}, \text{canonical})$ passée dans l'en-tête `X-Signature`.
 - **Fenêtre d'expiration** : Rejet des requêtes dont l'horodatage `X-Timestamp` dévie de plus de $\pm 300\text{ s}$ par rapport à l'horloge atomique des Workers.
-- **Protection Anti-Rejeu à Deux Niveaux** :
+- **Taille de requête** : Flux streaming borné à `MAX_BODY_BYTES = 32 Ko` (rejet 413 immédiat sans bufferiser). Le profil embarqué `profile_json` est borné à `MAX_PROFILE_JSON_BYTES = 16 Ko`.
+- **Protection Anti-Rejeu Multi-Niveaux** :
   1. *Échelon 1 (Mémoire Isolate)* : Cache `Map<string, number>` avec nettoyage paresseux et éviction FIFO (5 000 signatures max).
-  2. *Échelon 2 (Persistance D1)* : Insertion atomique `INSERT INTO rate_limits (key) VALUES ('sig:' || signature)` avec clause `ON CONFLICT DO NOTHING`.
+  2. *Échelon 1.5 (Pré-filtre IP)* : Plafond mémoire de 60 requêtes signées/min par IP pour stopper tout déni de service d'écriture sur D1.
+  3. *Échelon 2 (Persistance D1)* : Insertion atomique `INSERT INTO rate_limits (key) VALUES ('sig:' || signature)` avec clause `ON CONFLICT DO NOTHING` et TTL de 300s.
 
 ### 2. Identité d'Appareil Opaque (`/api/device/register`)
 - **Émission** : `crypto.randomBytes(32).toString('hex')` (token de 64 caractères hexadécimaux, 256 bits d'entropie).

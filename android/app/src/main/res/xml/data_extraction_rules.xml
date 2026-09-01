@@ -2,6 +2,7 @@
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="."/>
+        <exclude domain="sharedpref" path="openmapper_device_token.xml"/>
         <include domain="file" path="profiles/"/>
     </cloud-backup>
 </data-extraction-rules>

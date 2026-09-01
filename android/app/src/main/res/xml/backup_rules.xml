@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <include domain="sharedpref" path="."/>
+    <exclude domain="sharedpref" path="openmapper_device_token.xml"/>
     <include domain="file" path="profiles/"/>
 </full-backup-content>
