@@ -273,6 +273,7 @@ fun ProfileCard(
     var deadzoneJoy by remember(profile.id) { mutableFloatStateOf(profile.joystick.deadzone) }
     var raaKeepAlive by remember(profile.id) { mutableStateOf(profile.joystick.raaKeepAlive) }
     var jiggleStrafe by remember(profile.id) { mutableStateOf(profile.joystick.jiggleStrafe) }
+    var jiggleRandomPattern by remember(profile.id) { mutableStateOf(profile.joystick.jiggleRandomPattern) }
     var jiggleHumanize by remember(profile.id) { mutableStateOf(profile.joystick.jiggleHumanize) }
     var jiggleRandomness by remember(profile.id) { mutableFloatStateOf(profile.joystick.jiggleRandomness) }
     var jiggleSpeed by remember(profile.id) { mutableFloatStateOf(profile.joystick.jiggleSpeed) }
@@ -900,6 +901,33 @@ fun ProfileCard(
                                     .padding(start = 8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
+                                // 1. Patterns Aléatoires & Feintes (Random Directions)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(stringResource(R.string.jiggle_random_pattern_title), fontWeight = FontWeight.Bold, color = NeonYellow, fontSize = 12.sp)
+                                        Text(stringResource(R.string.jiggle_random_pattern_desc), color = TextSecondary, fontSize = 10.sp)
+                                    }
+                                    Switch(
+                                        checked = jiggleRandomPattern,
+                                        onCheckedChange = {
+                                            jiggleRandomPattern = it
+                                            profile.joystick.jiggleRandomPattern = it
+                                            onSave()
+                                        },
+                                        colors = SwitchDefaults.colors(
+                                            checkedThumbColor = DarkBackground,
+                                            checkedTrackColor = NeonYellow,
+                                            uncheckedThumbColor = TextSecondary,
+                                            uncheckedTrackColor = DarkSurface
+                                        )
+                                    )
+                                }
+
+                                // 2. Humanisation (Timing & Distance Variations)
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,

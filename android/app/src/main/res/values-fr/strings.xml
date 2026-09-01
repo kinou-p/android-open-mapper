@@ -114,10 +114,12 @@
     <string name="aim_assist_title">🧲 Aim Assist Permanent (Keep-Alive RAA)</string>
     <string name="aim_assist_desc">Maintient l\'aide à la visée rotative active en continu.</string>
     <string name="jiggle_strafe_title">⚡ Auto Jiggle Strafe (Esquive en Tir)</string>
-    <string name="jiggle_strafe_desc">Oscille en alternance stricte 1-1 (gauche/droite) pendant le tir pour esquiver les balles.</string>
-    <string name="humanization_title">🧬 Patterns Aléatoires &amp; Humanisation</string>
-    <string name="humanization_desc">Introduit des feintes imprévisibles et variations de cadence au lieu de l\'alternance stricte 1-1.</string>
-    <string name="jiggle_random_label">Niveau d\'Aléa / Randomisation</string>
+    <string name="jiggle_strafe_desc">Oscille latéralement pendant le tir pour esquiver les balles.</string>
+    <string name="jiggle_random_pattern_title">🎲 Patterns Aléatoires &amp; Feintes</string>
+    <string name="jiggle_random_pattern_desc">Alterne aléatoirement les directions et feintes (peut strafer plusieurs fois du même côté) au lieu de l\'alternance stricte 1-1.</string>
+    <string name="humanization_title">🧬 Humanisation (Timing &amp; Distance)</string>
+    <string name="humanization_desc">Ajoute des micro-variations de durée, d\'amplitude et de dérive pour simuler un mouvement humain.</string>
+    <string name="jiggle_random_label">Intensité de Variation (Timing &amp; Distance)</string>
     <string name="jiggle_speed_label">Cadence du Strafe (Vitesse)</string>
     <string name="joystick_deadzone">Zone Morte (Anti-Drift Stick Gauche)</string>
     <string name="key_mapping_title">Mapping des Touches</string>

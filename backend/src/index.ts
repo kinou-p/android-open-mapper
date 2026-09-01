@@ -432,6 +432,7 @@ function validateProfileStructure(obj: any): { valid: boolean; error?: string } 
       checkBoolean(j.enabled, 'Joystick enabled') ||
       checkBoolean(j.raaKeepAlive ?? j.raa_keep_alive, 'Joystick raa_keep_alive') ||
       checkBoolean(j.jiggleStrafe ?? j.jiggle_strafe, 'Joystick jiggle_strafe') ||
+      checkBoolean(j.jiggleRandomPattern ?? j.jiggle_random_pattern, 'Joystick jiggle_random_pattern') ||
       checkBoolean(j.jiggleHumanize ?? j.jiggle_humanize, 'Joystick jiggle_humanize');
     if (err) return { valid: false, error: err };
   }

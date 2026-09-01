@@ -70,7 +70,7 @@ class MovementProcessor(
                 // Initialize a new jiggle burst
                 isJigglingActive = true
                 halfCycleStartTime = now
-                currentDirection = if (cfg.jiggleHumanize) {
+                currentDirection = if (cfg.jiggleRandomPattern) {
                     if (random.nextBoolean()) 1 else -1
                 } else {
                     // Strict 1:1 alternating mode: alternate from the last finished direction
@@ -83,16 +83,15 @@ class MovementProcessor(
 
             var elapsed = now - halfCycleStartTime
             if (elapsed >= currentHalfCycleDuration) {
-                // Step transition to the opposite side
+                // Step transition to the next side
                 halfCycleStartTime = now
                 startAmplitudeX = currentTargetAmplitudeX
                 startDriftY = currentTargetDriftY
                 lastFinishedDirection = currentDirection
 
-                if (cfg.jiggleHumanize) {
-                    val rand = cfg.jiggleRandomness.coerceIn(0f, 1f)
-                    // Optional unpredictable feint / double-strafe on same side when humanization is enabled
-                    val doFeint = random.nextFloat() < (rand * 0.20f)
+                if (cfg.jiggleRandomPattern) {
+                    // Random pattern / feint / multiple strafes on the same side
+                    val doFeint = random.nextFloat() < 0.25f
                     currentDirection = if (doFeint) currentDirection else -currentDirection
                 } else {
                     // Strict 1:1 alternating mode: strictly alternate 1 side then the other

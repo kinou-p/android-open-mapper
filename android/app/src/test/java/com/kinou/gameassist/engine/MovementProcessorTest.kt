@@ -127,6 +127,7 @@ class MovementProcessorTest {
     @Test
     fun testJiggleStrafeWhenFiring() {
         config.jiggleStrafe = true
+        config.jiggleRandomPattern = false
         config.jiggleHumanize = false
         config.jiggleSpeed = 1.0f
         processor.config = config
@@ -144,11 +145,14 @@ class MovementProcessorTest {
         assertTrue(injector.events.size >= 2)
         assertEquals("DOWN", injector.events[0].type)
         assertEquals("MOVE", injector.events[1].type)
+        // With humanize = false, Y must remain perfectly at center (864f)
+        assertEquals(864f, injector.events.last().y, 0.01f)
     }
 
     @Test
     fun testJiggleStrafeStrictAlternationAcrossBursts() {
         config.jiggleStrafe = true
+        config.jiggleRandomPattern = false
         config.jiggleHumanize = false
         config.jiggleSpeed = 2.0f
         processor.config = config

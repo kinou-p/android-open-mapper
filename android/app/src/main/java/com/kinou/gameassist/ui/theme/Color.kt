@@ -11,6 +11,7 @@ val NeonCyan = Color(0xFF00F0FF)
 val NeonGreen = Color(0xFF00FF66)
 val NeonPink = Color(0xFFFF0055)
 val NeonOrange = Color(0xFFFF9900)
+val NeonYellow = Color(0xFFFFE600)
 
 val TextPrimary = Color(0xFFFFFFFF)
 val TextSecondary = Color(0xFF8A99AD)

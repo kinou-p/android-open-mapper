@@ -32,6 +32,9 @@ data class JoystickConfig(
     @SerialName("jiggle_strafe")
     var jiggleStrafe: Boolean = false,
 
+    @SerialName("jiggle_random_pattern")
+    var jiggleRandomPattern: Boolean = false,
+
     @SerialName("jiggle_humanize")
     var jiggleHumanize: Boolean = false,
 
