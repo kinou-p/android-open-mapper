@@ -112,7 +112,6 @@ app.use('*', async (c, next) => {
 });
 
 // Helpers
-const HASH_REGEX = /^[a-f0-9]{64}$/i;
 const MAX_PROFILE_JSON_BYTES = 16 * 1024; // 16 KB max per profile
 
 // In-memory sliding rate limit filter to reduce D1 write load under heavy traffic
@@ -563,7 +562,7 @@ app.post('/api/profiles', verifySignature, async (c) => {
       return c.json({ success: false, error: 'Corps de requête invalide' }, 400);
     }
 
-    const { title, description, game_name, package_name, author_name, controller_type, profile_json, deviceHash } = body;
+    const { title, description, game_name, package_name, author_name, controller_type, profile_json, deviceToken } = body;
 
     // Strict type checks on required and optional fields
     if (
@@ -585,17 +584,18 @@ app.post('/api/profiles', verifySignature, async (c) => {
       return c.json({ success: false, error: 'Le champ controller_type doit être une chaîne de caractères' }, 400);
     }
 
-    // 2. Validate device fingerprint format
-    if (!deviceHash || typeof deviceHash !== 'string' || !HASH_REGEX.test(deviceHash)) {
-      return c.json({ success: false, error: 'Empreinte d\'appareil invalide ou manquante' }, 400);
+    // 2. Valider l'identité d'appareil : token opaque émis par le serveur → hash interne
+    const deviceIdentity = await normalizeDeviceToken(deviceToken);
+    if (!deviceIdentity) {
+      return c.json({ success: false, error: 'Identité d\'appareil invalide ou manquante (réenregistrez l\'appareil)' }, 400);
     }
 
     // 3. Anti-spam & Cooldown: Consolidated Batched Rate Limiting (Single D1 batch execution)
     const multiLimits = await checkMultiRateLimits(c.env.DB, [
       { key: `ip:pub_cd:${clientIp}`, maxRequests: 1, windowMs: 20_000, errorMessage: 'Veuillez patienter avant de publier à nouveau.' },
-      { key: `dev:pub_cd:${deviceHash}`, maxRequests: 1, windowMs: 15_000, errorMessage: 'Veuillez patienter entre chaque publication.' },
+      { key: `dev:pub_cd:${deviceIdentity}`, maxRequests: 1, windowMs: 15_000, errorMessage: 'Veuillez patienter entre chaque publication.' },
       { key: `ip:pub_daily:${clientIp}`, maxRequests: 5, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite journalière atteinte pour cette adresse IP (maximum 5 profils par 24h).' },
-      { key: `dev:pub_daily:${deviceHash}`, maxRequests: 10, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite journalière atteinte pour cet appareil (maximum 10 profils par 24h).' }
+      { key: `dev:pub_daily:${deviceIdentity}`, maxRequests: 10, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite journalière atteinte pour cet appareil (maximum 10 profils par 24h).' }
     ], c.executionCtx);
 
     if (!multiLimits.allowed) {
@@ -640,7 +640,7 @@ app.post('/api/profiles', verifySignature, async (c) => {
       (author_name || 'Anonymous').trim().slice(0, 50),
       (controller_type || 'Universal').trim().slice(0, 50),
       finalJsonString,
-      deviceHash,
+      deviceIdentity,
       hashedIp,
       now,
       now
@@ -674,10 +674,11 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
       return c.json({ success: false, error: 'Corps de requête invalide' }, 400);
     }
 
-    const { deviceHash, vote } = body;
+    const { deviceToken, vote } = body;
 
-    if (!deviceHash || typeof deviceHash !== 'string' || !HASH_REGEX.test(deviceHash) || vote === undefined) {
-      return c.json({ success: false, error: 'Empreinte d\'appareil invalide ou paramètre de vote manquant' }, 400);
+    const deviceIdentity = await normalizeDeviceToken(deviceToken);
+    if (!deviceIdentity || vote === undefined) {
+      return c.json({ success: false, error: 'Identité d\'appareil invalide ou paramètre de vote manquant' }, 400);
     }
 
     const voteVal = parseInt(vote, 10);
@@ -686,11 +687,11 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
     }
 
     // 1. Anti-Sybil Rate Limiting (IP + cooldown appareil + plafond journalier appareil)
-    //    deviceHash étant désormais signé (HMAC), il constitue une identité fiable.
+    //    deviceIdentity = hash(deviceToken) : identité opaque, toujours falsifiable (copiable) — PAS une confiance matérielle.
     const multiVoteLimits = await checkMultiRateLimits(c.env.DB, [
       { key: `ip:vote:${clientIp}`, maxRequests: 30, windowMs: 60_000, errorMessage: 'Trop de votes enregistrés. Veuillez patienter un instant.' },
-      { key: `dev:vote_cd:${deviceHash}`, maxRequests: 10, windowMs: 10_000, errorMessage: 'Votes trop rapides pour cet appareil.' },
-      { key: `dev:vote_daily:${deviceHash}`, maxRequests: 200, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite de votes journalière atteinte pour cet appareil.' }
+      { key: `dev:vote_cd:${deviceIdentity}`, maxRequests: 10, windowMs: 10_000, errorMessage: 'Votes trop rapides pour cet appareil.' },
+      { key: `dev:vote_daily:${deviceIdentity}`, maxRequests: 200, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite de votes journalière atteinte pour cet appareil.' }
     ], c.executionCtx);
 
     if (!multiVoteLimits.allowed) {
@@ -716,7 +717,7 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
       batchStatements.push(
         c.env.DB.prepare(`
           DELETE FROM votes WHERE profile_id = ? AND device_hash = ?
-        `).bind(profileId, deviceHash)
+        `).bind(profileId, deviceIdentity)
       );
     } else {
       // Upsert vote atomically
@@ -728,7 +729,7 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
             vote_type = excluded.vote_type,
             client_ip = excluded.client_ip,
             voted_at = excluded.voted_at
-        `).bind(profileId, deviceHash, hashedIp, voteVal, now)
+        `).bind(profileId, deviceIdentity, hashedIp, voteVal, now)
       );
     }
 
@@ -868,16 +869,17 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
       return c.json({ success: false, error: 'Corps de requête invalide' }, 400);
     }
 
-    const { deviceHash, appVersion } = body;
+    const { deviceToken, appVersion } = body;
 
-    if (!deviceHash || typeof deviceHash !== 'string' || !HASH_REGEX.test(deviceHash)) {
-      return c.json({ success: false, error: 'Empreinte d\'appareil invalide ou manquante' }, 400);
+    const deviceIdentity = await normalizeDeviceToken(deviceToken);
+    if (!deviceIdentity) {
+      return c.json({ success: false, error: 'Identité d\'appareil invalide ou manquante' }, 400);
     }
 
     // 1. Consolidated Batched Rate Limiting for Telemetry (IP & Device)
     const multiPing = await checkMultiRateLimits(c.env.DB, [
       { key: `ip:ping:${clientIp}`, maxRequests: 60, windowMs: 3600_000, errorMessage: 'throttled_ip' },
-      { key: `ping:${deviceHash}`, maxRequests: 30, windowMs: 3600_000, errorMessage: 'throttled_device' }
+      { key: `ping:${deviceIdentity}`, maxRequests: 30, windowMs: 3600_000, errorMessage: 'throttled_device' }
     ], c.executionCtx);
 
     if (!multiPing.allowed) {
@@ -897,7 +899,7 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
           last_seen = excluded.last_seen,
           app_version = excluded.app_version,
           launch_count = launch_count + 1
-      `).bind(deviceHash, now, now, version),
+      `).bind(deviceIdentity, now, now, version),
       c.env.DB.prepare(`
         INSERT INTO daily_activity (date, device_hash, app_version, launch_count, last_seen)
         VALUES (?, ?, ?, 1, ?)
@@ -905,7 +907,7 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
           launch_count = launch_count + 1,
           app_version = excluded.app_version,
           last_seen = excluded.last_seen
-      `).bind(todayStr, deviceHash, version, now)
+      `).bind(todayStr, deviceIdentity, version, now)
     ]);
 
     return c.json({ success: true });
