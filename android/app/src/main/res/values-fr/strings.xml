@@ -67,6 +67,10 @@
     <string name="btn_export">Exporter</string>
     <string name="btn_duplicate">Dupliquer</string>
     <string name="btn_delete">Supprimer</string>
+    <string name="btn_rename">Renommer</string>
+    <string name="rename_profile_title">Renommer le profil</string>
+    <string name="rename_profile_label">Nom du profil</string>
+    <string name="profile_renamed_toast">Profil renommé</string>
     <string name="btn_cancel">Annuler</string>
     <string name="btn_save">Sauvegarder</string>
     <string name="btn_add">Ajouter</string>

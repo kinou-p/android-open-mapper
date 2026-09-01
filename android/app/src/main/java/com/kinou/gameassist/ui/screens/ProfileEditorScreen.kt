@@ -276,6 +276,10 @@ fun ProfileCard(
     var hapticFire by remember(profile.id) { mutableStateOf(profile.settings.hapticFire) }
     var hapticReload by remember(profile.id) { mutableStateOf(profile.settings.hapticReload) }
     var hapticIntensity by remember(profile.id) { mutableFloatStateOf(profile.settings.hapticIntensity) }
+    // Rename Profile States
+    var profileName by remember(profile.id, profile.name) { mutableStateOf(profile.name) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var renameInputText by remember(profile.id, profile.name) { mutableStateOf(profile.name) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -300,7 +304,26 @@ fun ProfileCard(
                         .weight(1f)
                         .clickable { onSelect() }
                 ) {
-                    Text(profile.name, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(profileName, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                        IconButton(
+                            onClick = {
+                                renameInputText = profile.name
+                                showRenameDialog = true
+                            },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = stringResource(R.string.btn_rename),
+                                tint = NeonCyan.copy(alpha = 0.85f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                     Text(profile.packageName, color = TextSecondary, fontSize = 12.sp)
                     Text(stringResource(R.string.buttons_count_configured, profile.buttons.size), color = NeonCyan, fontSize = 12.sp)
                 }
@@ -345,19 +368,32 @@ fun ProfileCard(
             if (isSelected) {
                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
 
-                // Actions: Exporter, Dupliquer
+                // Actions: Renommer, Exporter, Dupliquer
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
+                        onClick = {
+                            renameInputText = profile.name
+                            showRenameDialog = true
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(stringResource(R.string.btn_rename), color = NeonCyan, fontSize = 11.sp)
+                    }
+
+                    OutlinedButton(
                         onClick = onExport,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Share, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.btn_export), color = NeonCyan, fontSize = 11.sp)
+                        Text(stringResource(R.string.btn_export), color = TextPrimary, fontSize = 11.sp)
                     }
 
                     OutlinedButton(
@@ -1090,6 +1126,76 @@ fun ProfileCard(
                 }
             }
         }
+    }
+
+    // ==========================================
+    // DIALOG: RENOMMER LE PROFIL
+    // ==========================================
+    if (showRenameDialog) {
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, tint = NeonCyan)
+                    Text(
+                        stringResource(R.string.rename_profile_title),
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        fontSize = 16.sp
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(R.string.rename_profile_label),
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
+                    OutlinedTextField(
+                        value = renameInputText,
+                        onValueChange = { renameInputText = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = androidx.compose.ui.text.TextStyle(
+                            fontSize = 14.sp,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = DarkCardBorder
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = renameInputText.trim()
+                        if (trimmed.isNotBlank()) {
+                            profile.name = trimmed
+                            profileName = trimmed
+                            onSave()
+                            Toast.makeText(context, context.getString(R.string.profile_renamed_toast), Toast.LENGTH_SHORT).show()
+                            showRenameDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                ) {
+                    Text(stringResource(R.string.btn_save), color = DarkBackground, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text(stringResource(R.string.btn_cancel), color = TextSecondary)
+                }
+            },
+            containerColor = DarkCard
+        )
     }
 }
 
