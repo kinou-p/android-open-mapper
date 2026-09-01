@@ -124,6 +124,9 @@ dependencies {
     // JSON Serialization
     implementation("com.google.code.gson:gson:2.11.0")
 
+    // EncryptedSharedPreferences (stockage chiffré du token appareil)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

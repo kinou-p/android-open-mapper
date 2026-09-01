@@ -2,6 +2,7 @@ package com.kinou.gameassist.data.community
 
 import android.content.Context
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.kinou.gameassist.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,6 +16,11 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 data class CacheEntry<T>(val data: T, val timestamp: Long)
+
+data class RegisterResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("deviceToken") val deviceToken: String?
+)
 
 class CommunityApiClient(private val context: Context) {
 
@@ -38,7 +44,54 @@ class CommunityApiClient(private val context: Context) {
     }
 
     private val gson = Gson()
-    private val deviceHash by lazy { DeviceFingerprint.getDeviceHash(context) }
+    @Volatile private var cachedDeviceToken: String? = null
+
+    // Token opaque émis par le serveur via /api/device/register, persisté chiffré côté client.
+    private suspend fun ensureDeviceToken(): String {
+        cachedDeviceToken?.let { return it }
+        DeviceTokenStore.get(context)?.let {
+            cachedDeviceToken = it
+            return it
+        }
+        val token = registerDevice()
+        DeviceTokenStore.save(context, token)
+        cachedDeviceToken = token
+        return token
+    }
+
+    private suspend fun registerDevice(): String = withContext(Dispatchers.IO) {
+        var conn: HttpURLConnection? = null
+        try {
+            val url = URL("$BASE_URL/api/device/register")
+            conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                setRequestProperty("Accept", "application/json")
+                setRequestProperty("User-Agent", "OpenMapper-Android/${BuildConfig.VERSION_NAME}")
+            }
+            val payload = mapOf("appVersion" to BuildConfig.VERSION_NAME)
+            val jsonBody = gson.toJson(payload)
+            val bodyBytes = jsonBody.toByteArray(Charsets.UTF_8)
+
+            applySignature(conn, "POST", url.path, bodyBytes)
+            conn.outputStream.use { it.write(bodyBytes) }
+
+            val responseCode = conn.responseCode
+            if (responseCode in 200..299) {
+                val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                val response = gson.fromJson(json, RegisterResponse::class.java)
+                response.deviceToken ?: throw Exception("Token absent de la réponse serveur")
+            } else {
+                val rawErr = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+                throw Exception(extractServerErrorMessage(rawErr, responseCode))
+            }
+        } finally {
+            try { conn?.disconnect() } catch (_: Exception) {}
+        }
+    }
 
     /**
      * Signe une requête POST en HMAC-SHA256 (clé BuildConfig.API_SIGNING_SECRET) sur la
@@ -196,7 +249,7 @@ class CommunityApiClient(private val context: Context) {
             }
 
             val payload = mapOf(
-                "deviceHash" to deviceHash,
+                "deviceToken" to ensureDeviceToken(),
                 "vote" to voteValue
             )
             val jsonBody = gson.toJson(payload)
@@ -259,7 +312,7 @@ class CommunityApiClient(private val context: Context) {
     suspend fun publishProfile(request: PublishProfileRequest): Result<PublishProfileResponse> = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
         try {
-            request.deviceHash = deviceHash
+            request.deviceToken = ensureDeviceToken()
 
             val url = URL("$BASE_URL/api/profiles")
             conn = (url.openConnection() as HttpURLConnection).apply {
@@ -316,7 +369,7 @@ class CommunityApiClient(private val context: Context) {
             }
 
             val payload = mapOf(
-                "deviceHash" to deviceHash,
+                "deviceToken" to ensureDeviceToken(),
                 "appVersion" to appVersion
             )
             val jsonBody = gson.toJson(payload)

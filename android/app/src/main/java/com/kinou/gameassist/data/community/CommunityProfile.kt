@@ -65,7 +65,7 @@ data class PublishProfileRequest(
     @SerializedName("author_name") val authorName: String,
     @SerializedName("controller_type") val controllerType: String,
     @SerializedName("profile_json") val profileJson: String,
-    @SerializedName("deviceHash") var deviceHash: String? = null
+    @SerializedName("deviceToken") var deviceToken: String? = null
 )
 
 data class PublishProfileResponse(
