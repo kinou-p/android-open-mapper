@@ -295,6 +295,7 @@ class HudEditorOverlayView(
     private val btnCloseRect = RectF()
     private val btnSaveRect = RectF()
     private val btnHideRect = RectF()
+    private val btnStrafeRect = RectF()
     private val btnOpacRect = RectF()
     private val btnDetailsRect = RectF()
     private val btnAddRect = RectF()
@@ -321,6 +322,7 @@ class HudEditorOverlayView(
     private val btnRoleRect = RectF()
     private val btnModeRect = RectF()
     private val btnAssignRect = RectF()
+    private val btnJoyStrafeRect = RectF()
 
     init {
         isFocusable = true
@@ -518,6 +520,7 @@ class HudEditorOverlayView(
             btnCloseRect.setEmpty()
             btnSaveRect.setEmpty()
             btnHideRect.setEmpty()
+            btnStrafeRect.setEmpty()
             btnOpacRect.setEmpty()
             btnDetailsRect.setEmpty()
             btnAddRect.setEmpty()
@@ -609,7 +612,21 @@ class HudEditorOverlayView(
         canvas.drawText(saveLabel, btnSaveRect.centerX(), btnSaveRect.centerY() + 5f * density, uiBtnTextPaint)
         curRight -= (saveW + btnSpacing)
 
-        // 4. Button: 🎨 Opacité Toggle
+        // 4. Button: ⚡ Strafe Quick Toggle
+        val strafeActive = profile.joystick.jiggleStrafe
+        val strafeLabel = if (strafeActive) "⚡ Strafe: ON" else "⚡ Strafe: OFF"
+        uiBtnTextPaint.color = if (strafeActive) Color.BLACK else Color.WHITE
+        uiBtnTextPaint.textSize = 13.5f * density
+        val strafeW = max(94f * density, uiBtnTextPaint.measureText(strafeLabel) + 20f * density)
+        btnStrafeRect.set(curRight - strafeW, btnTop, curRight, btnBottom)
+        uiBtnBgPaint.color = if (strafeActive) 0xFF00FF66.toInt() else 0xFF1E2633.toInt()
+        uiBtnStrokePaint.color = if (strafeActive) 0xFF00FF66.toInt() else 0xFF445566.toInt()
+        canvas.drawRoundRect(btnStrafeRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawRoundRect(btnStrafeRect, btnRadius, btnRadius, uiBtnStrokePaint)
+        canvas.drawText(strafeLabel, btnStrafeRect.centerX(), btnStrafeRect.centerY() + 5f * density, uiBtnTextPaint)
+        curRight -= (strafeW + btnSpacing)
+
+        // 5. Button: 🎨 Opacité Toggle
         val opacPercent = (opacitySteps[opacityIndex] * 100).toInt()
         val opacLabel = context.getString(R.string.overlay_btn_opacity, opacPercent)
         uiBtnTextPaint.color = Color.WHITE
@@ -804,10 +821,29 @@ class HudEditorOverlayView(
             uiBtnTextPaint.textSize = 13.5f * density
             canvas.drawText(if (isLearning) "⏳ Touche..." else "🎮 Assigner", btnAssignRect.centerX(), btnAssignRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (assignW + btnSpacing)
+            btnJoyStrafeRect.setEmpty()
+        } else if (isJoystickSelected) {
+            btnRoleRect.setEmpty()
+            btnModeRect.setEmpty()
+            btnAssignRect.setEmpty()
+
+            val strafeActive = profile.joystick.jiggleStrafe
+            val strafeLabel = if (strafeActive) "⚡ Strafe: ON" else "⚡ Strafe: OFF"
+            uiBtnBgPaint.color = if (strafeActive) 0xFF00FF66.toInt() else 0xFF243040.toInt()
+            uiBtnStrokePaint.color = if (strafeActive) 0xFF00FF66.toInt() else 0xFF00F0FF.toInt()
+            uiBtnTextPaint.color = if (strafeActive) Color.BLACK else Color.WHITE
+            uiBtnTextPaint.textSize = 13f * density
+            val strafeW = max(100f * density, uiBtnTextPaint.measureText(strafeLabel) + 20f * density)
+            btnJoyStrafeRect.set(rightX - strafeW, btnTop, rightX, btnBottom)
+            canvas.drawRoundRect(btnJoyStrafeRect, btnRadius, btnRadius, uiBtnBgPaint)
+            canvas.drawRoundRect(btnJoyStrafeRect, btnRadius, btnRadius, uiBtnStrokePaint)
+            canvas.drawText(strafeLabel, btnJoyStrafeRect.centerX(), btnJoyStrafeRect.centerY() + 5f * density, uiBtnTextPaint)
+            rightX -= (strafeW + btnSpacing)
         } else {
             btnRoleRect.setEmpty()
             btnModeRect.setEmpty()
             btnAssignRect.setEmpty()
+            btnJoyStrafeRect.setEmpty()
         }
 
         // Title on the left of bottom bar
@@ -876,6 +912,14 @@ class HudEditorOverlayView(
                     if (btnSaveRect.contains(tx, ty)) {
                         performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                         onSave(profile)
+                        return true
+                    }
+
+                    // ⚡ Strafe Quick Toggle
+                    if (btnStrafeRect.contains(tx, ty)) {
+                        profile.joystick.jiggleStrafe = !profile.joystick.jiggleStrafe
+                        performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        invalidate()
                         return true
                     }
 
@@ -1018,6 +1062,14 @@ class HudEditorOverlayView(
                             invalidate()
                             return true
                         }
+                    }
+
+                    // ⚡ Joystick Strafe Toggle
+                    if (isJoystickSelected && btnJoyStrafeRect.contains(tx, ty)) {
+                        profile.joystick.jiggleStrafe = !profile.joystick.jiggleStrafe
+                        performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        invalidate()
+                        return true
                     }
 
                     // If tap inside the bottom bar card, consume it

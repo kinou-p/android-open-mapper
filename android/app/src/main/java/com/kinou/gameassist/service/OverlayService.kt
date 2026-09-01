@@ -262,6 +262,18 @@ class OverlayService : LifecycleService() {
             },
             onStopService = {
                 stopSelf()
+            },
+            isStrafeActive = {
+                currentProfile?.joystick?.jiggleStrafe == true
+            },
+            onToggleStrafe = {
+                currentProfile?.let { prof ->
+                    prof.joystick.jiggleStrafe = !prof.joystick.jiggleStrafe
+                    repository.saveProfile(prof)
+                    engine.setProfile(prof)
+                    val stateMsg = if (prof.joystick.jiggleStrafe) "⚡ Auto Jiggle Strafe ACTIVÉ" else "Auto Jiggle Strafe DÉSACTIVÉ"
+                    android.widget.Toast.makeText(this, stateMsg, android.widget.Toast.LENGTH_SHORT).show()
+                }
             }
         )
 

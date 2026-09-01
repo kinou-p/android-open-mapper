@@ -24,7 +24,9 @@ class EdgeHandleOverlayView(
     private val params: WindowManager.LayoutParams,
     private val onOpenHud: () -> Unit,
     private val onOpenApp: () -> Unit,
-    private val onStopService: () -> Unit
+    private val onStopService: () -> Unit,
+    private val isStrafeActive: (() -> Boolean)? = null,
+    private val onToggleStrafe: (() -> Unit)? = null
 ) : View(context) {
 
     enum class ScreenEdge { LEFT, RIGHT }
@@ -35,7 +37,7 @@ class EdgeHandleOverlayView(
     val restingWidth = (16 * density).toInt()
     val restingHeight = (90 * density).toInt()
     val menuWidth = (210 * density).toInt()
-    val menuHeight = (200 * density).toInt()
+    val menuHeight = (248 * density).toInt()
 
     private val triggerThreshold = 55 * density
     private val cornerRadius = 14 * density
@@ -54,7 +56,7 @@ class EdgeHandleOverlayView(
     private var isSlidingToOpen = false
     private var hasHapticPlayed = false
 
-    private enum class MenuButton { HUD, APP, STOP, CLOSE }
+    private enum class MenuButton { HUD, STRAFE, APP, STOP, CLOSE }
     private var pressedButton: MenuButton? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -306,22 +308,36 @@ class EdgeHandleOverlayView(
             alpha = a
         )
 
-        // Button 2: 📱 Ouvrir l'App
+        // Button 2: ⚡ Auto Strafe Toggle
         val btn2Top = 86 * density
         val btn2Bottom = btn2Top + btnHeight
+        val strafeOn = isStrafeActive?.invoke() ?: false
+        val strafeLabel = if (strafeOn) "Strafe: ACTIF" else "Strafe: OFF"
+        val strafeColor = if (strafeOn) 0xFF00FF66.toInt() else 0xFF8899AA.toInt()
         drawMenuButton(
             canvas, RectF(btnLeft, btn2Top, btnRight, btn2Bottom),
+            label = strafeLabel, icon = "⚡",
+            accentColor = strafeColor,
+            isPressed = pressedButton == MenuButton.STRAFE,
+            alpha = a
+        )
+
+        // Button 3: 📱 Ouvrir l'App
+        val btn3Top = 134 * density
+        val btn3Bottom = btn3Top + btnHeight
+        drawMenuButton(
+            canvas, RectF(btnLeft, btn3Top, btnRight, btn3Bottom),
             label = context.getString(com.kinou.gameassist.R.string.overlay_open_app), icon = "📱",
             accentColor = 0xFF00E5FF.toInt(),
             isPressed = pressedButton == MenuButton.APP,
             alpha = a
         )
 
-        // Button 3: ⏹ Arrêter
-        val btn3Top = 134 * density
-        val btn3Bottom = btn3Top + btnHeight
+        // Button 4: ⏹ Arrêter
+        val btn4Top = 182 * density
+        val btn4Bottom = btn4Top + btnHeight
         drawMenuButton(
-            canvas, RectF(btnLeft, btn3Top, btnRight, btn3Bottom),
+            canvas, RectF(btnLeft, btn4Top, btnRight, btn4Bottom),
             label = context.getString(com.kinou.gameassist.R.string.overlay_stop_mapping), icon = "⏹",
             accentColor = 0xFFFF0055.toInt(),
             isPressed = pressedButton == MenuButton.STOP,
@@ -380,10 +396,13 @@ class EdgeHandleOverlayView(
             if (y in btn1Top..(btn1Top + btnHeight)) return MenuButton.HUD
 
             val btn2Top = 86 * density
-            if (y in btn2Top..(btn2Top + btnHeight)) return MenuButton.APP
+            if (y in btn2Top..(btn2Top + btnHeight)) return MenuButton.STRAFE
 
             val btn3Top = 134 * density
-            if (y in btn3Top..(btn3Top + btnHeight)) return MenuButton.STOP
+            if (y in btn3Top..(btn3Top + btnHeight)) return MenuButton.APP
+
+            val btn4Top = 182 * density
+            if (y in btn4Top..(btn4Top + btnHeight)) return MenuButton.STOP
         }
         return null
     }
@@ -430,6 +449,11 @@ class EdgeHandleOverlayView(
 
                     when (targetBtn) {
                         MenuButton.HUD -> closeMenu { onOpenHud() }
+                        MenuButton.STRAFE -> {
+                            onToggleStrafe?.invoke()
+                            performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            invalidate()
+                        }
                         MenuButton.APP -> closeMenu { onOpenApp() }
                         MenuButton.STOP -> closeMenu { onStopService() }
                         MenuButton.CLOSE -> closeMenu()
