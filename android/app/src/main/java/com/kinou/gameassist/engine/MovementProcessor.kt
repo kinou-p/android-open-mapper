@@ -23,6 +23,7 @@ class MovementProcessor(
     // Organic humanization state
     @Volatile private var isJigglingActive = false
     @Volatile private var currentDirection = 1 // 1 = Right, -1 = Left
+    @Volatile private var lastFinishedDirection = -1 // Memory of last direction completed across bursts
     @Volatile private var halfCycleStartTime = 0L
     @Volatile private var currentHalfCycleDuration = BASE_HALF_CYCLE_MS
     @Volatile private var currentTargetAmplitudeX = BASE_AMPLITUDE_X
@@ -66,10 +67,15 @@ class MovementProcessor(
             val baseDuration = (BASE_HALF_CYCLE_MS / speedFactor).toLong()
 
             if (!isJigglingActive) {
-                // Initialize a new humanized jiggle burst
+                // Initialize a new jiggle burst
                 isJigglingActive = true
                 halfCycleStartTime = now
-                currentDirection = if (random.nextBoolean()) 1 else -1
+                currentDirection = if (cfg.jiggleHumanize) {
+                    if (random.nextBoolean()) 1 else -1
+                } else {
+                    // Strict 1:1 alternating mode: alternate from the last finished direction
+                    if (lastFinishedDirection == 1) -1 else 1
+                }
                 startAmplitudeX = 0f
                 startDriftY = 0f
                 computeNextHalfCycle(baseDuration, cfg)
@@ -81,7 +87,18 @@ class MovementProcessor(
                 halfCycleStartTime = now
                 startAmplitudeX = currentTargetAmplitudeX
                 startDriftY = currentTargetDriftY
-                currentDirection = -currentDirection
+                lastFinishedDirection = currentDirection
+
+                if (cfg.jiggleHumanize) {
+                    val rand = cfg.jiggleRandomness.coerceIn(0f, 1f)
+                    // Optional unpredictable feint / double-strafe on same side when humanization is enabled
+                    val doFeint = random.nextFloat() < (rand * 0.20f)
+                    currentDirection = if (doFeint) currentDirection else -currentDirection
+                } else {
+                    // Strict 1:1 alternating mode: strictly alternate 1 side then the other
+                    currentDirection = -currentDirection
+                }
+
                 computeNextHalfCycle(baseDuration, cfg)
                 elapsed = 0L
             }
@@ -105,6 +122,7 @@ class MovementProcessor(
         } else {
             if (isJigglingActive) {
                 isJigglingActive = false
+                lastFinishedDirection = currentDirection
                 startAmplitudeX = 0f
                 startDriftY = 0f
             }

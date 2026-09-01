@@ -114,9 +114,9 @@
     <string name="aim_assist_title">🧲 Aim Assist Permanente (Keep-Alive RAA)</string>
     <string name="aim_assist_desc">Mantém a assistência de rotação de mira ativa continuamente.</string>
     <string name="jiggle_strafe_title">⚡ Auto Jiggle Strafe (Esquiva ao Atirar)</string>
-    <string name="jiggle_strafe_desc">Oscila automaticamente para a esquerda e direita ao atirar para desviar de balas.</string>
-    <string name="humanization_title">🧬 Humanização e Anti-Detecção</string>
-    <string name="humanization_desc">Gera microvariações de cadência para simular um dedo humano.</string>
+    <string name="jiggle_strafe_desc">Oscila em alternância estrita 1-1 (esquerda/direita) ao atirar para desviar de balas.</string>
+    <string name="humanization_title">🧬 Padrões Aleatórios e Humanização</string>
+    <string name="humanization_desc">Introduz fintas imprevisíveis e variações de cadência em vez da alternância estrita 1-1.</string>
     <string name="jiggle_random_label">Nível de Aleatoriedade / Variação</string>
     <string name="jiggle_speed_label">Cadência de Strafe (Velocidade)</string>
     <string name="joystick_deadzone">Zona Morta (Anti-Drift Analógico Esquerdo)</string>

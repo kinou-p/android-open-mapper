@@ -33,7 +33,7 @@ data class JoystickConfig(
     var jiggleStrafe: Boolean = false,
 
     @SerialName("jiggle_humanize")
-    var jiggleHumanize: Boolean = true,
+    var jiggleHumanize: Boolean = false,
 
     @SerialName("jiggle_randomness")
     var jiggleRandomness: Float = 0.35f,

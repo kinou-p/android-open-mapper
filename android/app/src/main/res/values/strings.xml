@@ -114,9 +114,9 @@
     <string name="aim_assist_title">🧲 Permanent Aim Assist (RAA Keep-Alive)</string>
     <string name="aim_assist_desc">Keeps rotational aim assist active continuously.</string>
     <string name="jiggle_strafe_title">⚡ Auto Jiggle Strafe (Dodge While Firing)</string>
-    <string name="jiggle_strafe_desc">Automatically oscillates left &amp; right while firing to dodge enemy bullets.</string>
-    <string name="humanization_title">🧬 Humanization &amp; Anti-Detection</string>
-    <string name="humanization_desc">Generates micro-variations in timing to simulate human fingers.</string>
+    <string name="jiggle_strafe_desc">Oscillates in strict 1-1 alternation (left/right) while firing to dodge enemy bullets.</string>
+    <string name="humanization_title">🧬 Randomized Patterns &amp; Humanization</string>
+    <string name="humanization_desc">Introduces unpredictable feints and timing variations instead of strict 1-1 alternation.</string>
     <string name="jiggle_random_label">Randomness / Variation Level</string>
     <string name="jiggle_speed_label">Strafe Cadence (Speed)</string>
     <string name="joystick_deadzone">Deadzone (Left Stick Anti-Drift)</string>

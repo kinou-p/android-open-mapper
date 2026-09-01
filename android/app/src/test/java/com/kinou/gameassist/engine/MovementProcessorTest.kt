@@ -127,6 +127,7 @@ class MovementProcessorTest {
     @Test
     fun testJiggleStrafeWhenFiring() {
         config.jiggleStrafe = true
+        config.jiggleHumanize = false
         config.jiggleSpeed = 1.0f
         processor.config = config
 
@@ -143,6 +144,38 @@ class MovementProcessorTest {
         assertTrue(injector.events.size >= 2)
         assertEquals("DOWN", injector.events[0].type)
         assertEquals("MOVE", injector.events[1].type)
+    }
+
+    @Test
+    fun testJiggleStrafeStrictAlternationAcrossBursts() {
+        config.jiggleStrafe = true
+        config.jiggleHumanize = false
+        config.jiggleSpeed = 2.0f
+        processor.config = config
+
+        // Burst 1: Starts moving in one direction (e.g. Right: targetX > 480)
+        processor.process(0f, 0f, isFiring = true)
+        Thread.sleep(50)
+        processor.process(0f, 0f, isFiring = true)
+        val burst1X = injector.events.last().x
+
+        // Stop firing
+        processor.process(0f, 0f, isFiring = false)
+
+        // Clear recorded events
+        injector.events.clear()
+
+        // Burst 2: Starts moving in the opposite direction (e.g. Left: targetX < 480)
+        processor.process(0f, 0f, isFiring = true)
+        Thread.sleep(50)
+        processor.process(0f, 0f, isFiring = true)
+        val burst2X = injector.events.last().x
+
+        // Ensure bursts alternate sides (one is to the right of center 480, one is to the left)
+        assertTrue(
+            "Burst 1 ($burst1X) and Burst 2 ($burst2X) must be on opposite sides of center (480)",
+            (burst1X > 480f && burst2X < 480f) || (burst1X < 480f && burst2X > 480f)
+        )
     }
 
     @Test
