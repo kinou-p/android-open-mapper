@@ -22,7 +22,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.gson.Gson
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.community.*
 import com.kinou.gameassist.data.model.GameProfile
@@ -31,6 +30,8 @@ import com.kinou.gameassist.ui.theme.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -292,11 +293,15 @@ fun CommunityScreen(
                                             try {
                                                 val res = apiClient.vote(profileId, voteVal)
                                                 res.onSuccess { voteRes ->
-                                                    item.likesCount = voteRes.likes
-                                                    item.dislikesCount = voteRes.dislikes
-                                                    item.userVote = voteRes.currentVote
-                                                    // trigger UI recomposition
-                                                    profiles = profiles.toList()
+                                                    profiles = profiles.map {
+                                                        if (it.id == profileId) {
+                                                            it.copy(
+                                                                likesCount = voteRes.likes,
+                                                                dislikesCount = voteRes.dislikes,
+                                                                userVote = voteRes.currentVote
+                                                            )
+                                                        } else it
+                                                    }
                                                 }.onFailure { ex ->
                                                     Toast.makeText(
                                                         context,
@@ -325,8 +330,9 @@ fun CommunityScreen(
                                                         return@onSuccess
                                                     }
                                                     apiClient.trackDownload(profileId)
-                                                    item.downloadsCount += 1
-                                                    profiles = profiles.toList()
+                                                    profiles = profiles.map {
+                                                        if (it.id == profileId) it.copy(downloadsCount = it.downloadsCount + 1) else it
+                                                    }
 
                                                     val imported = repository.importProfileFromJson(profileJson)
                                                     if (imported != null) {
@@ -536,7 +542,7 @@ fun PublishProfileDialog(
     onDismiss: () -> Unit,
     onPublish: (PublishProfileRequest) -> Unit
 ) {
-    val gson = remember { Gson() }
+    val jsonSerializer = remember { Json { prettyPrint = true; encodeDefaults = true } }
     var selectedProfile by remember { mutableStateOf(localProfiles.firstOrNull()) }
     var title by remember(selectedProfile) { mutableStateOf(selectedProfile?.name ?: "") }
     var description by remember { mutableStateOf("") }
@@ -608,7 +614,7 @@ fun PublishProfileDialog(
                 onClick = {
                     val prof = selectedProfile
                     if (prof != null && title.isNotBlank() && authorName.isNotBlank()) {
-                        val json = gson.toJson(prof)
+                        val json = jsonSerializer.encodeToString(prof)
                         onPublish(
                             PublishProfileRequest(
                                 title = title.trim(),

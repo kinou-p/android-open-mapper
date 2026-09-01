@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 val localProperties = Properties().apply {
@@ -25,8 +26,12 @@ val keystoreAlias = System.getenv("KEY_ALIAS")
     ?: localProperties.getProperty("KEY_ALIAS")
     ?: "openmapper"
 
-// Secret partagé avec le backend Cloudflare (wrangler secret put APP_SECRET) pour signer
-// les requêtes POST (HMAC-SHA256). Fourni via APP_SECRET (env ou local.properties), jamais en dur.
+// Secret partagé avec le backend Cloudflare (wrangler secret put APP_SECRET).
+// Fourni via APP_SECRET (env ou local.properties), jamais en dur dans le VCS.
+// ATTENTION — modèle de confiance : cette valeur est embarquée dans l'APK et donc
+// extractible par décompilation. Elle ne fournit qu'une intégrité anti-falsification
+// (HMAC-SHA256), PAS une authentification. L'anti-abus réel repose sur les rate-limits
+// serveur et le jeton d'appareil opaque émis par /api/device/register.
 val apiSigningSecret = System.getenv("APP_SECRET")
     ?: localProperties.getProperty("APP_SECRET")
     ?: error("APP_SECRET manquant : définir via variable d'environnement ou local.properties")
@@ -122,7 +127,7 @@ dependencies {
     implementation("dev.rikka.shizuku:provider:$shizukuVersion")
 
     // JSON Serialization
-    implementation("com.google.code.gson:gson:2.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1")
 
     // EncryptedSharedPreferences (stockage chiffré du token appareil)
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

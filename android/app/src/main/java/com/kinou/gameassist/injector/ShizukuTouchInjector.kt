@@ -196,19 +196,15 @@ class ShizukuTouchInjector {
     }
 
     fun releaseAll() {
-        val event: MotionEvent
-        val h: IInputManagerHelper
-
         lock.withLock {
-            val helperInstance = helper ?: return
+            val h = helper ?: return
             if (pointerPool.getActiveCount() == 0) return
-            h = helperInstance
 
             val eventTime = SystemClock.uptimeMillis()
             pointerPool.populatePointerBuffers(-1)
             val count = pointerPool.getActiveCount()
 
-            event = MotionEvent.obtain(
+            val event = MotionEvent.obtain(
                 downTime,
                 eventTime,
                 MotionEvent.ACTION_CANCEL,
@@ -226,14 +222,14 @@ class ShizukuTouchInjector {
             )
 
             pointerPool.clear()
-        }
 
-        try {
-            h.injectInputEvent(event, 0)
-        } catch (e: Throwable) {
-            handleInjectionError(e)
-        } finally {
-            event.recycle()
+            try {
+                h.injectInputEvent(event, 0)
+            } catch (e: Throwable) {
+                handleInjectionError(e)
+            } finally {
+                event.recycle()
+            }
         }
     }
 

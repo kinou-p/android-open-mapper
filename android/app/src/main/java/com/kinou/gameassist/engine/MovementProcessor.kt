@@ -9,7 +9,7 @@ import kotlin.math.sin
 
 class MovementProcessor(
     private val injector: ShizukuTouchInjector,
-    var config: JoystickConfig = JoystickConfig()
+    @Volatile var config: JoystickConfig = JoystickConfig()
 ) {
     companion object {
         const val POINTER_JOYSTICK = 0
@@ -37,7 +37,10 @@ class MovementProcessor(
         isAimingOrCameraActive: Boolean = false,
         isFiring: Boolean = false
     ) {
-        if (!config.enabled) {
+        // Snapshot local immuable de la config pour toute la frame :
+        // évite de mixer plusieurs snapshots si setProfile() échange la référence.
+        val cfg = config
+        if (!cfg.enabled) {
             if (isActive) release()
             return
         }
@@ -45,21 +48,21 @@ class MovementProcessor(
         val screenW = injector.screenWidth
         val screenH = injector.screenHeight
 
-        val centerX = config.centerX * screenW
-        val centerY = config.centerY * screenH
-        val radiusPx = config.radius * screenH
+        val centerX = cfg.centerX * screenW
+        val centerY = cfg.centerY * screenH
+        val radiusPx = cfg.radius * screenH
 
-        val innerDeadzone = config.deadzone
-        val outerDeadzone = config.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
+        val innerDeadzone = cfg.deadzone
+        val outerDeadzone = cfg.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
 
         // 1. Calculate Jiggle Strafe modifier if enabled and firing
-        val isJiggling = config.jiggleStrafe && isFiring
+        val isJiggling = cfg.jiggleStrafe && isFiring
         var effectiveLx = lx
         var effectiveLy = ly
 
         if (isJiggling) {
             val now = System.currentTimeMillis()
-            val speedFactor = config.jiggleSpeed.coerceIn(0.5f, 2.0f)
+            val speedFactor = cfg.jiggleSpeed.coerceIn(0.5f, 2.0f)
             val baseDuration = (BASE_HALF_CYCLE_MS / speedFactor).toLong()
 
             if (!isJigglingActive) {
@@ -69,7 +72,7 @@ class MovementProcessor(
                 currentDirection = if (random.nextBoolean()) 1 else -1
                 startAmplitudeX = 0f
                 startDriftY = 0f
-                computeNextHalfCycle(baseDuration)
+                computeNextHalfCycle(baseDuration, cfg)
             }
 
             var elapsed = now - halfCycleStartTime
@@ -79,7 +82,7 @@ class MovementProcessor(
                 startAmplitudeX = currentTargetAmplitudeX
                 startDriftY = currentTargetDriftY
                 currentDirection = -currentDirection
-                computeNextHalfCycle(baseDuration)
+                computeNextHalfCycle(baseDuration, cfg)
                 elapsed = 0L
             }
 
@@ -116,7 +119,7 @@ class MovementProcessor(
             val dirY = effectiveLy / mag
 
             // Sprint acceleration factor
-            val sprintFactor = if (mag >= config.sprintThreshold) 1.25f else 1.0f
+            val sprintFactor = if (mag >= cfg.sprintThreshold) 1.25f else 1.0f
             val currentRadius = radiusPx * normalizedMag * sprintFactor
 
             val targetX = centerX + (dirX * currentRadius)
@@ -127,7 +130,7 @@ class MovementProcessor(
                 isActive = true
             }
             injector.touchMove(POINTER_JOYSTICK, targetX, targetY)
-        } else if (config.raaKeepAlive && isAimingOrCameraActive) {
+        } else if (cfg.raaKeepAlive && isAimingOrCameraActive) {
             // Rotational Aim Assist (RAA) Keep-Alive:
             // Injects sub-pixel micro-strafe oscillations (3.5% radius) to maintain active in-game tracking bubble
             ditherPhase += 0.40f
@@ -147,9 +150,9 @@ class MovementProcessor(
         }
     }
 
-    private fun computeNextHalfCycle(baseDuration: Long) {
-        if (config.jiggleHumanize) {
-            val rand = config.jiggleRandomness.coerceIn(0f, 1f)
+    private fun computeNextHalfCycle(baseDuration: Long, cfg: JoystickConfig) {
+        if (cfg.jiggleHumanize) {
+            val rand = cfg.jiggleRandomness.coerceIn(0f, 1f)
             // Duration jitter: +/- 40% of randomness (e.g. at 0.35 randomness -> +/- 14% timing jitter)
             val durationNoise = (random.nextFloat() * 2f - 1f) * (0.40f * rand)
             currentHalfCycleDuration = (baseDuration * (1.0f + durationNoise)).toLong().coerceIn(60L, 450L)
@@ -170,10 +173,11 @@ class MovementProcessor(
 
     fun release() {
         if (isActive) {
+            val cfg = config
             val screenW = injector.screenWidth
             val screenH = injector.screenHeight
-            val centerX = config.centerX * screenW
-            val centerY = config.centerY * screenH
+            val centerX = cfg.centerX * screenW
+            val centerY = cfg.centerY * screenH
             injector.touchUp(POINTER_JOYSTICK, centerX, centerY)
             isActive = false
             ditherPhase = 0f

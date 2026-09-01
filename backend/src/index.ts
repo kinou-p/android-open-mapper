@@ -54,11 +54,17 @@ function timingSafeEqualHex(a: string, b: string): boolean {
 }
 
 /**
- * Middleware d'authentification des routes d'écriture POST.
- * Vérifie une signature HMAC-SHA256 (clé APP_SECRET partagée avec le client Android)
- * sur la chaîne canonique `METHOD\nPATH\nTIMESTAMP\nBODY_SHA256` pour authentifier
- * l'appelant et garantir l'intégrité du corps. Rejette les corps > 32 Ko avant lecture.
- * Remplace l'ancien contrôle par User-Agent, trivialement falsifiable.
+ * Middleware de protection des routes d'écriture POST.
+ *
+ * IMPORTANT — modèle de confiance : la clé APP_SECRET est embarquée dans l'APK
+ * Android (extractible par décompilation). La signature HMAC-SHA256 apporte donc
+ * uniquement une garantie d'INTÉGRITÉ/anti-falsification du corps (chaîne canonique
+ * `METHOD\nPATH\nTIMESTAMP\nBODY_SHA256`), PAS une authentification réelle de l'appelant.
+ * La véritable défense anti-abus repose sur :
+ *   - les limites de débit serveur (IP + appareil),
+ *   - le jeton d'appareil opaque émis par `/api/device/register` (émission rate-limitée),
+ *   validé et haché côté serveur sur les routes sensibles.
+ * Rejette les corps > 32 Ko avant toute lecture en mémoire.
  */
 const verifySignature = async (c: any, next: any) => {
   const secret = c.env.APP_SECRET;
@@ -67,10 +73,15 @@ const verifySignature = async (c: any, next: any) => {
     return c.json({ error: "Serveur mal configuré (secret d'authentification manquant)" }, 503);
   }
 
-  // 1. Rejet précoce des corps trop volumineux (avant toute lecture en mémoire)
-  const contentLength = parseInt(c.req.header('content-length') || '0', 10);
-  if (contentLength > MAX_BODY_BYTES) {
-    return c.json({ success: false, error: 'La taille de la requête dépasse la limite autorisée (32 Ko max)' }, 413);
+  // 1. Rejet précoce des corps trop volumineux si Content-Length est fourni.
+  //    Si Content-Length est absent (ex: flux HTTP/2, HTTP/3 ou encodage chunked),
+  //    la requête est acceptée et la taille exacte en octets sera vérifiée après lecture.
+  const rawContentLength = c.req.header('content-length');
+  if (rawContentLength !== null && rawContentLength !== undefined) {
+    const contentLength = parseInt(rawContentLength, 10);
+    if (!Number.isFinite(contentLength) || contentLength < 0 || contentLength > MAX_BODY_BYTES) {
+      return c.json({ success: false, error: 'La taille de la requête dépasse la limite autorisée (32 Ko max)' }, 413);
+    }
   }
 
   // 2. Rejet des requêtes sans en-têtes de signature ou horloge invalide
@@ -84,9 +95,10 @@ const verifySignature = async (c: any, next: any) => {
     return c.json({ error: 'Requête expirée ou horloge invalide' }, 401);
   }
 
-  // 3. Lecture du corps (bornée) puis vérification de la signature
+  // 3. Lecture du corps puis vérification stricte de la taille en octets (UTF-8)
   const rawBody = await c.req.text();
-  if (rawBody.length > MAX_BODY_BYTES) {
+  const bodyByteLength = new TextEncoder().encode(rawBody).byteLength;
+  if (bodyByteLength > MAX_BODY_BYTES) {
     return c.json({ success: false, error: 'La taille de la requête dépasse la limite autorisée (32 Ko max)' }, 413);
   }
 
@@ -115,8 +127,20 @@ app.use('*', async (c, next) => {
 const MAX_PROFILE_JSON_BYTES = 16 * 1024; // 16 KB max per profile
 
 // In-memory sliding rate limit filter to reduce D1 write load under heavy traffic
-const memRateLimitCache = new Map<string, { count: number; windowStart: number }>();
-const MAX_MEM_CACHE_SIZE = 5000;
+// Utilise 2 buckets temporels partitionnés par minute pour une éviction O(1) sans parcours itératif
+interface MemBucket {
+  windowMinute: number;
+  entries: Map<string, number>;
+}
+
+let currentBucket: MemBucket = { windowMinute: 0, entries: new Map() };
+let previousBucket: MemBucket = { windowMinute: 0, entries: new Map() };
+const MAX_MEM_BUCKET_ENTRIES = 5000;
+
+export function resetMemRateLimitCache(): void {
+  currentBucket = { windowMinute: 0, entries: new Map() };
+  previousBucket = { windowMinute: 0, entries: new Map() };
+}
 
 function getClientIp(c: any): string {
   const cfIp = c.req.header('cf-connecting-ip');
@@ -139,45 +163,46 @@ async function hashIp(ip: string, salt?: string): Promise<string | null> {
   return hashArr.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
 }
 
-function recordMemRateLimit(key: string, now: number, windowMs: number, maxRequests: number): { blocked: boolean; retryAfterSec: number } {
-  const windowStart = now - windowMs;
-  const memEntry = memRateLimitCache.get(key);
-  if (memEntry) {
-    if (memEntry.windowStart >= windowStart) {
-      if (memEntry.count >= maxRequests) {
-        const retryAfterMs = (memEntry.windowStart + windowMs) - now;
-        return {
-          blocked: true,
-          retryAfterSec: Math.max(1, Math.ceil(retryAfterMs / 1000))
-        };
-      }
-      memEntry.count++;
-      return { blocked: false, retryAfterSec: 0 };
+export function recordMemRateLimit(
+  key: string,
+  now: number,
+  windowMs: number,
+  maxRequests: number
+): { blocked: boolean; retryAfterSec: number } {
+  const currentMinute = Math.floor(now / 60_000);
+
+  // Rotation des buckets en O(1) sans boucle d'itération
+  if (currentBucket.windowMinute !== currentMinute) {
+    if (currentBucket.windowMinute === currentMinute - 1) {
+      previousBucket = currentBucket;
     } else {
-      memEntry.count = 1;
-      memEntry.windowStart = now;
-      return { blocked: false, retryAfterSec: 0 };
+      previousBucket = { windowMinute: currentMinute - 1, entries: new Map() };
     }
-  } else {
-    // Eviction if size exceeds MAX_MEM_CACHE_SIZE: purge expired entries or oldest 500 entries (FIFO)
-    if (memRateLimitCache.size >= MAX_MEM_CACHE_SIZE) {
-      for (const [k, v] of memRateLimitCache.entries()) {
-        if (now - v.windowStart > 60_000) {
-          memRateLimitCache.delete(k);
-        }
-      }
-      if (memRateLimitCache.size >= MAX_MEM_CACHE_SIZE) {
-        let deleted = 0;
-        for (const k of memRateLimitCache.keys()) {
-          memRateLimitCache.delete(k);
-          deleted++;
-          if (deleted >= 500) break;
-        }
-      }
-    }
-    memRateLimitCache.set(key, { count: 1, windowStart: now });
-    return { blocked: false, retryAfterSec: 0 };
+    currentBucket = { windowMinute: currentMinute, entries: new Map() };
   }
+
+  const currentCount = currentBucket.entries.get(key) || 0;
+  const previousCount = previousBucket.entries.get(key) || 0;
+
+  // Calcul glissant proportionnel à l'avancement dans la minute courante
+  const elapsedRatio = (now % 60_000) / 60_000;
+  const prevWeight = Math.max(0, 1 - elapsedRatio);
+  const estimatedCount = Math.floor(previousCount * prevWeight) + currentCount;
+
+  if (estimatedCount >= maxRequests) {
+    const retryAfterMs = Math.max(1000, 60_000 - (now % 60_000));
+    return {
+      blocked: true,
+      retryAfterSec: Math.max(1, Math.ceil(retryAfterMs / 1000))
+    };
+  }
+
+  // Stockage borné pour éviter toute allocation mémoire excessive par bucket
+  if (currentBucket.entries.size < MAX_MEM_BUCKET_ENTRIES || currentBucket.entries.has(key)) {
+    currentBucket.entries.set(key, currentCount + 1);
+  }
+
+  return { blocked: false, retryAfterSec: 0 };
 }
 
 function validateProfileStructure(obj: any): { valid: boolean; error?: string } {
@@ -338,8 +363,10 @@ async function checkRateLimit(
 }
 
 /**
- * Batched multi-key rate limiter to consolidate multiple rate limit checks into a single atomic D1 batch query.
- * Eliminates multiple roundtrips and locks for POST /api/profiles and other composite endpoints.
+ * Batched multi-key rate limiter to consolidate multiple rate limit checks into a single D1 batch query.
+ * Reduces roundtrips for POST /api/profiles and other composite endpoints.
+ * (Note : db.batch() n'est pas transactionnel ; acceptable ici car chaque upsert est
+ *  atomique individuellement et le limiteur échoue en mode ouvert — fail-open — sur erreur.)
  */
 async function checkMultiRateLimits(
   db: D1Database,
@@ -605,7 +632,8 @@ app.post('/api/profiles', verifySignature, async (c) => {
 
     // 4. Validate profile_json size before parsing (max 16 KB)
     const finalJsonString = typeof profile_json === 'string' ? profile_json : JSON.stringify(profile_json);
-    if (finalJsonString.length > MAX_PROFILE_JSON_BYTES) {
+    const profileJsonByteLength = new TextEncoder().encode(finalJsonString).byteLength;
+    if (profileJsonByteLength > MAX_PROFILE_JSON_BYTES) {
       return c.json({ success: false, error: 'La taille du profil dépasse la limite autorisée (16 Ko max)' }, 400);
     }
 
@@ -657,7 +685,7 @@ app.post('/api/profiles', verifySignature, async (c) => {
   }
 });
 
-// 4. Vote on a Profile (Atomic Batch Transaction & Anti-Sybil IP Rate Limiting)
+// 4. Vote on a Profile (Anti-Sybil Rate Limiting ; compteurs maintenus atomiquement par triggers SQLite)
 app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
   const profileId = c.req.param('id');
   const clientIp = getClientIp(c);
@@ -710,42 +738,27 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
 
     const now = Date.now();
     const hashedIp = await hashIp(clientIp, c.env.IP_SALT || c.env.APP_SECRET);
-    const batchStatements: any[] = [];
 
+    // Les compteurs likes_count/dislikes_count sont maintenus de façon ATOMIQUE par des
+    // triggers SQLite (voir schema.sql) déclenchés dans la même transaction que l'écriture
+    // de vote. db.batch() de D1 n'étant PAS transactionnel, on ne recale plus les compteurs
+    // via un second statement qui pourrait échouer séparément et laisser des compteurs faux.
     if (voteVal === 0) {
-      // Cancel vote
-      batchStatements.push(
-        c.env.DB.prepare(`
-          DELETE FROM votes WHERE profile_id = ? AND device_hash = ?
-        `).bind(profileId, deviceIdentity)
-      );
+      // Annulation de vote : trg_votes_delete décrémente les compteurs automatiquement
+      await c.env.DB.prepare(`
+        DELETE FROM votes WHERE profile_id = ? AND device_hash = ?
+      `).bind(profileId, deviceIdentity).run();
     } else {
-      // Upsert vote atomically
-      batchStatements.push(
-        c.env.DB.prepare(`
-          INSERT INTO votes (profile_id, device_hash, client_ip, vote_type, voted_at)
-          VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(profile_id, device_hash) DO UPDATE SET
-            vote_type = excluded.vote_type,
-            client_ip = excluded.client_ip,
-            voted_at = excluded.voted_at
-        `).bind(profileId, deviceIdentity, hashedIp, voteVal, now)
-      );
+      // Upsert atomique : trg_votes_insert / trg_votes_update maintiennent les compteurs
+      await c.env.DB.prepare(`
+        INSERT INTO votes (profile_id, device_hash, client_ip, vote_type, voted_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, device_hash) DO UPDATE SET
+          vote_type = excluded.vote_type,
+          client_ip = excluded.client_ip,
+          voted_at = excluded.voted_at
+      `).bind(profileId, deviceIdentity, hashedIp, voteVal, now).run();
     }
-
-    // Recalculate likes and dislikes count atomically (accelerated by idx_votes_profile_type)
-    batchStatements.push(
-      c.env.DB.prepare(`
-        UPDATE profiles 
-        SET likes_count = (SELECT COUNT(*) FROM votes WHERE profile_id = ?1 AND vote_type = 1),
-            dislikes_count = (SELECT COUNT(*) FROM votes WHERE profile_id = ?1 AND vote_type = -1),
-            updated_at = ?2
-        WHERE id = ?1
-      `).bind(profileId, now)
-    );
-
-    // 4. Execute atomic transaction
-    await c.env.DB.batch(batchStatements);
 
     // 5. Return updated stats
     const updated: any = await c.env.DB.prepare(`
@@ -764,12 +777,26 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
   }
 });
 
-// 5. Increment Download Counter (Atomic Batch, Profile Check & IP Rate Limiting)
+// 5. Increment Download Counter (Profile Check & IP Rate Limiting)
 app.post('/api/profiles/:id/download', verifySignature, async (c) => {
   const profileId = c.req.param('id');
   const clientIp = getClientIp(c);
 
   try {
+    let body: any;
+    try {
+      body = JSON.parse(c.get('rawBody'));
+    } catch {
+      return c.json({ success: false, error: 'Corps JSON invalide' }, 400);
+    }
+
+    // Identité d'appareil requise (cohérence avec vote/publish) : le simple HMAC
+    // partagé n'est pas une authentification fiable (clé extractible de l'APK).
+    const deviceIdentity = await normalizeDeviceToken(body?.deviceToken);
+    if (!deviceIdentity) {
+      return c.json({ success: false, error: 'Identité d\'appareil invalide ou manquante' }, 400);
+    }
+
     // 1. Rate limit downloads per IP: max 60 per hour
     const ipDlLimit = await checkRateLimit(c.env.DB, `ip:dl:${clientIp}`, 60, 3600_000, c.executionCtx);
     if (!ipDlLimit.allowed) {
@@ -788,7 +815,9 @@ app.post('/api/profiles/:id/download', verifySignature, async (c) => {
     const now = Date.now();
     const todayStr = new Date(now).toISOString().slice(0, 10);
 
-    // 3. Atomic update
+    // 3. Mise à jour (best-effort, non transactionnelle) : les deux statements sont
+    //    indépendants et une dérive éventuelle du compteur de téléchargements est sans
+    //    gravité (métrique communautaire non critique).
     await c.env.DB.batch([
       c.env.DB.prepare(`
         UPDATE profiles SET downloads_count = downloads_count + 1 WHERE id = ?
@@ -890,7 +919,8 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
     const version = typeof appVersion === 'string' ? appVersion.slice(0, 20) : '1.0.0';
     const todayStr = new Date(now).toISOString().slice(0, 10);
 
-    // Atomic batch updates
+    // Batch best-effort (non transactionnel) : chaque upsert est atomique individuellement,
+    // et une dérive éventuelle de la télémétrie est sans gravité.
     await c.env.DB.batch([
       c.env.DB.prepare(`
         INSERT INTO devices (device_hash, first_seen, last_seen, app_version, launch_count)
@@ -1033,6 +1063,8 @@ app.get('/api/stats', async (c) => {
     return c.json({ success: false, error: 'Une erreur interne est survenue sur le serveur.' }, 500);
   }
 });
+
+export { app };
 
 export default {
   fetch: app.fetch,

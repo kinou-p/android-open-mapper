@@ -81,8 +81,10 @@ class GamepadEngine(
 
     fun setProfile(profile: GameProfile) {
         currentProfile = profile
-        movementProcessor.config = profile.joystick
-        cameraProcessor.config = profile.camera
+        // Snapshots immuables et isolés du modèle : la boucle engine lit ces copies
+        // @Volatile, jamais mutées in-place, donc aucune data race avec l'UI/l'éditeur.
+        movementProcessor.config = profile.joystick.copy()
+        cameraProcessor.config = profile.camera.copy()
         buttonProcessor.updateButtons(profile.buttons)
         buttonProcessor.updateSettings(profile.settings)
     }
@@ -106,9 +108,10 @@ class GamepadEngine(
             var nextFrameTimeNanos = System.nanoTime()
             while (isActive && isRunning) {
                 try {
+                    val camCfg = cameraProcessor.config
                     val isFiring = rtPressed || buttonProcessor.isFireActive()
                     val isAds = ltPressed || buttonProcessor.isAdsActive()
-                    val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > cameraProcessor.config.deadzone)
+                    val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
                     movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
                     cameraProcessor.process(rx, ry, isAds)
 
@@ -137,17 +140,50 @@ class GamepadEngine(
     }
 
     fun stop() {
+        if (!isRunning && loopJob == null) return
         isRunning = false
         linuxReader.stop()
-        // Attend la fin de la frame en cours pour éviter qu'un touchDown soit injecté
-        // après resetAllPointers (doigt fantôme).
-        loopJob?.let { runBlocking { it.cancelAndJoin() } }
         pressedRawButtons.clear()
         movementProcessor.release()
         cameraProcessor.release()
         buttonProcessor.releaseAll()
-        injector.resetAllPointers()
         hapticManager?.release()
+
+        val job = loopJob
+        loopJob = null
+        if (job == null) {
+            injector.resetAllPointers()
+            return
+        }
+
+        // Annule la boucle puis, UNE FOIS la frame courante terminée, réinitialise les
+        // pointeurs pour éviter qu'un touchDown soit injecté après resetAllPointers
+        // (doigt fantôme). Non bloquant : plus de runBlocking sur le thread principal.
+        if (!scope.isActive) {
+            job.cancel()
+            injector.resetAllPointers()
+            return
+        }
+        scope.launch {
+            try {
+                job.cancelAndJoin()
+            } catch (_: CancellationException) {
+                // déjà annulée, normal
+            } finally {
+                injector.resetAllPointers()
+            }
+        }
+    }
+
+    /**
+     * Appelé par OverlayService quand Shizuku redevient RUNNING_AUTHORIZED alors que le
+     * moteur est actif : rebranche l'injecteur ET relance le lecteur /dev/input (ses
+     * sous-processus `cat` meurent avec le binder Shizuku).
+     */
+    fun onShizukuReconnected() {
+        if (!isRunning) return
+        injector.connect()
+        linuxReader.restart()
     }
 
     fun handleKeyEvent(event: KeyEvent): Boolean {

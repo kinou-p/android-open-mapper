@@ -6,11 +6,16 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
-import com.google.gson.JsonParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.io.BufferedReader
 import java.io.File
 import java.io.FileNotFoundException
@@ -29,7 +34,8 @@ data class AppReleaseInfo(
     val releaseHtmlUrl: String,
     val isNewer: Boolean,
     val apkFileName: String = "OpenMapper.apk",
-    val apkFileSize: Long = 0L
+    val apkFileSize: Long = 0L,
+    val expectedSha256: String? = null
 )
 
 /**
@@ -61,28 +67,28 @@ object AppUpdateManager {
             val reader = BufferedReader(InputStreamReader(connection.inputStream))
             val responseText = reader.use { it.readText() }
 
-            val json = JsonParser.parseString(responseText).asJsonObject
-            val tagName = json.get("tag_name")?.asString ?: return@withContext null
+            val json = Json.parseToJsonElement(responseText).jsonObject
+            val tagName = json["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@withContext null
             val remoteVersion = tagName.removePrefix("v").trim()
-            val title = json.get("name")?.asString ?: "Update $tagName"
-            val changelog = json.get("body")?.asString ?: ""
-            val htmlUrl = json.get("html_url")?.asString ?: "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases"
+            val title = json["name"]?.jsonPrimitive?.contentOrNull ?: "Update $tagName"
+            val changelog = json["body"]?.jsonPrimitive?.contentOrNull ?: ""
+            val htmlUrl = json["html_url"]?.jsonPrimitive?.contentOrNull ?: "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases"
 
             // Search for attached .apk asset (prefer version-specific over generic)
             var apkDownloadUrl = ""
             var apkFileName = "OpenMapper-$remoteVersion.apk"
             var apkFileSize = 0L
-            val assets = json.getAsJsonArray("assets")
+            val assets = json["assets"]?.jsonArray
             if (assets != null) {
                 var fallbackUrl = ""
                 var fallbackName = ""
                 var fallbackSize = 0L
                 for (assetElem in assets) {
-                    val asset = assetElem.asJsonObject
-                    val name = asset.get("name")?.asString ?: ""
+                    val asset = assetElem.jsonObject
+                    val name = asset["name"]?.jsonPrimitive?.contentOrNull ?: ""
                     if (name.endsWith(".apk", ignoreCase = true)) {
-                        val downloadUrl = asset.get("browser_download_url")?.asString ?: ""
-                        val size = asset.get("size")?.asLong ?: 0L
+                        val downloadUrl = asset["browser_download_url"]?.jsonPrimitive?.contentOrNull ?: ""
+                        val size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0L
                         if (name.contains(remoteVersion, ignoreCase = true)) {
                             apkDownloadUrl = downloadUrl
                             apkFileName = name
@@ -107,6 +113,7 @@ object AppUpdateManager {
             }
 
             val isNewer = isVersionNewer(remoteVersion, currentVersion.removePrefix("v").trim())
+            val expectedSha256 = extractSha256FromBody(changelog)
 
             return@withContext AppReleaseInfo(
                 tagName = tagName,
@@ -117,7 +124,8 @@ object AppUpdateManager {
                 releaseHtmlUrl = htmlUrl,
                 isNewer = isNewer,
                 apkFileName = apkFileName,
-                apkFileSize = apkFileSize
+                apkFileSize = apkFileSize,
+                expectedSha256 = expectedSha256
             )
         } catch (e: Exception) {
             e.printStackTrace()
@@ -134,6 +142,7 @@ object AppUpdateManager {
         context: Context,
         downloadUrl: String,
         targetFileName: String = "OpenMapper-Update.apk",
+        expectedSha256: String? = null,
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
@@ -151,11 +160,17 @@ object AppUpdateManager {
             var redirectCount = 0
             val maxRedirects = 5
 
+            val trustedHostSuffixes = listOf("github.com", "githubusercontent.com", "amazonaws.com")
+
             // Follow HTTP / HTTPS redirects (GitHub release asset downloads redirect to S3 AWS)
             while (redirectCount < maxRedirects) {
                 val url = URL(currentUrl)
+                if (!url.protocol.equals("https", ignoreCase = true)) {
+                    return@withContext Result.failure(SecurityException("URL non sécurisée rejetée : $currentUrl"))
+                }
+
                 connection = (url.openConnection() as HttpURLConnection).apply {
-                    instanceFollowRedirects = true
+                    instanceFollowRedirects = false
                     setRequestProperty("User-Agent", "OpenMapper-Android-App")
                     setRequestProperty("Accept", "application/octet-stream, */*")
                     connectTimeout = 15000
@@ -168,12 +183,23 @@ object AppUpdateManager {
                     status == HttpURLConnection.HTTP_SEE_OTHER ||
                     status == 307 || status == 308) {
                     val newUrl = connection.getHeaderField("Location")
-                    if (newUrl != null) {
-                        currentUrl = URL(URL(currentUrl), newUrl).toString()
-                        redirectCount++
-                        connection.disconnect()
-                        continue
+                        ?: return@withContext Result.failure(SecurityException("Redirection sans en-tête Location"))
+                    val targetUrl = URL(URL(currentUrl), newUrl)
+
+                    if (!targetUrl.protocol.equals("https", ignoreCase = true)) {
+                        return@withContext Result.failure(SecurityException("Redirection non sécurisée bloquée : $targetUrl"))
                     }
+
+                    val host = (targetUrl.host ?: "").lowercase()
+                    val isTrusted = trustedHostSuffixes.any { host == it || host.endsWith(".$it") }
+                    if (!isTrusted) {
+                        return@withContext Result.failure(SecurityException("Hôte de redirection non autorisé : ${targetUrl.host}"))
+                    }
+
+                    currentUrl = targetUrl.toString()
+                    redirectCount++
+                    connection.disconnect()
+                    continue
                 }
                 break
             }
@@ -208,6 +234,17 @@ object AppUpdateManager {
             }
 
             outputStream.flush()
+            outputStream.close()
+
+            // Vérification d'intégrité du fichier téléchargé (si un checksum est fourni par la release)
+            if (expectedSha256 != null) {
+                val actual = calculateFileSha256(outputFile)
+                if (actual.isBlank() || !actual.equals(expectedSha256, ignoreCase = true)) {
+                    outputFile.delete()
+                    return@withContext Result.failure(Exception("Échec de vérification d'intégrité de l'APK téléchargé"))
+                }
+            }
+
             Result.success(outputFile!!)
         } catch (e: CancellationException) {
             outputFile?.delete()
@@ -232,7 +269,11 @@ object AppUpdateManager {
         if (targetFile.exists() && targetFile.length() > 0) {
             // Verify file size if available from release info
             if (release.apkFileSize <= 0L || targetFile.length() == release.apkFileSize) {
-                return targetFile
+                // Verify checksum if published, to avoid installing a tampered/truncated cache
+                val expected = release.expectedSha256
+                if (expected == null) return targetFile
+                val actual = calculateFileSha256(targetFile)
+                if (actual.equals(expected, ignoreCase = true)) return targetFile
             }
         }
         return null
@@ -324,6 +365,16 @@ object AppUpdateManager {
             e.printStackTrace()
             Result.failure(e)
         }
+    }
+
+    /**
+     * Extrait un checksum SHA-256 du corps de la release GitHub (ex. ligne "SHA-256: abc123...").
+     * Retourne null si aucun checksum n'est publié.
+     */
+    private fun extractSha256FromBody(body: String): String? {
+        if (body.isBlank()) return null
+        val regex = Regex("""(?i)(?:sha-?256|checksum)\s*[:=]\s*([a-f0-9]{64})""")
+        return regex.find(body)?.groupValues?.get(1)?.lowercase()
     }
 
     /**

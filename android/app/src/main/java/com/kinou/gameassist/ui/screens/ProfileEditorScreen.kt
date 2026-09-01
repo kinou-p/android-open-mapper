@@ -35,6 +35,7 @@ import com.kinou.gameassist.data.model.ButtonMode
 import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.ResponseCurve
+import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.engine.HapticManager
 import com.kinou.gameassist.ui.theme.*
 import java.util.UUID
@@ -112,8 +113,7 @@ fun ProfileEditorScreen(
                     onDuplicate = { onDuplicateProfile(prof) },
                     onOpenVisualEditor = { onOpenVisualEditor(prof) },
                     onExport = {
-                        val gson = com.google.gson.GsonBuilder().setPrettyPrinting().create()
-                        val json = gson.toJson(prof)
+                        val json = ProfileRepository.getInstance(context).exportProfileToJson(prof)
 
                         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("OpenMapper Profile", json))

@@ -1,11 +1,17 @@
 package com.kinou.gameassist.data.model
 
 import android.content.Context
+import android.hardware.input.InputManager
 import android.hardware.usb.UsbManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 data class GamepadDevice(
     val id: Int,
@@ -15,6 +21,36 @@ data class GamepadDevice(
 )
 
 object GamepadDetector {
+
+    /**
+     * Observe les connexions / déconnexions de manettes de manière purement événementielle
+     * via InputManager.InputDeviceListener, sans polling CPU.
+     */
+    fun observeConnectedGamepads(context: Context): Flow<List<GamepadDevice>> = callbackFlow {
+        val appContext = context.applicationContext
+        val inputManager = appContext.getSystemService(Context.INPUT_SERVICE) as? InputManager
+        val listener = object : InputManager.InputDeviceListener {
+            override fun onInputDeviceAdded(deviceId: Int) {
+                trySend(getConnectedGamepads(appContext))
+            }
+
+            override fun onInputDeviceRemoved(deviceId: Int) {
+                trySend(getConnectedGamepads(appContext))
+            }
+
+            override fun onInputDeviceChanged(deviceId: Int) {
+                trySend(getConnectedGamepads(appContext))
+            }
+        }
+
+        inputManager?.registerInputDeviceListener(listener, Handler(Looper.getMainLooper()))
+        // Émettre l'état initial immédiatement
+        trySend(getConnectedGamepads(appContext))
+
+        awaitClose {
+            inputManager?.unregisterInputDeviceListener(listener)
+        }
+    }
 
     private val IGNORED_DEVICE_KEYWORDS = listOf(
         "uinput",

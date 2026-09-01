@@ -35,6 +35,44 @@ CREATE TABLE IF NOT EXISTS votes (
 CREATE INDEX IF NOT EXISTS idx_votes_ip ON votes(client_ip, voted_at);
 CREATE INDEX IF NOT EXISTS idx_votes_profile_type ON votes(profile_id, vote_type);
 
+-- Maintien ATOMIQUE des compteurs likes_count/dislikes_count de profiles.
+-- D1 ne proposant pas de transaction multi-statements, ces triggers s'exécutent dans
+-- la même transaction SQLite que l'écriture de vote, garantissant des compteurs
+-- toujours cohérents (sans second statement qui pourrait échouer séparément).
+CREATE TRIGGER IF NOT EXISTS trg_votes_insert
+AFTER INSERT ON votes
+BEGIN
+  UPDATE profiles SET
+    likes_count = likes_count + CASE WHEN NEW.vote_type = 1 THEN 1 ELSE 0 END,
+    dislikes_count = dislikes_count + CASE WHEN NEW.vote_type = -1 THEN 1 ELSE 0 END,
+    updated_at = NEW.voted_at
+  WHERE id = NEW.profile_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_votes_update
+AFTER UPDATE OF vote_type ON votes
+BEGIN
+  UPDATE profiles SET
+    likes_count = likes_count
+      + CASE WHEN NEW.vote_type = 1 THEN 1 ELSE 0 END
+      - CASE WHEN OLD.vote_type = 1 THEN 1 ELSE 0 END,
+    dislikes_count = dislikes_count
+      + CASE WHEN NEW.vote_type = -1 THEN 1 ELSE 0 END
+      - CASE WHEN OLD.vote_type = -1 THEN 1 ELSE 0 END,
+    updated_at = NEW.voted_at
+  WHERE id = NEW.profile_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_votes_delete
+AFTER DELETE ON votes
+BEGIN
+  UPDATE profiles SET
+    likes_count = likes_count - CASE WHEN OLD.vote_type = 1 THEN 1 ELSE 0 END,
+    dislikes_count = dislikes_count - CASE WHEN OLD.vote_type = -1 THEN 1 ELSE 0 END,
+    updated_at = OLD.voted_at
+  WHERE id = OLD.profile_id;
+END;
+
 CREATE TABLE IF NOT EXISTS rate_limits (
     key TEXT PRIMARY KEY,
     last_seen INTEGER NOT NULL,

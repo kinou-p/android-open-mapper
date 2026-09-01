@@ -1,56 +1,59 @@
 package com.kinou.gameassist.data.model
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class GameSettings(
-    @SerializedName("polling_rate_hz")
+    @SerialName("polling_rate_hz")
     var pollingRateHz: Int = 120,
 
-    @SerializedName("haptic_feedback")
+    @SerialName("haptic_feedback")
     var hapticFeedback: Boolean = true,
 
-    @SerializedName("haptic_device")
+    @SerialName("haptic_device")
     var hapticDevice: Boolean = true,
 
-    @SerializedName("haptic_controller")
+    @SerialName("haptic_controller")
     var hapticController: Boolean = true,
 
-    @SerializedName("haptic_fire")
+    @SerialName("haptic_fire")
     var hapticFire: Boolean = true,
 
-    @SerializedName("haptic_reload")
+    @SerialName("haptic_reload")
     var hapticReload: Boolean = true,
 
-    @SerializedName("haptic_intensity")
+    @SerialName("haptic_intensity")
     var hapticIntensity: Float = 0.8f
 )
 
+@Serializable
 data class GameProfile(
-    @SerializedName("id")
+    @SerialName("id")
     var id: String,
 
-    @SerializedName("name")
+    @SerialName("name")
     var name: String,
 
-    @SerializedName("package_name")
+    @SerialName("package_name")
     var packageName: String = "com.activision.callofduty.shooter",
 
-    @SerializedName("description")
+    @SerialName("description")
     var description: String = "Profil optimisé pour Call of Duty: Mobile",
 
-    @SerializedName("joystick")
+    @SerialName("joystick")
     var joystick: JoystickConfig = JoystickConfig(),
 
-    @SerializedName("camera")
+    @SerialName("camera")
     var camera: CameraConfig = CameraConfig(),
 
-    @SerializedName("buttons")
+    @SerialName("buttons")
     var buttons: MutableList<ButtonConfig> = mutableListOf(),
 
-    @SerializedName("settings")
+    @SerialName("settings")
     var settings: GameSettings = GameSettings(),
 
-    @SerializedName("custom_screenshot_path")
+    @SerialName("custom_screenshot_path")
     var customScreenshotPath: String? = null
 )
 

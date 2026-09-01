@@ -28,6 +28,9 @@ import com.kinou.gameassist.ui.overlay.EdgeHandleOverlayView
 import com.kinou.gameassist.ui.overlay.HudEditorOverlayView
 
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,6 +73,7 @@ class OverlayService : LifecycleService() {
 
     private var editorView: HudEditorOverlayView? = null
     private var inputInterceptorView: View? = null
+    private var screenshotLoadJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -95,7 +99,9 @@ class OverlayService : LifecycleService() {
         lifecycleScope.launch {
             ShizukuManager.status.collect { status ->
                 if (status == ShizukuStatus.RUNNING_AUTHORIZED) {
-                    injector.connect()
+                    // Rebranche l'injecteur ET relance le lecteur /dev/input si le moteur
+                    // tourne (ses sous-processus `cat` meurent avec le binder Shizuku).
+                    engine.onShizukuReconnected()
                     // Détacher l'intercepteur si Shizuku vient d'être autorisé après le démarrage
                     // (cas : service lancé avant autorisation, puis l'utilisateur accepte dans Shizuku).
                     // Sans ce détachement, la vue 1×1 reste attachée indéfiniment.
@@ -363,12 +369,19 @@ class OverlayService : LifecycleService() {
         )
 
         // Load screenshot asynchronously without blocking main UI thread
+        screenshotLoadJob?.cancel()
         if (editorProfile.customScreenshotPath != null) {
-            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            screenshotLoadJob = lifecycleScope.launch(Dispatchers.IO) {
                 val bmp = com.kinou.gameassist.data.repository.ScreenshotManager.loadScreenshotBitmapAsync(editorProfile.customScreenshotPath)
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                if (!isActive) {
+                    bmp?.recycle()
+                    return@launch
+                }
+                withContext(Dispatchers.Main) {
                     if (editorView == newEditor) {
                         newEditor.setScreenshot(bmp)
+                    } else {
+                        bmp?.recycle()
                     }
                 }
             }
@@ -398,6 +411,8 @@ class OverlayService : LifecycleService() {
     }
 
     private fun closeHudEditor() {
+        screenshotLoadJob?.cancel()
+        screenshotLoadJob = null
         editorView?.let {
             it.releaseBitmap()
             safeRemoveView(it)
@@ -457,6 +472,9 @@ class OverlayService : LifecycleService() {
     override fun onDestroy() {
         _isServiceRunning.value = false
         engine.stop()
+
+        screenshotLoadJob?.cancel()
+        screenshotLoadJob = null
 
         editorView?.releaseBitmap()
         safeRemoveView(edgeHandleView)

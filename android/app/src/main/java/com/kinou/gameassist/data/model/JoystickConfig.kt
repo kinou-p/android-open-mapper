@@ -1,41 +1,43 @@
 package com.kinou.gameassist.data.model
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class JoystickConfig(
-    @SerializedName("enabled")
+    @SerialName("enabled")
     var enabled: Boolean = true,
 
-    @SerializedName("center_x")
+    @SerialName("center_x")
     var centerX: Float = 0.18f,
 
-    @SerializedName("center_y")
+    @SerialName("center_y")
     var centerY: Float = 0.72f,
 
-    @SerializedName("radius")
+    @SerialName("radius")
     var radius: Float = 0.12f,
 
-    @SerializedName("deadzone")
+    @SerialName("deadzone")
     var deadzone: Float = 0.08f,
 
-    @SerializedName("outer_deadzone")
+    @SerialName("outer_deadzone")
     var outerDeadzone: Float = 0.95f,
 
-    @SerializedName("sprint_threshold")
+    @SerialName("sprint_threshold")
     var sprintThreshold: Float = 0.85f,
 
-    @SerializedName("raa_keep_alive")
+    @SerialName("raa_keep_alive")
     var raaKeepAlive: Boolean = true,
 
-    @SerializedName("jiggle_strafe")
+    @SerialName("jiggle_strafe")
     var jiggleStrafe: Boolean = false,
 
-    @SerializedName("jiggle_humanize")
+    @SerialName("jiggle_humanize")
     var jiggleHumanize: Boolean = true,
 
-    @SerializedName("jiggle_randomness")
+    @SerialName("jiggle_randomness")
     var jiggleRandomness: Float = 0.35f,
 
-    @SerializedName("jiggle_speed")
+    @SerialName("jiggle_speed")
     var jiggleSpeed: Float = 1.0f
 )

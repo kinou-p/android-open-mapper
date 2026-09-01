@@ -59,15 +59,23 @@ fun HomeScreen(
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     val currentLang by LanguageManager.currentLanguageFlow.collectAsState()
 
-    // Live Gamepad Detection State
-    var connectedGamepads by remember { mutableStateOf(GamepadDetector.getConnectedGamepads(context)) }
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
 
-    // Periodic check for gamepads & permissions
-    LaunchedEffect(Unit) {
-        while (true) {
-            connectedGamepads = GamepadDetector.getConnectedGamepads(context)
-            hasOverlayPermission = Settings.canDrawOverlays(context)
-            delay(1500)
+    // Live Gamepad Detection State (événementiel via InputDeviceListener)
+    val connectedGamepads by remember(context) {
+        GamepadDetector.observeConnectedGamepads(context)
+    }.collectAsState(initial = remember { GamepadDetector.getConnectedGamepads(context) })
+
+    // Observation du cycle de vie ON_RESUME pour rafraîchir les permissions système sans polling
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                hasOverlayPermission = Settings.canDrawOverlays(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -614,7 +622,8 @@ fun HomeScreen(
                                 val res = AppUpdateManager.downloadApk(
                                     context = context,
                                     downloadUrl = release.downloadUrl,
-                                    targetFileName = release.apkFileName
+                                    targetFileName = release.apkFileName,
+                                    expectedSha256 = release.expectedSha256
                                 ) { progress, dBytes, tBytes ->
                                     downloadProgress = progress
                                     downloadedBytes = dBytes

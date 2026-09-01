@@ -1,10 +1,21 @@
 package com.kinou.gameassist.data.repository
 
+import com.kinou.gameassist.data.model.ButtonConfig
+import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.data.model.GameProfile
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.junit.Assert.*
 import org.junit.Test
 
 class ProfileRepositoryTest {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        encodeDefaults = true
+        prettyPrint = true
+    }
 
     @Test
     fun testProfileScreenshotFieldSerialization() {
@@ -14,11 +25,10 @@ class ProfileRepositoryTest {
             customScreenshotPath = "/data/user/0/com.kinou.gameassist/files/screenshots/test.jpg"
         )
 
-        val gson = com.google.gson.Gson()
-        val json = gson.toJson(profile)
-        assertTrue(json.contains("custom_screenshot_path"))
+        val jsonString = json.encodeToString(profile)
+        assertTrue(jsonString.contains("custom_screenshot_path"))
 
-        val deserialized = gson.fromJson(json, GameProfile::class.java)
+        val deserialized = json.decodeFromString<GameProfile>(jsonString)
         assertEquals("/data/user/0/com.kinou.gameassist/files/screenshots/test.jpg", deserialized.customScreenshotPath)
         assertEquals("test_profile", deserialized.id)
         assertEquals("Test Profile", deserialized.name)
@@ -35,21 +45,20 @@ class ProfileRepositoryTest {
 
     @Test
     fun testButtonRoleSerialization() {
-        val button = com.kinou.gameassist.data.model.ButtonConfig(
+        val button = ButtonConfig(
             id = "btn_fire",
             label = "Fire Action",
             gamepadButton = "BUTTON_R2",
             x = 0.8f,
             y = 0.7f,
-            role = com.kinou.gameassist.data.model.ButtonRole.FIRE
+            role = ButtonRole.FIRE
         )
 
-        val gson = com.google.gson.Gson()
-        val json = gson.toJson(button)
-        assertTrue(json.contains("\"role\":\"fire\""))
+        val jsonString = json.encodeToString(button)
+        assertTrue(jsonString.contains("\"role\": \"fire\"") || jsonString.contains("\"role\":\"fire\""))
 
-        val deserialized = gson.fromJson(json, com.kinou.gameassist.data.model.ButtonConfig::class.java)
-        assertEquals(com.kinou.gameassist.data.model.ButtonRole.FIRE, deserialized.role)
+        val deserialized = json.decodeFromString<ButtonConfig>(jsonString)
+        assertEquals(ButtonRole.FIRE, deserialized.role)
     }
 
     @Test

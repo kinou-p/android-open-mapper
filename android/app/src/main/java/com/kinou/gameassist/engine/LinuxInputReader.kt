@@ -21,7 +21,9 @@ class LinuxInputReader(
 ) {
     private val activeProcesses = mutableListOf<Process>()
     private val activeStreams = mutableListOf<InputStream>()
+    private val childJobs = mutableListOf<Job>()
     private val processLock = Any()
+    @Volatile
     private var isRunning = false
     private var readerJob: Job? = null
 
@@ -60,21 +62,18 @@ class LinuxInputReader(
     }
 
     /**
-     * Tue les processus `cat /dev/input/event*` / `getevent -q` orphelins laissés par une
-     * session précédente (crash / kill sans stop()). Leur père étant shizuku_server,
-     * ils survivraient sinon indéfiniment tant que la manette est au repos.
+     * NOTE — suppression du nettoyage par `pkill -f 'cat /dev/input/event'` / `getevent -q`.
+     *
+     * L'ancien code exécutait `pkill -f` via le shell Shizuku (UID 2000), ce qui tuait
+     * N'IMPORTE QUEL processus système dont la ligne de commande contenait cette chaîne
+     * (autres apps lisant /dev/input, etc.) — un effet de bord critique.
+     *
+     * Les processus `cat`/`getevent` orphelins (session crashée sans stop()) se terminent
+     * d'eux-mêmes : leur pipe de sortie est fermé à la mort de l'app, donc ils reçoivent
+     * SIGPIPE à la prochaine écriture (prochain événement manette). S'ils restent bloqués
+     * en lecture (manette au repos), ils n'occupent qu'un fd sur le device, sans bloquer
+     * la réouverture par une nouvelle session. Aucun nettoyage agressif n'est donc requis.
      */
-    private fun cleanupStaleProcesses() {
-        try {
-            val proc = spawnShizukuProcess(
-                arrayOf("sh", "-c", "pkill -f 'cat /dev/input/event' 2>/dev/null; pkill -f 'getevent -q' 2>/dev/null")
-            ) ?: return
-            try {
-                proc.waitFor(1000, java.util.concurrent.TimeUnit.MILLISECONDS)
-            } catch (_: Exception) {}
-            closeProcessQuietly(proc)
-        } catch (_: Exception) {}
-    }
 
     fun start() {
         if (isRunning) return
@@ -82,14 +81,13 @@ class LinuxInputReader(
 
         readerJob = scope.launch(Dispatchers.IO) {
             try {
-                cleanupStaleProcesses()
                 val gamepadNodes = findGamepadEventNodes()
                 val is64Bit = isKernel64Bit()
 
                 if (gamepadNodes.isNotEmpty()) {
                     // Multi-node parallel streaming: captures buttons/sticks, touchpad, and motion gyro simultaneously
                     for (node in gamepadNodes) {
-                        launch(Dispatchers.IO) {
+                        val child = launch(Dispatchers.IO) {
                             val proc = spawnShizukuProcess(arrayOf("cat", node)) ?: return@launch
                             val inStream = proc.inputStream
                             synchronized(processLock) {
@@ -106,6 +104,7 @@ class LinuxInputReader(
                                 closeProcessQuietly(proc, inStream)
                             }
                         }
+                        synchronized(processLock) { childJobs.add(child) }
                     }
                 } else {
                     // Fallback to system getevent in quiet hex mode
@@ -135,6 +134,11 @@ class LinuxInputReader(
         isRunning = false
         readerJob?.cancel()
         synchronized(processLock) {
+            for (job in childJobs) {
+                job.cancel()
+            }
+            childJobs.clear()
+
             for (stream in activeStreams) {
                 try {
                     stream.close()
@@ -147,6 +151,16 @@ class LinuxInputReader(
             }
             activeProcesses.clear()
         }
+    }
+
+    /**
+     * Redémarre proprement la lecture après une reconnexion Shizuku (les sous-processus
+     * `cat` meurent avec le binder Shizuku). Appelé depuis OverlayService quand le statut
+     * redevient RUNNING_AUTHORIZED alors que le moteur est toujours actif.
+     */
+    fun restart() {
+        stop()
+        start()
     }
 
     private fun closeProcessQuietly(proc: Process?, inStream: InputStream? = null) {

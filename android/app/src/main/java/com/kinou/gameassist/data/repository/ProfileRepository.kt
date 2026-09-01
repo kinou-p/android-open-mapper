@@ -2,18 +2,23 @@ package com.kinou.gameassist.data.repository
 
 import android.content.Context
 import androidx.core.util.AtomicFile
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 import com.kinou.gameassist.data.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
 class ProfileRepository private constructor(context: Context) {
     private val context: Context = context.applicationContext
-    private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
+    private val json: Json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        encodeDefaults = true
+        prettyPrint = true
+    }
     private val profilesDir: File = File(this.context.filesDir, "profiles")
     private val fileLock = Any()
     private val profileCache = mutableMapOf<String, GameProfile>()
@@ -38,17 +43,6 @@ class ProfileRepository private constructor(context: Context) {
         fun validateAndSanitizeProfile(p: GameProfile): Boolean {
             if (p.name.isBlank()) p.name = "Custom Profile"
             if (p.packageName.isBlank()) p.packageName = "com.game.app"
-
-            // Défense contre un JSON local corrompu où un sous-objet serait null
-            // (Gson contourne la null-safety Kotlin par réflexion).
-            @Suppress("SENSELESS_COMPARISON")
-            if (p.joystick == null) p.joystick = JoystickConfig()
-            @Suppress("SENSELESS_COMPARISON")
-            if (p.camera == null) p.camera = CameraConfig()
-            @Suppress("SENSELESS_COMPARISON")
-            if (p.buttons == null) p.buttons = mutableListOf()
-            @Suppress("SENSELESS_COMPARISON")
-            if (p.settings == null) p.settings = GameSettings()
 
             // Sanitize Joystick
             val joy = p.joystick
@@ -119,14 +113,12 @@ class ProfileRepository private constructor(context: Context) {
             profileCache.clear()
             for (f in files) {
                 try {
-                    val json = f.readText()
-                    val p = gson.fromJson(json, GameProfile::class.java)
-                    if (p != null) {
-                        ensureRolesMigrated(p)
-                        validateAndSanitizeProfile(p)
-                        list.add(p)
-                        profileCache[p.id] = p
-                    }
+                    val jsonText = f.readText()
+                    val p = json.decodeFromString<GameProfile>(jsonText)
+                    ensureRolesMigrated(p)
+                    validateAndSanitizeProfile(p)
+                    list.add(p)
+                    profileCache[p.id] = p
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -153,13 +145,11 @@ class ProfileRepository private constructor(context: Context) {
             val file = File(profilesDir, "$id.json")
             if (!file.exists()) return null
             return try {
-                val p = gson.fromJson(file.readText(), GameProfile::class.java)
-                p?.let {
-                    ensureRolesMigrated(it)
-                    validateAndSanitizeProfile(it)
-                    profileCache[it.id] = it
-                    it.deepCopy()
-                }
+                val p = json.decodeFromString<GameProfile>(file.readText())
+                ensureRolesMigrated(p)
+                validateAndSanitizeProfile(p)
+                profileCache[p.id] = p
+                p.deepCopy()
             } catch (e: Exception) {
                 null
             }
@@ -192,7 +182,7 @@ class ProfileRepository private constructor(context: Context) {
         validateAndSanitizeProfile(profile)
         val file = File(profilesDir, "${profile.id}.json")
         val atomicFile = AtomicFile(file)
-        val jsonBytes = gson.toJson(profile).toByteArray(Charsets.UTF_8)
+        val jsonBytes = json.encodeToString(profile).toByteArray(Charsets.UTF_8)
         var fos: FileOutputStream? = null
         try {
             fos = atomicFile.startWrite()
@@ -221,31 +211,46 @@ class ProfileRepository private constructor(context: Context) {
     }
 
     fun exportProfileToJson(profile: GameProfile): String {
-        return gson.toJson(profile)
+        return json.encodeToString(profile)
     }
 
-    fun importProfileFromJson(json: String): GameProfile? {
+    fun importProfileFromJson(jsonText: String): GameProfile? {
         return try {
-            val imported = gson.fromJson(json, GameProfile::class.java)
-            if (imported != null) {
-                ensureRolesMigrated(imported)
-                if (!validateAndSanitizeProfile(imported)) {
-                    return null
-                }
-                // Ensure unique ID if imported
-                if (getProfile(imported.id) != null) {
-                    imported.id = "profile_${UUID.randomUUID().toString().take(8)}"
-                    imported.name = "${imported.name} (Importé)"
-                }
-                saveProfile(imported)
-                imported
-            } else null
+            val imported = json.decodeFromString<GameProfile>(jsonText)
+            ensureRolesMigrated(imported)
+            imported.customScreenshotPath = sanitizeImportedScreenshotPath(imported.customScreenshotPath)
+            if (!validateAndSanitizeProfile(imported)) {
+                return null
+            }
+            // Ensure unique ID if imported
+            if (getProfile(imported.id) != null) {
+                imported.id = "profile_${UUID.randomUUID().toString().take(8)}"
+                imported.name = "${imported.name} (Importé)"
+            }
+            saveProfile(imported)
+            imported
         } catch (e: Exception) {
             e.printStackTrace()
             null
         }
     }
 
+
+    /**
+     * Neutralise tout chemin de capture d'écran non fiable (profil importé depuis le Hub
+     * communautaire ou un JSON externe). Un chemin arbitraire permettrait la lecture
+     * (loadScreenshotBitmap) et la suppression (deleteScreenshot) de fichiers locaux.
+     */
+    private fun sanitizeImportedScreenshotPath(path: String?): String? {
+        if (path.isNullOrBlank()) return null
+        return try {
+            val allowed = File(context.filesDir, "screenshots").canonicalPath + File.separator
+            val candidate = File(path).canonicalPath
+            if (candidate.startsWith(allowed)) path else null
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     private fun ensureRolesMigrated(p: GameProfile) {
         for (btn in p.buttons) {

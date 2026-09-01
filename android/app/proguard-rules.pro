@@ -4,14 +4,18 @@
 -keep class android.hardware.input.IInputManager** { *; }
 -keep class com.kinou.gameassist.injector.IInputManagerHelper** { *; }
 
-# Data Models & Serialization (Gson)
+# Data Models & Serialization (Kotlinx Serialization)
 -keep class com.kinou.gameassist.data.model.** { *; }
 -keep class com.kinou.gameassist.data.community.** { *; }
 -keep class com.kinou.gameassist.data.updater.** { *; }
 -keepclassmembers class * {
-    @com.google.gson.annotations.SerializedName <fields>;
+    @kotlinx.serialization.SerialName <fields>;
 }
 
 # Coroutines & ViewModel
 -keepclassmembers class * extends kotlinx.coroutines.CoroutineScope { *; }
+
+# Security Crypto (Tink) optional annotations
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn javax.annotation.**
 

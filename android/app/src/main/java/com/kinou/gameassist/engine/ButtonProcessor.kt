@@ -73,9 +73,9 @@ class ButtonProcessor(
         var moved: Boolean = false
     )
 
-    private var buttons: List<ButtonConfig> = emptyList()
-    private var buttonsByGamepadKey: Map<String, List<ButtonConfig>> = emptyMap()
-    private var settings: GameSettings = GameSettings()
+    @Volatile private var buttons: List<ButtonConfig> = emptyList()
+    @Volatile private var buttonsByGamepadKey: Map<String, List<ButtonConfig>> = emptyMap()
+    @Volatile private var settings: GameSettings = GameSettings()
     private val activePointers = ConcurrentHashMap<String, Int>()
     private val freePointers = (POINTER_BUTTON_START until MAX_POINTERS).toMutableSet()
     private val pendingTaps = ConcurrentLinkedQueue<PendingTap>()
@@ -92,11 +92,16 @@ class ButtonProcessor(
 
     fun updateButtons(list: List<ButtonConfig>) {
         synchronized(lock) {
-            buttons = list
-            buttonsByGamepadKey = list.groupBy { it.gamepadButton.trim().uppercase() }
-            fireButtonIds = list.filter { isFireButtonStatic(it) }.map { it.id }.toSet()
-            adsButtonIds = list.filter { isAdsButtonStatic(it) }.map { it.id }.toSet()
-            reloadButtonIds = list.filter { isReloadButtonStatic(it) }.map { it.id }.toSet()
+            // Copie défensive : on fige un snapshot immuable pour que les threads du lecteur
+            // /dev/input (lecture sans lock) et l'éditeur HUD (mutation en place de la liste
+            // passée par le profil) ne puissent pas s'interférer. Les champs sont @Volatile
+            // pour garantir la publication sûre de la nouvelle référence.
+            val snapshot = list.map { it.copy() }
+            buttons = snapshot
+            buttonsByGamepadKey = snapshot.groupBy { it.gamepadButton.trim().uppercase() }
+            fireButtonIds = snapshot.filter { isFireButtonStatic(it) }.map { it.id }.toSet()
+            adsButtonIds = snapshot.filter { isAdsButtonStatic(it) }.map { it.id }.toSet()
+            reloadButtonIds = snapshot.filter { isReloadButtonStatic(it) }.map { it.id }.toSet()
 
             // Recompute active counts in case buttons changed
             var fireCount = 0
@@ -112,7 +117,7 @@ class ButtonProcessor(
 
     fun updateSettings(newSettings: GameSettings) {
         synchronized(lock) {
-            settings = newSettings
+            settings = newSettings.copy()
         }
     }
 

@@ -51,9 +51,14 @@ class PointerPool {
         if (state.active) {
             state.x = x
             state.y = y
-            // Organic micro-fluctuation during movement (+/- 0.02)
-            val jitter = (random.nextFloat() * 2f - 1f) * 0.02f
-            state.currentPressure = (state.basePressure + jitter).coerceIn(0.45f, 0.70f)
+            if (requestedPressure != null) {
+                state.currentPressure = requestedPressure
+                if (requestedPressure > 0f) state.basePressure = requestedPressure
+            } else {
+                // Organic micro-fluctuation during movement (+/- 0.02)
+                val jitter = (random.nextFloat() * 2f - 1f) * 0.02f
+                state.currentPressure = (state.basePressure + jitter).coerceIn(0.45f, 0.70f)
+            }
 
             // Subtle ellipse radius micro-fluctuations (+/- 1.5px)
             val ellipseJitter = (random.nextFloat() * 2f - 1f) * 1.5f
@@ -67,8 +72,8 @@ class PointerPool {
             state.y = y
 
             // New touch down: Generate organic human touch characteristics
-            // Pressure randomized between 0.45 and 0.70
-            val p = requestedPressure?.takeIf { it in 0.45f..0.70f }
+            // Pressure randomized between 0.45 and 0.70 unless explicitly requested
+            val p = requestedPressure?.coerceIn(0f, 1f)
                 ?: (0.45f + random.nextFloat() * (0.70f - 0.45f))
 
             // Touch contact ellipse: typical human finger contact patch (38px - 48px major, 32px - 40px minor)

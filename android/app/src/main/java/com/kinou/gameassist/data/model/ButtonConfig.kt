@@ -1,47 +1,51 @@
 package com.kinou.gameassist.data.model
 
-import com.google.gson.annotations.SerializedName
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class ButtonMode {
-    @SerializedName("hold")
+    @SerialName("hold")
     HOLD,
-    @SerializedName("tap")
+    @SerialName("tap")
     TAP
 }
 
+@Serializable
 enum class ButtonRole {
-    @SerializedName("normal")
+    @SerialName("normal")
     NORMAL,
-    @SerializedName("fire")
+    @SerialName("fire")
     FIRE,
-    @SerializedName("reload")
+    @SerialName("reload")
     RELOAD,
-    @SerializedName("ads")
+    @SerialName("ads")
     ADS
 }
 
+@Serializable
 data class ButtonConfig(
-    @SerializedName("id")
+    @SerialName("id")
     val id: String,
 
-    @SerializedName("label")
+    @SerialName("label")
     var label: String,
 
-    @SerializedName("gamepad_button")
+    @SerialName("gamepad_button")
     var gamepadButton: String, // e.g. "BUTTON_A", "BUTTON_X", "BUTTON_R1", "TRIGGER_R2"
 
-    @SerializedName("x")
+    @SerialName("x")
     var x: Float, // Normalized 0.0 .. 1.0
 
-    @SerializedName("y")
+    @SerialName("y")
     var y: Float, // Normalized 0.0 .. 1.0
 
-    @SerializedName("radius")
+    @SerialName("radius")
     var radius: Float = 0.04f, // Normalized relative to screen height
 
-    @SerializedName("mode")
+    @SerialName("mode")
     var mode: ButtonMode = ButtonMode.HOLD,
 
-    @SerializedName("role")
+    @SerialName("role")
     var role: ButtonRole = ButtonRole.NORMAL
 )

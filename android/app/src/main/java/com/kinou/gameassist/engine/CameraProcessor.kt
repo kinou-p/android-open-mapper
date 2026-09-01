@@ -9,7 +9,7 @@ import kotlin.math.sign
 
 class CameraProcessor(
     private val injector: ShizukuTouchInjector,
-    var config: CameraConfig = CameraConfig()
+    @Volatile var config: CameraConfig = CameraConfig()
 ) {
     companion object {
         const val POINTER_CAM_A = 1
@@ -26,7 +26,9 @@ class CameraProcessor(
     private var prevSmoothDy = 0.0f
 
     fun process(rx: Float, ry: Float, isAiming: Boolean = false) {
-        if (!config.enabled) {
+        // Snapshot local immuable de la config pour toute la frame.
+        val cfg = config
+        if (!cfg.enabled) {
             if (isActive) release()
             return
         }
@@ -34,35 +36,35 @@ class CameraProcessor(
         val screenW = injector.screenWidth
         val screenH = injector.screenHeight
 
-        val x1 = config.rectX1 * screenW
-        val y1 = config.rectY1 * screenH
-        val x2 = config.rectX2 * screenW
-        val y2 = config.rectY2 * screenH
+        val x1 = cfg.rectX1 * screenW
+        val y1 = cfg.rectY1 * screenH
+        val x2 = cfg.rectX2 * screenW
+        val y2 = cfg.rectY2 * screenH
 
         val origX = (x1 + x2) / 2.0f
         val origY = (y1 + y2) / 2.0f
 
         val mag = hypot(rx, ry)
-        val innerDeadzone = config.deadzone
-        val outerDeadzone = config.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
+        val innerDeadzone = cfg.deadzone
+        val outerDeadzone = cfg.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
 
         if (mag > innerDeadzone) {
             val normMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
             val rawDirX = rx / mag
             val rawDirY = ry / mag
-            val dirX = if (config.invertX) -rawDirX else rawDirX
-            val dirY = if (config.invertY) -rawDirY else rawDirY
+            val dirX = if (cfg.invertX) -rawDirX else rawDirX
+            val dirY = if (cfg.invertY) -rawDirY else rawDirY
 
             var curvedMagX: Float
             var curvedMagY: Float
 
-            when (config.responseCurve) {
+            when (cfg.responseCurve) {
                 com.kinou.gameassist.data.model.ResponseCurve.LINEAR -> {
                     curvedMagX = normMag
                     curvedMagY = normMag
                 }
                 com.kinou.gameassist.data.model.ResponseCurve.STANDARD -> {
-                    val curved = normMag.pow(config.acceleration)
+                    val curved = normMag.pow(cfg.acceleration)
                     curvedMagX = curved
                     curvedMagY = curved
                 }
@@ -72,7 +74,7 @@ class CameraProcessor(
                     curvedMagY = curved
                 }
                 com.kinou.gameassist.data.model.ResponseCurve.DYNAMIC_BOOST -> {
-                    val threshold = config.flickThreshold.coerceIn(0.65f, 0.95f)
+                    val threshold = cfg.flickThreshold.coerceIn(0.65f, 0.95f)
                     if (normMag <= threshold) {
                         val scale = normMag / threshold
                         val base = (0.25f * scale + 0.75f * scale.pow(2.2f)) * 0.85f
@@ -81,7 +83,7 @@ class CameraProcessor(
                     } else {
                         val turboT = (normMag - threshold) / (1.0f - threshold)
                         // ADS Safety: If aiming in ADS (LT held) and safety is enabled, dampen turbo boost
-                        val effectiveBoost = if (config.flickAdsSafety && isAiming) 1.20f else config.flickBoost.coerceIn(1.2f, 5.0f)
+                        val effectiveBoost = if (cfg.flickAdsSafety && isAiming) 1.20f else cfg.flickBoost.coerceIn(1.2f, 5.0f)
                         
                         // Horizontal (X) gets full turbo boost for 180° turns
                         curvedMagX = 0.85f + (turboT * (effectiveBoost - 0.85f))
@@ -94,12 +96,12 @@ class CameraProcessor(
             
             // Fine-grained dynamic resolution scaling: ~17.6px per frame at max tilt for 3200px screen
             val baseStep = screenW * 0.0055f
-            val adsFactor = if (config.adsSensitivityEnabled && isAiming) config.adsSensitivityMultiplier.coerceIn(0.05f, 3.0f) else 1.0f
-            val targetDx = dirX * curvedMagX * config.sensitivityX * adsFactor * baseStep
-            val targetDy = dirY * curvedMagY * config.sensitivityY * adsFactor * baseStep
+            val adsFactor = if (cfg.adsSensitivityEnabled && isAiming) cfg.adsSensitivityMultiplier.coerceIn(0.05f, 3.0f) else 1.0f
+            val targetDx = dirX * curvedMagX * cfg.sensitivityX * adsFactor * baseStep
+            val targetDy = dirY * curvedMagY * cfg.sensitivityY * adsFactor * baseStep
 
             // Exponential moving average (EMA) smoothing
-            val alpha = (1.0f - config.smoothing.coerceIn(0f, 0.8f))
+            val alpha = (1.0f - cfg.smoothing.coerceIn(0f, 0.8f))
             val smoothDx = alpha * targetDx + (1.0f - alpha) * prevSmoothDx
             val smoothDy = alpha * targetDy + (1.0f - alpha) * prevSmoothDy
             prevSmoothDx = smoothDx

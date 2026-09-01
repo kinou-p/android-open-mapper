@@ -1,11 +1,16 @@
 package com.kinou.gameassist.data.community
 
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.annotations.SerializedName
 import com.kinou.gameassist.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -17,9 +22,10 @@ import javax.crypto.spec.SecretKeySpec
 
 data class CacheEntry<T>(val data: T, val timestamp: Long)
 
+@Serializable
 data class RegisterResponse(
-    @SerializedName("success") val success: Boolean,
-    @SerializedName("deviceToken") val deviceToken: String?
+    val success: Boolean,
+    val deviceToken: String? = null
 )
 
 class CommunityApiClient(private val context: Context) {
@@ -43,7 +49,11 @@ class CommunityApiClient(private val context: Context) {
         }
     }
 
-    private val gson = Gson()
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        encodeDefaults = true
+    }
     @Volatile private var cachedDeviceToken: String? = null
 
     // Token opaque émis par le serveur via /api/device/register, persisté chiffré côté client.
@@ -73,7 +83,7 @@ class CommunityApiClient(private val context: Context) {
                 setRequestProperty("User-Agent", "OpenMapper-Android/${BuildConfig.VERSION_NAME}")
             }
             val payload = mapOf("appVersion" to BuildConfig.VERSION_NAME)
-            val jsonBody = gson.toJson(payload)
+            val jsonBody = json.encodeToString(payload)
             val bodyBytes = jsonBody.toByteArray(Charsets.UTF_8)
 
             applySignature(conn, "POST", url.path, bodyBytes)
@@ -81,8 +91,8 @@ class CommunityApiClient(private val context: Context) {
 
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
-                val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                val response = gson.fromJson(json, RegisterResponse::class.java)
+                val responseJson = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                val response = json.decodeFromString<RegisterResponse>(responseJson)
                 response.deviceToken ?: throw Exception("Token absent de la réponse serveur")
             } else {
                 val rawErr = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
@@ -164,16 +174,16 @@ class CommunityApiClient(private val context: Context) {
 
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
-                val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                val response = gson.fromJson(json, CommunityListResponse::class.java)
-                if (response != null && response.success) {
+                val responseJson = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                val response = json.decodeFromString<CommunityListResponse>(responseJson)
+                if (response.success) {
                     // Filtre défensif : écarte les profils dont l'id est null/absent
                     // (un objet malformé en base ferait planter items(key = { it.id })).
                     val filtered = response.copy(profiles = response.profiles.filter { !it.id.isNullOrBlank() })
                     profilesCache[cacheKey] = CacheEntry(filtered, now)
                     Result.success(filtered)
                 } else {
-                    Result.failure(Exception(response?.error ?: "Réponse invalide du serveur"))
+                    Result.failure(Exception(response.error ?: "Réponse invalide du serveur"))
                 }
             } else {
                 val rawErr = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
@@ -214,8 +224,8 @@ class CommunityApiClient(private val context: Context) {
 
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
-                val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                val response = gson.fromJson(json, CommunityDetailResponse::class.java)
+                val responseJson = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                val response = json.decodeFromString<CommunityDetailResponse>(responseJson)
                 if (response.success && response.profile != null) {
                     profileDetailCache[profileId] = CacheEntry(response.profile, now)
                     Result.success(response.profile)
@@ -250,9 +260,9 @@ class CommunityApiClient(private val context: Context) {
 
             val payload = mapOf(
                 "deviceToken" to ensureDeviceToken(),
-                "vote" to voteValue
+                "vote" to voteValue.toString()
             )
-            val jsonBody = gson.toJson(payload)
+            val jsonBody = json.encodeToString(payload)
             val bodyBytes = jsonBody.toByteArray(Charsets.UTF_8)
 
             applySignature(conn, "POST", url.path, bodyBytes)
@@ -261,12 +271,12 @@ class CommunityApiClient(private val context: Context) {
 
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
-                val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                val response = gson.fromJson(json, VoteResponse::class.java)
-                if (response != null && response.success) {
+                val responseJson = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                val response = json.decodeFromString<VoteResponse>(responseJson)
+                if (response.success) {
                     Result.success(response)
                 } else {
-                    Result.failure(Exception(response?.error ?: "Vote refusé"))
+                    Result.failure(Exception(response.error ?: "Vote refusé"))
                 }
             } else {
                 val rawErr = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
@@ -290,9 +300,10 @@ class CommunityApiClient(private val context: Context) {
                 readTimeout = 5000
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("User-Agent", "OpenMapper-Android/1.0.0")
+                setRequestProperty("User-Agent", "OpenMapper-Android/${BuildConfig.VERSION_NAME}")
             }
-            val bodyBytes = "{}".toByteArray(Charsets.UTF_8)
+            val payload = mapOf("deviceToken" to ensureDeviceToken())
+            val bodyBytes = json.encodeToString(payload).toByteArray(Charsets.UTF_8)
             applySignature(conn, "POST", url.path, bodyBytes)
             conn.outputStream.use { it.write(bodyBytes) }
             val code = conn.responseCode
@@ -325,7 +336,7 @@ class CommunityApiClient(private val context: Context) {
                 setRequestProperty("User-Agent", "OpenMapper-Android/1.0.1")
             }
 
-            val jsonBody = gson.toJson(request)
+            val jsonBody = json.encodeToString(request)
             val bodyBytes = jsonBody.toByteArray(Charsets.UTF_8)
 
             applySignature(conn, "POST", url.path, bodyBytes)
@@ -334,13 +345,13 @@ class CommunityApiClient(private val context: Context) {
 
             val responseCode = conn.responseCode
             if (responseCode in 200..299) {
-                val json = conn.inputStream.bufferedReader().use(BufferedReader::readText)
-                val response = gson.fromJson(json, PublishProfileResponse::class.java)
-                if (response != null && response.success) {
+                val responseJson = conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                val response = json.decodeFromString<PublishProfileResponse>(responseJson)
+                if (response.success) {
                     clearCache()
                     Result.success(response)
                 } else {
-                    Result.failure(Exception(response?.error ?: "Publication refusée"))
+                    Result.failure(Exception(response.error ?: "Publication refusée"))
                 }
             } else {
                 val rawErr = conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
@@ -372,7 +383,7 @@ class CommunityApiClient(private val context: Context) {
                 "deviceToken" to ensureDeviceToken(),
                 "appVersion" to appVersion
             )
-            val jsonBody = gson.toJson(payload)
+            val jsonBody = json.encodeToString(payload)
             val bodyBytes = jsonBody.toByteArray(Charsets.UTF_8)
 
             applySignature(conn, "POST", url.path, bodyBytes)
@@ -394,8 +405,8 @@ class CommunityApiClient(private val context: Context) {
     private fun extractServerErrorMessage(rawErr: String, responseCode: Int): String {
         if (rawErr.isBlank()) return "Erreur serveur ($responseCode)"
         return try {
-            val map = gson.fromJson(rawErr, Map::class.java)
-            val serverError = map["error"]?.toString()
+            val element = json.parseToJsonElement(rawErr)
+            val serverError = element.jsonObject["error"]?.jsonPrimitive?.contentOrNull
             if (!serverError.isNullOrBlank()) {
                 serverError
             } else {
