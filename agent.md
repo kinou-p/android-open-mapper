@@ -410,8 +410,9 @@ JAVA_HOME=/usr/lib/jvm/java-1.17.0-openjdk-amd64 ./gradlew testDebugUnitTest
    - Le wrapper Gradle actuel (v8.7) nécessite **Java 17** (`java-1.17.0-openjdk`). Ne pas utiliser Java 25 par défaut sous peine d'échec de build Gradle.
 2. **Processus `cat /proc/bus/input/devices` sous SELinux** :
    - Sur Android 11+, les applications standard (`untrusted_app`) n'ont pas la permission de lire `/proc/bus/input/devices`. Il faut impérativement exécuter cette lecture via le processus Shizuku (UID 2000).
-3. **Pointeurs tactiles orphelins lors du Stop du Service** :
+3. **Pointeurs tactiles orphelins (Arrêt Service & Hot-Switch)** :
    - Si `OverlayService` est arrêté pendant qu'une touche ou un stick est actif, le système Android peut laisser le pointeur tactile appuyé indéfiniment. `OverlayService.onDestroy()` et `GamepadEngine.stop()` doivent obligatoirement appeler `injector.resetAllPointers()` pour envoyer un `ACTION_CANCEL` sur tous les identifiants de 0 à 9.
+   - De même, lors d'un hot-switch de profil en cours d'appui (`ButtonProcessor.updateButtons`), le processeur réconcilie et libère automatiquement (`touchUp`) les pointeurs orphelins dont l'ID n'existe plus dans le nouveau profil pour éviter tout touch fantôme persistant.
 4. **Recyclage des Bitmaps dans l'Éditeur HUD** :
    - Les captures d'écran haute résolution (QHD/4K) consomment rapidement 30 à 60 Mo de mémoire native. Toujours appeler `.recycle()` sur l'ancien Bitmap lors du chargement d'une nouvelle capture ou lors de la fermeture de la vue.
 5. **Comportement `db.batch()` dans Cloudflare D1** :

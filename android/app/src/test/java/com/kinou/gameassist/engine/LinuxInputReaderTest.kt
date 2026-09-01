@@ -48,6 +48,14 @@ class LinuxInputReaderTest {
     }
 
     @Test
+    fun testParseBinaryEvent64_TruncatedBufferReturnsFalse() {
+        val shortBuf = ByteArray(20) // Less than 24 bytes
+        val outEvent = BinaryInputParser.RawInputEvent()
+        assertFalse(BinaryInputParser.parseBinaryEvent64(shortBuf, 0, outEvent))
+        assertFalse(BinaryInputParser.parseBinaryEvent64(ByteArray(30), 10, outEvent)) // 30 - 10 = 20 < 24
+    }
+
+    @Test
     fun testParseBinaryEvent32() {
         // 16-byte 32-bit struct input_event
         // tv_sec (4B) = 100, tv_usec (4B) = 200, type (2B) = 0x0001 (EV_KEY), code = 0x0130 (BTN_A), value = 1 (Down)
@@ -66,6 +74,13 @@ class LinuxInputReaderTest {
         assertEquals(0x0130, outEvent.code)
         assertEquals(1L, outEvent.value)
         assertEquals("BUTTON_A", BinaryInputParser.evKeyToButtonName(outEvent.code))
+    }
+
+    @Test
+    fun testParseBinaryEvent32_TruncatedBufferReturnsFalse() {
+        val shortBuf = ByteArray(12) // Less than 16 bytes
+        val outEvent = BinaryInputParser.RawInputEvent()
+        assertFalse(BinaryInputParser.parseBinaryEvent32(shortBuf, 0, outEvent))
     }
 
     @Test
@@ -108,6 +123,15 @@ class LinuxInputReaderTest {
     @Test
     fun testParseAsciiHexLine_InvalidHexReturnsFalse() {
         val line = "0003 0010 zzzzzzzz\n".toByteArray(Charsets.US_ASCII)
+        val outEvent = BinaryInputParser.RawInputEvent()
+        val success = BinaryInputParser.parseAsciiHexLine(line, 0, line.size, outEvent)
+
+        assertFalse(success)
+    }
+
+    @Test
+    fun testParseAsciiHexLine_EmptyReturnsFalse() {
+        val line = "   \n".toByteArray(Charsets.US_ASCII)
         val outEvent = BinaryInputParser.RawInputEvent()
         val success = BinaryInputParser.parseAsciiHexLine(line, 0, line.size, outEvent)
 

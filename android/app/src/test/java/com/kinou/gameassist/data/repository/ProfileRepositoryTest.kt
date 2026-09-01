@@ -1,20 +1,36 @@
 package com.kinou.gameassist.data.repository
 
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import com.kinou.gameassist.data.model.ButtonConfig
+import com.kinou.gameassist.data.model.ButtonMode
 import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.data.model.GameProfile
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
 
 class ProfileRepositoryTest {
+
+    @get:Rule
+    val tempFolder = TemporaryFolder()
 
     private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
         encodeDefaults = true
         prettyPrint = true
+    }
+
+    private class TestContext(private val testFilesDir: File) : ContextWrapper(null) {
+        override fun getApplicationContext(): Context = this
+        override fun getFilesDir(): File = testFilesDir
+        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences? = null
     }
 
     @Test
@@ -163,5 +179,49 @@ class ProfileRepositoryTest {
             ProfileRepository.validateAndSanitizeProfile(profile)
             assertEquals(validId, profile.id)
         }
+    }
+
+    @Test
+    fun testDefaultCodmProfilesCreation() {
+        val baseDir = tempFolder.newFolder("profiles_test")
+        val context = TestContext(baseDir)
+        val repo = ProfileRepository.getInstance(context)
+
+        val codmMp = repo.createDefaultCodmProfile()
+        assertEquals("codm_multiplayer_default", codmMp.id)
+        assertEquals("com.activision.callofduty.shooter", codmMp.packageName)
+        assertTrue(codmMp.joystick.enabled)
+        assertTrue(codmMp.camera.enabled)
+        assertTrue(codmMp.buttons.size >= 10)
+
+        // Verify key buttons exist
+        assertTrue(codmMp.buttons.any { it.role == ButtonRole.FIRE && it.gamepadButton == "BUTTON_R2" })
+        assertTrue(codmMp.buttons.any { it.role == ButtonRole.ADS && it.gamepadButton == "BUTTON_L2" })
+        assertTrue(codmMp.buttons.any { it.role == ButtonRole.RELOAD && it.gamepadButton == "BUTTON_X" })
+
+        val codmBr = repo.createDefaultCodmBrProfile()
+        assertEquals("codm_br_default", codmBr.id)
+        assertTrue(codmBr.buttons.any { it.id == "btn_armor" && it.gamepadButton == "DPAD_LEFT" })
+    }
+
+    @Test
+    fun testExportAndImportProfileJson() {
+        val baseDir = tempFolder.newFolder("profiles_export_import")
+        val context = TestContext(baseDir)
+        val repo = ProfileRepository.getInstance(context)
+
+        val originalProfile = repo.createDefaultCodmProfile().copy(
+            id = "custom_test_export",
+            name = "Export Test Name"
+        )
+
+        val exportedJson = repo.exportProfileToJson(originalProfile)
+        assertTrue(exportedJson.contains("custom_test_export"))
+        assertTrue(exportedJson.contains("Export Test Name"))
+
+        val imported = repo.importProfileFromJson(exportedJson)
+        assertNotNull(imported)
+        assertEquals("Export Test Name", imported!!.name)
+        assertEquals(originalProfile.buttons.size, imported.buttons.size)
     }
 }

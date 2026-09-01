@@ -9,7 +9,7 @@ import android.view.MotionEvent
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-class ShizukuTouchInjector {
+open class ShizukuTouchInjector {
     companion object {
         private const val TAG = "ShizukuTouchInjector"
     }
@@ -23,14 +23,14 @@ class ShizukuTouchInjector {
 
     private var downTime: Long = 0L
 
-    fun connect(): Boolean {
+    open fun connect(): Boolean {
         val binder = ShizukuManager.getInputBinder() ?: return false
         helper = IInputManagerHelper(binder)
         resetAllPointers()
         return true
     }
 
-    fun isConnected(): Boolean = helper != null
+    open fun isConnected(): Boolean = helper != null
 
     private fun handleInjectionError(e: Throwable) {
         if (e is DeadObjectException || e is RemoteException) {
@@ -46,14 +46,14 @@ class ShizukuTouchInjector {
         }
     }
 
-    fun setScreenResolution(w: Int, h: Int) {
+    open fun setScreenResolution(w: Int, h: Int) {
         lock.withLock {
             screenWidth = maxOf(w, h)
             screenHeight = minOf(w, h)
         }
     }
 
-    fun touchDown(pointerId: Int, x: Float, y: Float, pressure: Float? = null) {
+    open fun touchDown(pointerId: Int, x: Float, y: Float, pressure: Float? = null) {
         lock.withLock {
             val h = helper ?: return
 
@@ -104,7 +104,7 @@ class ShizukuTouchInjector {
         }
     }
 
-    fun touchMove(pointerId: Int, x: Float, y: Float, pressure: Float? = null) {
+    open fun touchMove(pointerId: Int, x: Float, y: Float, pressure: Float? = null) {
         lock.withLock {
             val h = helper ?: return
             if (!pointerPool.contains(pointerId)) return
@@ -144,7 +144,7 @@ class ShizukuTouchInjector {
         }
     }
 
-    fun touchUp(pointerId: Int, x: Float? = null, y: Float? = null) {
+    open fun touchUp(pointerId: Int, x: Float? = null, y: Float? = null) {
         lock.withLock {
             val h = helper ?: return
             if (!pointerPool.contains(pointerId)) return
@@ -195,7 +195,7 @@ class ShizukuTouchInjector {
         }
     }
 
-    fun releaseAll() {
+    open fun releaseAll() {
         lock.withLock {
             val h = helper ?: return
             if (pointerPool.getActiveCount() == 0) return
@@ -237,7 +237,7 @@ class ShizukuTouchInjector {
      * Atomically executes a dual-pointer handoff (touchDown on nextPointer + touchUp on oldPointer)
      * within a single lock critical section, eliminating race conditions during continuous 360° camera rotation.
      */
-    fun handoff(
+    open fun handoff(
         downPointerId: Int, downX: Float, downY: Float,
         upPointerId: Int, upX: Float, upY: Float,
         downPressure: Float? = null
@@ -337,7 +337,7 @@ class ShizukuTouchInjector {
         }
     }
 
-    fun resetAllPointers() {
+    open fun resetAllPointers() {
         lock.withLock {
             val h = helper ?: return
             val now = SystemClock.uptimeMillis()

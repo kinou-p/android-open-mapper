@@ -96,7 +96,26 @@ class ButtonProcessor(
             // /dev/input (lecture sans lock) et l'éditeur HUD (mutation en place de la liste
             // passée par le profil) ne puissent pas s'interférer. Les champs sont @Volatile
             // pour garantir la publication sûre de la nouvelle référence.
+            val oldButtonsById = buttons.associateBy { it.id }
             val snapshot = list.map { it.copy() }
+            val newIds = snapshot.map { it.id }.toSet()
+
+            // Réconciliation : libération et touchUp des pointeurs orphelins après un hot-switch
+            val orphaned = activePointers.keys.filter { it !in newIds }
+            for (id in orphaned) {
+                val pid = activePointers.remove(id)
+                if (pid != null) {
+                    freePointers.add(pid)
+                    val oldBtn = oldButtonsById[id]
+                    val tx = (oldBtn?.x ?: 0.5f) * injector.screenWidth
+                    val ty = (oldBtn?.y ?: 0.5f) * injector.screenHeight
+                    injector.touchUp(pid, tx, ty)
+                }
+            }
+
+            // Nettoie également les taps asynchrones en cours pour les boutons supprimés
+            pendingTaps.removeIf { it.btnId !in newIds }
+
             buttons = snapshot
             buttonsByGamepadKey = snapshot.groupBy { it.gamepadButton.trim().uppercase() }
             fireButtonIds = snapshot.filter { isFireButtonStatic(it) }.map { it.id }.toSet()

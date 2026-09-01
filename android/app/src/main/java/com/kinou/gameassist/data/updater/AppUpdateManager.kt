@@ -133,6 +133,15 @@ object AppUpdateManager {
         }
     }
 
+    fun sanitizeApkFileName(fileName: String): String {
+        val trimmed = fileName.trim()
+        val isValid = trimmed.matches(Regex("^[a-zA-Z0-9._-]+\\.apk$", RegexOption.IGNORE_CASE)) &&
+                !trimmed.contains("..") &&
+                !trimmed.contains("/") &&
+                !trimmed.contains("\\")
+        return if (isValid) trimmed else "OpenMapper-Update.apk"
+    }
+
     /**
      * Downloads the APK file to app cache with real-time progress callbacks.
      */
@@ -153,7 +162,12 @@ object AppUpdateManager {
         var outputFile: File? = null
         try {
             val updateDir = File(context.cacheDir, "updates").apply { mkdirs() }
-            outputFile = File(updateDir, targetFileName)
+            val safeFileName = sanitizeApkFileName(targetFileName)
+            val candidateFile = File(updateDir, safeFileName)
+            if (!candidateFile.canonicalPath.startsWith(updateDir.canonicalPath)) {
+                return@withContext Result.failure(SecurityException("Tentative de traversée de répertoire détectée : $targetFileName"))
+            }
+            outputFile = candidateFile
             if (outputFile.exists()) {
                 outputFile.delete()
             }

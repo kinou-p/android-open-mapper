@@ -81,7 +81,7 @@ object DeviceTokenStore {
 
     fun save(context: Context, token: String) {
         try {
-            getPrefs(context).edit().putString(KEY, token).commit()
+            getPrefs(context).edit().putString(KEY, token).apply()
         } catch (e: Throwable) {
             Log.e(TAG, "Erreur lors de la sauvegarde du device token", e)
         }

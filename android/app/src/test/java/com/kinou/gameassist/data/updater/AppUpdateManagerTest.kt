@@ -21,4 +21,17 @@ class AppUpdateManagerTest {
         assertEquals("10.0 MB", AppUpdateManager.formatFileSize(10 * 1024 * 1024))
         assertEquals("15.5 MB", AppUpdateManager.formatFileSize((15.5 * 1024 * 1024).toLong()))
     }
+
+    @Test
+    fun testSanitizeApkFileName() {
+        assertEquals("OpenMapper-v1.2.0.apk", AppUpdateManager.sanitizeApkFileName("OpenMapper-v1.2.0.apk"))
+        assertEquals("app_update_debug.apk", AppUpdateManager.sanitizeApkFileName("app_update_debug.apk"))
+        
+        // Rejections / fallbacks
+        assertEquals("OpenMapper-Update.apk", AppUpdateManager.sanitizeApkFileName("../../../evil.apk"))
+        assertEquals("OpenMapper-Update.apk", AppUpdateManager.sanitizeApkFileName("/tmp/evil.apk"))
+        assertEquals("OpenMapper-Update.apk", AppUpdateManager.sanitizeApkFileName("update.exe"))
+        assertEquals("OpenMapper-Update.apk", AppUpdateManager.sanitizeApkFileName("malicious.sh"))
+        assertEquals("OpenMapper-Update.apk", AppUpdateManager.sanitizeApkFileName("   "))
+    }
 }

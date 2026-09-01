@@ -107,7 +107,10 @@ class OverlayService : LifecycleService() {
                 if (status == ShizukuStatus.RUNNING_AUTHORIZED) {
                     // Rebranche l'injecteur ET relance le lecteur /dev/input si le moteur
                     // tourne (ses sous-processus `cat` meurent avec le binder Shizuku).
-                    engine.onShizukuReconnected()
+                    // Exécuté hors du thread UI (Dispatchers.IO) pour éviter tout jank/ANR lié aux IPC Binder synchrones.
+                    withContext(Dispatchers.IO) {
+                        engine.onShizukuReconnected()
+                    }
                     // Détacher l'intercepteur si Shizuku vient d'être autorisé après le démarrage
                     // (cas : service lancé avant autorisation, puis l'utilisateur accepte dans Shizuku).
                     // Sans ce détachement, la vue 1×1 reste attachée indéfiniment.
