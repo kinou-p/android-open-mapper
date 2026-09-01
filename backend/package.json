@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "test": "vitest run"
   },
   "dependencies": {
     "hono": "^4.6.14"
@@ -12,6 +13,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1",
     "typescript": "^5.7.2",
+    "vitest": "^4.1.11",
     "wrangler": "^4.127.1"
   }
 }
