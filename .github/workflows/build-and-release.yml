@@ -121,6 +121,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download Build Artifact
         uses: actions/download-artifact@v4
@@ -128,10 +130,37 @@ jobs:
           name: OpenMapper-APK
           path: dist
 
+      - name: Generate Release Body
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' "$TAG_NAME" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+          cat << 'EOF' > release_body.md
+          ## 🎮 OpenMapper ${{ github.ref_name }}
+
+          Bienvenue sur la version **${{ github.ref_name }}** d'OpenMapper !
+
+          ### 📱 Installation & Démarrage
+          1. Téléchargez l'APK **`OpenMapper-${{ github.ref_name }}.apk`** ci-dessous.
+          2. Installez l'APK sur votre appareil Android.
+          3. Assurez-vous que **[Shizuku](https://shizuku.rikka.app/)** est actif sur votre téléphone pour profiter du mapping et de l'injection tactile à ultra-faible latence (< 0.5 ms).
+
+          EOF
+
+          if [ -n "$TAG_MESSAGE" ] && [ "$TAG_MESSAGE" != "$TAG_NAME" ]; then
+            echo "### 📝 Notes de cette version" >> release_body.md
+            echo "$TAG_MESSAGE" >> release_body.md
+            echo "" >> release_body.md
+          fi
+
+          echo "---" >> release_body.md
+          echo "### 📋 Changelog détaillé des commits" >> release_body.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.apk
+          body_path: release_body.md
           draft: false
           prerelease: false
           generate_release_notes: true
