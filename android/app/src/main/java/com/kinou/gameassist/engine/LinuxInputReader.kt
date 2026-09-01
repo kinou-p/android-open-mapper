@@ -328,6 +328,19 @@ class LinuxInputReader(
         }
     }
 
+    private fun isTriggerDown(rawValue: Long): Boolean {
+        if (rawValue < 0L) {
+            val unsigned = rawValue + 32768L
+            return unsigned > 8000L // ~25% threshold for signed -32768..32767 range
+        }
+        return when {
+            rawValue > 32767L -> rawValue > 16000L // 0..65535 (~25%)
+            rawValue > 1023L -> rawValue > 8000L   // 0..32767 (~25% e.g. Xbox 360 controller)
+            rawValue > 255L -> rawValue > 250L     // 0..1023 (~25%)
+            else -> rawValue > 64L                 // 0..255 (~25%)
+        }
+    }
+
     private fun handleAbsoluteAxis(code: Int, rawValue: Long) {
         when (code) {
             // ABS_X (0x0000): Left Stick X
@@ -338,18 +351,18 @@ class LinuxInputReader(
             0x0001 -> {
                 engine.ly = BinaryInputParser.normalizeStick(rawValue)
             }
-            // ABS_Z (0x0002) or ABS_RX (0x0003): Right Stick X
-            0x0002, 0x0003 -> {
+            // ABS_RX (0x0003): Right Stick X
+            0x0003 -> {
                 engine.rx = BinaryInputParser.normalizeStick(rawValue)
             }
-            // ABS_RZ (0x0005) or ABS_RY (0x0004): Right Stick Y
-            0x0005, 0x0004 -> {
+            // ABS_RY (0x0004): Right Stick Y
+            0x0004 -> {
                 engine.ry = BinaryInputParser.normalizeStick(rawValue)
             }
 
-            // ABS_GAS (0x0009): RT Trigger (~30% actuation threshold)
-            0x0009 -> {
-                val isDown = if (rawValue > 255L) rawValue > 300L else rawValue > 76L
+            // ABS_RZ (0x0005) or ABS_GAS (0x0009): RT Trigger (BUTTON_R2)
+            0x0005, 0x0009 -> {
+                val isDown = isTriggerDown(rawValue)
                 val prev = rtActive.getAndSet(isDown)
                 if (isDown != prev) {
                     if (isDown) engine.onRawButtonDown("BUTTON_R2")
@@ -357,9 +370,9 @@ class LinuxInputReader(
                 }
             }
 
-            // ABS_BRAKE (0x000a): LT Trigger (~30% actuation threshold)
-            0x000a -> {
-                val isDown = if (rawValue > 255L) rawValue > 300L else rawValue > 76L
+            // ABS_Z (0x0002) or ABS_BRAKE (0x000a): LT Trigger (BUTTON_L2)
+            0x0002, 0x000a -> {
+                val isDown = isTriggerDown(rawValue)
                 val prev = ltActive.getAndSet(isDown)
                 if (isDown != prev) {
                     if (isDown) engine.onRawButtonDown("BUTTON_L2")

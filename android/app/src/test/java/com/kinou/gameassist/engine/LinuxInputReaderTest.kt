@@ -168,4 +168,30 @@ class LinuxInputReaderTest {
         assertEquals("DPAD_DOWN", BinaryInputParser.evKeyToButtonName(0x0221))
         assertNull(BinaryInputParser.evKeyToButtonName(0x9999))
     }
+
+    @Test
+    fun testParseBinaryEvent64_RightStickAndTriggers() {
+        val outEvent = BinaryInputParser.RawInputEvent()
+
+        // ABS_RX (0x0003) = Right Stick X
+        val bufRx = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN)
+            .putLong(0L).putLong(0L).putShort(0x0003.toShort()).putShort(0x0003.toShort()).putInt(32768)
+        assertTrue(BinaryInputParser.parseBinaryEvent64(bufRx.array(), 0, outEvent))
+        assertEquals(0x0003, outEvent.code)
+        assertEquals(0.0f, BinaryInputParser.normalizeStick(outEvent.value), 0.001f)
+
+        // ABS_Z (0x0002) = LT Trigger (0 at rest, up to 32767)
+        val bufZ = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN)
+            .putLong(0L).putLong(0L).putShort(0x0003.toShort()).putShort(0x0002.toShort()).putInt(15000)
+        assertTrue(BinaryInputParser.parseBinaryEvent64(bufZ.array(), 0, outEvent))
+        assertEquals(0x0002, outEvent.code)
+        assertEquals(15000L, outEvent.value)
+
+        // ABS_RZ (0x0005) = RT Trigger (0 at rest, up to 32767)
+        val bufRz = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN)
+            .putLong(0L).putLong(0L).putShort(0x0003.toShort()).putShort(0x0005.toShort()).putInt(30000)
+        assertTrue(BinaryInputParser.parseBinaryEvent64(bufRz.array(), 0, outEvent))
+        assertEquals(0x0005, outEvent.code)
+        assertEquals(30000L, outEvent.value)
+    }
 }

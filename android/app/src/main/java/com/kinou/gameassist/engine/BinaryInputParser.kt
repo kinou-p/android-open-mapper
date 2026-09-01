@@ -219,7 +219,7 @@ object BinaryInputParser {
     /**
      * Converts a raw Linux gamepad stick coordinate to normalized Float [-1.0f .. +1.0f].
      *
-     * Linux / Android Gamepad Drivers (ABS_X, ABS_Y, ABS_Z, ABS_RZ, etc.):
+     * Linux / Android Gamepad Drivers (ABS_X, ABS_Y, ABS_RX, ABS_RY, etc.):
      * - Standard 16-bit Unsigned (0..65535): Center = 32768 (0x8000), Min = 0 (-1.0f), Max = 65535 (+1.0f)
      * - Signed 16-bit extension (-32768..-1): Negative offset mapping
      */
