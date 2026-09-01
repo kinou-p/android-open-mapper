@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/kinou-p/android-open-mapper/releases/latest"><img src="https://img.shields.io/github/v/release/kinou-p/android-open-mapper?color=00F0FF&label=Latest%20Release" alt="Latest Release"></a>
+  <img src="https://img.shields.io/badge/Status-Early%20Development%20%2F%20Beta-yellow.svg" alt="Early Development">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm%20Noncommercial-orange.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/Android-8.0%2B-green.svg" alt="Android 8.0+">
   <img src="https://img.shields.io/badge/Root-Not%20Required-blue.svg" alt="No Root Required">
@@ -15,6 +16,12 @@
 </p>
 
 ---
+
+> [!WARNING]
+> **⚠️ Early Development & Alpha/Beta Notice**
+> OpenMapper is actively under **early development**. While the core mapping engine, zero-allocation input streaming, and in-game HUD editor are fully operational, you may occasionally run into unexpected bugs or device-specific quirks across different Android ROMs (MIUI/HyperOS, OneUI, ColorOS, OxygenOS, etc.).
+> 
+> If you encounter any bugs, controller recognition issues, or have ideas for improvements, please feel free to [**Open an Issue on GitHub**](https://github.com/kinou-p/android-open-mapper/issues) with your device model, controller model, and Android version!
 
 > [!TIP]
 > **🚀 Free & Modern Alternative to Mantis Gamepad Pro, Panda Gamepad & Octopus**
@@ -85,7 +92,7 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
 - **🚀 Dynamic Boost & 180° Instant Flick**: Micro-precision center aim combined with fast 180° turns at stick edge + ADS Scope Safety lock.
 - **🧲 RAA Keep-Alive & Organic Jiggle Strafe**: Rotational Aim Assist micro-dithering and humanized anti-detection strafe dodge during fire.
 - **📳 Dynamic Haptic Feedback**: Realistic weapon recoil vibration and mechanical reload pulses with in-app test buttons.
-- **🎮 In-App Key Rebinding**: Easily remap Fire, Reload, and any button directly inside the app with Hold or Tap modes.
+- **🎮 Visual HUD Editor & Key Rebinding**: Easily position buttons directly over the game with live preview, assign roles (Fire, Reload, ADS), customize Hold/Tap modes, and freely rename, duplicate, or export profiles.
 - **🪄 Built-in Gamepad Diagnostic**: Real-time stick visualizer, 3-second automatic drift test, and circularity/outer-deadzone calibration.
 - **🔄 In-App Auto-Updater**: Directly detects and downloads new GitHub releases within the app.
 

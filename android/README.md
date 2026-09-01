@@ -4,6 +4,12 @@
 
 Grâce à l'intégration de **Shizuku**, l'application injecte des événements multi-touch directement dans le système d'exploitation avec une latence ultra-basse (**< 0.5 ms**), **sans aucun root** et **sans PC requis après configuration initiale**.
 
+> [!WARNING]
+> **⚠️ Projet en Développement Actif (Early Development / Bêta)**
+> OpenMapper est actuellement en **développement actif**. Bien que le moteur d'entrée binaire, l'injection Shizuku et l'éditeur HUD en jeu soient pleinement opérationnels, vous pouvez occasionnellement rencontrer des bugs ou des comportements imprévus selon les surcouches Android (HyperOS, OneUI, ColorOS, OxygenOS, etc.).
+> 
+> Si vous rencontrez un bug ou un comportement anormal avec votre manette, n'hésitez pas à [**Ouvrir une Issue sur GitHub**](https://github.com/kinou-p/android-open-mapper/issues) en précisant le modèle de votre smartphone, votre manette et votre version d'Android !
+
 ---
 
 ## ⚡ Caractéristiques Principales
@@ -31,14 +37,15 @@ Grâce à l'intégration de **Shizuku**, l'application injecte des événements 
   - *RAA Keep-Alive* : Micro-oscillations sub-pixel maintenant active l'aide à la visée rotative (*Rotational Aim Assist*) en continu.
   - *Organic Jiggle Strafe* : Esquive automatique gauche-droite pendant le tir avec micro-variations biométriques humaines et anti-détection.
 
-### 📳 3. Immersion Haptique & Remapping Direct
+### 📳 3. Immersion Haptique & Gestionnaire de Profils
 - **Retour Haptique Dynamique (Vibrations en Jeu)** :
   - Vibration de tir sèche simulant le recul d'arme à chaque coup tiré.
   - Double impulsion mécanique distincte simulant le rechargement.
   - Intensité réglable et boutons de test interactifs.
-- **Gestionnaire de Touches Intégré dans l'App** :
-  - Remappez n'importe quel bouton (`RT`, `LT`, `RB`, `LB`, `A`, `B`, `X`, `Y`, `L3`, `R3`, `D-Pad`...) en 1 clic.
-  - Bascule instantanée de mode d'action : **HOLD** (Maintenu) ou **TAP** (Pression courte avec micro-drift humain).
+- **Gestionnaire de Profils Libre & Moderne** :
+  - Renommage libre de chaque profil en 1 clic (crayon ✏️ ou dialogue dédié).
+  - Exportation / Partage et Duplication instantanée de profils en JSON.
+  - Assignation des rôles clés (Tir, Rechargement, Visée ADS) et modes (Hold / Tap).
 
 ### 📐 4. Diagnostic & Calibration Manette
 - **Visualiseur en temps réel** : Position des sticks et matrice d'état de tous les boutons.
@@ -46,8 +53,8 @@ Grâce à l'intégration de **Shizuku**, l'application injecte des événements 
 - **🎯 Test de Circularité & Portée Maximale** : Tracé radar à 360° et calibration de l'*Outer Deadzone* pour garantir 100% de vitesse en diagonale.
 
 ### 📱 5. Overlay Flottant en Jeu (HUD Editor)
-- Volet latéral discret sur le bord de l'écran.
-- Éditeur plein écran par-dessus le jeu avec glisser-déposer des boutons et mode d'apprentissage instantané.
+- Volet latéral discret sur le bord de l'écran avec intégration propre `WindowInsetsController` (Android 11+).
+- Éditeur plein écran par-dessus le jeu avec glisser-déposer des boutons et calibration visuelle en temps réel.
 
 ---
 
