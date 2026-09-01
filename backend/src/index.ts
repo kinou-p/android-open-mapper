@@ -53,6 +53,41 @@ function timingSafeEqualHex(a: string, b: string): boolean {
   return diff === 0;
 }
 
+// Cache anti-rejeu en mémoire des signatures HMAC récemment validées (TTL = SIGNATURE_WINDOW_SEC = 300s).
+// Protège l'instance contre le rejeu immédiat des requêtes signées interceptées.
+const MAX_SEEN_SIGNATURES = 5000;
+const seenSignatures = new Map<string, number>();
+
+export function resetSeenSignaturesCache(): void {
+  seenSignatures.clear();
+}
+
+export function isSignatureReplayed(signature: string, nowSec: number): boolean {
+  // 1. Nettoyage paresseux périodique des signatures expirées
+  if (seenSignatures.size > 50) {
+    for (const [sig, exp] of seenSignatures.entries()) {
+      if (exp <= nowSec) {
+        seenSignatures.delete(sig);
+      }
+    }
+  }
+
+  // 2. Éviction FIFO si le cache atteint sa capacité maximale
+  if (seenSignatures.size >= MAX_SEEN_SIGNATURES) {
+    const oldestKey = seenSignatures.keys().next().value;
+    if (oldestKey) {
+      seenSignatures.delete(oldestKey);
+    }
+  }
+
+  if (seenSignatures.has(signature)) {
+    return true; // Déjà traitée (Rejeu détecté)
+  }
+
+  seenSignatures.set(signature, nowSec + SIGNATURE_WINDOW_SEC);
+  return false;
+}
+
 /**
  * Middleware de protection des routes d'écriture POST.
  *
@@ -91,7 +126,8 @@ const verifySignature = async (c: any, next: any) => {
     return c.json({ error: 'Signature manquante' }, 401);
   }
   const ts = parseInt(timestamp, 10);
-  if (!Number.isFinite(ts) || Math.abs(Math.floor(Date.now() / 1000) - ts) > SIGNATURE_WINDOW_SEC) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (!Number.isFinite(ts) || Math.abs(nowSec - ts) > SIGNATURE_WINDOW_SEC) {
     return c.json({ error: 'Requête expirée ou horloge invalide' }, 401);
   }
 
@@ -109,7 +145,32 @@ const verifySignature = async (c: any, next: any) => {
     return c.json({ error: 'Signature invalide' }, 401);
   }
 
-  // 4. Corps authentifié mis à disposition des handlers
+  // 4. Protection anti-rejeu : rejet des signatures déjà consommées
+  // Échelon 1 : filtre mémoire rapide local à l'isolate
+  if (isSignatureReplayed(signature, nowSec)) {
+    return c.json({ error: 'Signature déjà utilisée (Replay Attack détectée)' }, 401);
+  }
+
+  // Échelon 2 : barrière atomique multi-régions persistée dans la base D1
+  if (c.env.DB) {
+    try {
+      const sigKey = `sig:${signature}`;
+      const replayCheck = await c.env.DB.prepare(`
+        INSERT INTO rate_limits (key, last_seen, request_count, window_start)
+        VALUES (?1, ?2, 1, ?2)
+        ON CONFLICT(key) DO NOTHING
+        RETURNING key
+      `).bind(sigKey, Date.now()).first();
+
+      if (!replayCheck) {
+        return c.json({ error: 'Signature déjà utilisée (Replay Attack détectée)' }, 401);
+      }
+    } catch (dbErr: any) {
+      console.error('[Anti-Replay] Erreur vérification D1:', dbErr);
+    }
+  }
+
+  // 5. Corps authentifié mis à disposition des handlers
   c.set('rawBody', rawBody);
   await next();
 };
@@ -142,13 +203,53 @@ export function resetMemRateLimitCache(): void {
   previousBucket = { windowMinute: 0, entries: new Map() };
 }
 
-function getClientIp(c: any): string {
+/**
+ * Normalise les adresses IPv4 et IPv6 pour les clés de rate limiting.
+ * En IPv6, tronque l'adresse au sous-réseau /64 (les 4 premiers blocs de 16 bits)
+ * pour éviter le contournement du rate limiter par rotation d'adresses IPv6 au sein du même préfixe.
+ */
+export function normalizeIpForRateLimit(ip: string): string {
+  const trimmed = ip.trim();
+  if (!trimmed.includes(':')) {
+    return trimmed; // IPv4 standard
+  }
+  // Gestion des adresses IPv4-mapped IPv6 (ex: ::ffff:192.0.2.128)
+  if (trimmed.toLowerCase().startsWith('::ffff:') && trimmed.indexOf('.', 7) !== -1) {
+    return trimmed.substring(7);
+  }
+  // Normalisation IPv6 vers le sous-réseau /64 (les 4 premiers groupes de 16 bits)
+  try {
+    const parts = trimmed.split('::');
+    let left: string[] = [];
+    let right: string[] = [];
+    if (parts.length === 2) {
+      left = parts[0] ? parts[0].split(':').filter(Boolean) : [];
+      right = parts[1] ? parts[1].split(':').filter(Boolean) : [];
+      const missing = 8 - (left.length + right.length);
+      const middle = Array(Math.max(0, missing)).fill('0');
+      const full = [...left, ...middle, ...right];
+      return full.slice(0, 4).map(h => (h ? h.toLowerCase() : '0')).join(':') + '::/64';
+    } else if (parts.length === 1) {
+      const full = parts[0].split(':').filter(Boolean);
+      return full.slice(0, 4).map(h => (h ? h.toLowerCase() : '0')).join(':') + '::/64';
+    }
+  } catch {
+    // Fallback de sécurité
+  }
+  return trimmed;
+}
+
+export function getClientIp(c: any): string {
   const cfIp = c.req.header('cf-connecting-ip');
   if (cfIp && cfIp.trim().length > 0) {
     return cfIp.trim();
   }
   // En environnement local de développement ou fallback sécurisé
   return '127.0.0.1';
+}
+
+export function getRateLimitIp(c: any): string {
+  return normalizeIpForRateLimit(getClientIp(c));
 }
 
 async function hashIp(ip: string, salt?: string): Promise<string | null> {
@@ -205,77 +306,145 @@ export function recordMemRateLimit(
   return { blocked: false, retryAfterSec: 0 };
 }
 
+function checkNumber(val: any, min: number, max: number, name: string): string | null {
+  if (val === undefined || val === null) return null;
+  if (typeof val !== 'number' || !Number.isFinite(val)) {
+    return `${name} doit être un nombre valide`;
+  }
+  if (val < min || val > max) {
+    return `${name} hors limites (${min} à ${max})`;
+  }
+  return null;
+}
+
+function checkBoolean(val: any, name: string): string | null {
+  if (val === undefined || val === null) return null;
+  if (typeof val !== 'boolean') {
+    return `${name} doit être un booléen`;
+  }
+  return null;
+}
+
+function checkString(val: any, maxLen: number, name: string): string | null {
+  if (val === undefined || val === null) return null;
+  if (typeof val !== 'string') {
+    return `${name} doit être une chaîne de caractères`;
+  }
+  if (val.length > maxLen) {
+    return `${name} trop long (max ${maxLen} caractères)`;
+  }
+  return null;
+}
+
 function validateProfileStructure(obj: any): { valid: boolean; error?: string } {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
     return { valid: false, error: 'La configuration doit être un objet JSON valide' };
   }
+
+  // Validate root string fields if present
+  const rootIdErr = checkString(obj.id, 100, 'id');
+  if (rootIdErr) return { valid: false, error: rootIdErr };
+  const rootNameErr = checkString(obj.name, 100, 'name');
+  if (rootNameErr) return { valid: false, error: rootNameErr };
+  const rootPkgErr = checkString(obj.package_name || obj.packageName, 150, 'package_name');
+  if (rootPkgErr) return { valid: false, error: rootPkgErr };
+  const rootDescErr = checkString(obj.description, 500, 'description');
+  if (rootDescErr) return { valid: false, error: rootDescErr };
+
   // Validate Joystick if present
-  if (obj.joystick && typeof obj.joystick === 'object') {
-    const { centerX, centerY, radius, deadzone, outerDeadzone, sprintThreshold } = obj.joystick;
-    if (
-      (typeof centerX === 'number' && (!Number.isFinite(centerX) || centerX < -0.5 || centerX > 1.5)) ||
-      (typeof centerY === 'number' && (!Number.isFinite(centerY) || centerY < -0.5 || centerY > 1.5)) ||
-      (typeof radius === 'number' && (!Number.isFinite(radius) || radius <= 0 || radius > 1.0)) ||
-      (typeof deadzone === 'number' && (!Number.isFinite(deadzone) || deadzone < 0 || deadzone > 0.5)) ||
-      (typeof outerDeadzone === 'number' && (!Number.isFinite(outerDeadzone) || outerDeadzone < 0.5 || outerDeadzone > 1.0)) ||
-      (typeof sprintThreshold === 'number' && (!Number.isFinite(sprintThreshold) || sprintThreshold < 0.2 || sprintThreshold > 1.0))
-    ) {
-      return { valid: false, error: 'Paramètres de joystick invalides' };
+  if (obj.joystick) {
+    if (typeof obj.joystick !== 'object' || Array.isArray(obj.joystick)) {
+      return { valid: false, error: 'Joystick doit être un objet JSON valide' };
     }
+    const j = obj.joystick;
+    const err =
+      checkNumber(j.centerX ?? j.center_x, -0.5, 1.5, 'Joystick center_x') ||
+      checkNumber(j.centerY ?? j.center_y, -0.5, 1.5, 'Joystick center_y') ||
+      checkNumber(j.radius, 0.001, 1.0, 'Joystick radius') ||
+      checkNumber(j.deadzone, 0.0, 0.5, 'Joystick deadzone') ||
+      checkNumber(j.outerDeadzone ?? j.outer_deadzone, 0.5, 1.0, 'Joystick outer_deadzone') ||
+      checkNumber(j.sprintThreshold ?? j.sprint_threshold, 0.2, 1.0, 'Joystick sprint_threshold') ||
+      checkNumber(j.jiggleRandomness ?? j.jiggle_randomness, 0.0, 1.0, 'Joystick jiggle_randomness') ||
+      checkNumber(j.jiggleSpeed ?? j.jiggle_speed, 0.1, 5.0, 'Joystick jiggle_speed') ||
+      checkBoolean(j.enabled, 'Joystick enabled') ||
+      checkBoolean(j.raaKeepAlive ?? j.raa_keep_alive, 'Joystick raa_keep_alive') ||
+      checkBoolean(j.jiggleStrafe ?? j.jiggle_strafe, 'Joystick jiggle_strafe') ||
+      checkBoolean(j.jiggleHumanize ?? j.jiggle_humanize, 'Joystick jiggle_humanize');
+    if (err) return { valid: false, error: err };
   }
+
   // Validate Camera if present
-  if (obj.camera && typeof obj.camera === 'object') {
-    const { rectX1, rectY1, rectX2, rectY2, sensitivityX, sensitivityY, deadzone, smoothing, acceleration } = obj.camera;
-    if (
-      (typeof rectX1 === 'number' && (!Number.isFinite(rectX1) || rectX1 < -0.5 || rectX1 > 1.5)) ||
-      (typeof rectY1 === 'number' && (!Number.isFinite(rectY1) || rectY1 < -0.5 || rectY1 > 1.5)) ||
-      (typeof rectX2 === 'number' && (!Number.isFinite(rectX2) || rectX2 < -0.5 || rectX2 > 1.5)) ||
-      (typeof rectY2 === 'number' && (!Number.isFinite(rectY2) || rectY2 < -0.5 || rectY2 > 1.5)) ||
-      (typeof sensitivityX === 'number' && (!Number.isFinite(sensitivityX) || sensitivityX < 0.1 || sensitivityX > 10.0)) ||
-      (typeof sensitivityY === 'number' && (!Number.isFinite(sensitivityY) || sensitivityY < 0.1 || sensitivityY > 10.0)) ||
-      (typeof deadzone === 'number' && (!Number.isFinite(deadzone) || deadzone < 0 || deadzone > 0.5)) ||
-      (typeof smoothing === 'number' && (!Number.isFinite(smoothing) || smoothing < 0 || smoothing > 1.0)) ||
-      (typeof acceleration === 'number' && (!Number.isFinite(acceleration) || acceleration < 0.5 || acceleration > 5.0))
-    ) {
-      return { valid: false, error: 'Paramètres de zone caméra invalides' };
+  if (obj.camera) {
+    if (typeof obj.camera !== 'object' || Array.isArray(obj.camera)) {
+      return { valid: false, error: 'Camera doit être un objet JSON valide' };
     }
+    const c = obj.camera;
+    const err =
+      checkNumber(c.rectX1 ?? c.rect_x1, -0.5, 1.5, 'Camera rect_x1') ||
+      checkNumber(c.rectY1 ?? c.rect_y1, -0.5, 1.5, 'Camera rect_y1') ||
+      checkNumber(c.rectX2 ?? c.rect_x2, -0.5, 1.5, 'Camera rect_x2') ||
+      checkNumber(c.rectY2 ?? c.rect_y2, -0.5, 1.5, 'Camera rect_y2') ||
+      checkNumber(c.sensitivityX ?? c.sensitivity_x, 0.1, 10.0, 'Camera sensitivity_x') ||
+      checkNumber(c.sensitivityY ?? c.sensitivity_y, 0.1, 10.0, 'Camera sensitivity_y') ||
+      checkNumber(c.deadzone, 0.0, 0.5, 'Camera deadzone') ||
+      checkNumber(c.outerDeadzone ?? c.outer_deadzone, 0.5, 1.0, 'Camera outer_deadzone') ||
+      checkNumber(c.smoothing, 0.0, 1.0, 'Camera smoothing') ||
+      checkNumber(c.acceleration, 0.5, 5.0, 'Camera acceleration') ||
+      checkNumber(c.flickBoost ?? c.flick_boost, 0.5, 10.0, 'Camera flick_boost') ||
+      checkNumber(c.flickThreshold ?? c.flick_threshold, 0.1, 1.0, 'Camera flick_threshold') ||
+      checkNumber(c.adsSensitivityMultiplier ?? c.ads_sensitivity_multiplier, 0.05, 5.0, 'Camera ads_sensitivity_multiplier') ||
+      checkNumber(c.maxStepPixels ?? c.max_step_pixels, 1.0, 500.0, 'Camera max_step_pixels') ||
+      checkBoolean(c.enabled, 'Camera enabled') ||
+      checkBoolean(c.flickAdsSafety ?? c.flick_ads_safety, 'Camera flick_ads_safety') ||
+      checkBoolean(c.adsSensitivityEnabled ?? c.ads_sensitivity_enabled, 'Camera ads_sensitivity_enabled') ||
+      checkBoolean(c.invertX ?? c.invert_x, 'Camera invert_x') ||
+      checkBoolean(c.invertY ?? c.invert_y, 'Camera invert_y') ||
+      checkString(c.responseCurve ?? c.response_curve, 50, 'Camera response_curve');
+    if (err) return { valid: false, error: err };
   }
+
   // Validate Buttons if present
-  if (obj.buttons) {
+  if (obj.buttons !== undefined && obj.buttons !== null) {
     if (!Array.isArray(obj.buttons) || obj.buttons.length > 50) {
       return { valid: false, error: 'Liste de boutons invalide (maximum 50 boutons autorisés)' };
     }
-    for (const btn of obj.buttons) {
-      if (!btn || typeof btn !== 'object') {
-        return { valid: false, error: 'Structure de bouton invalide' };
+    for (let i = 0; i < obj.buttons.length; i++) {
+      const btn = obj.buttons[i];
+      if (!btn || typeof btn !== 'object' || Array.isArray(btn)) {
+        return { valid: false, error: `Structure de bouton #${i + 1} invalide` };
       }
-      if (typeof btn.x === 'number' && (!Number.isFinite(btn.x) || btn.x < -0.5 || btn.x > 1.5)) {
-        return { valid: false, error: 'Coordonnée de bouton X invalide' };
-      }
-      if (typeof btn.y === 'number' && (!Number.isFinite(btn.y) || btn.y < -0.5 || btn.y > 1.5)) {
-        return { valid: false, error: 'Coordonnée de bouton Y invalide' };
-      }
-      if (typeof btn.radius === 'number' && (!Number.isFinite(btn.radius) || btn.radius <= 0 || btn.radius > 0.5)) {
-        return { valid: false, error: 'Rayon de bouton invalide' };
-      }
-      if (typeof btn.label === 'string' && btn.label.length > 100) {
-        return { valid: false, error: 'Libellé de bouton trop long (max 100 caractères)' };
-      }
-      if (typeof btn.gamepadButton === 'string' && btn.gamepadButton.length > 50) {
-        return { valid: false, error: 'Nom de touche manette trop long (max 50 caractères)' };
-      }
+      const xVal = btn.x;
+      const yVal = btn.y;
+      const err =
+        checkString(btn.id, 100, `Bouton #${i + 1} id`) ||
+        checkString(btn.label, 100, `Bouton #${i + 1} label`) ||
+        checkString(btn.gamepadButton ?? btn.gamepad_button, 50, `Bouton #${i + 1} gamepad_button`) ||
+        checkNumber(xVal, -0.5, 1.5, `Bouton #${i + 1} x`) ||
+        checkNumber(yVal, -0.5, 1.5, `Bouton #${i + 1} y`) ||
+        checkNumber(btn.radius, 0.001, 0.5, `Bouton #${i + 1} radius`) ||
+        checkString(btn.mode, 20, `Bouton #${i + 1} mode`) ||
+        checkString(btn.role, 20, `Bouton #${i + 1} role`);
+      if (err) return { valid: false, error: err };
     }
   }
+
   // Validate Settings if present
-  if (obj.settings && typeof obj.settings === 'object') {
-    const { polling_rate_hz, haptic_intensity } = obj.settings;
-    if (typeof polling_rate_hz === 'number' && (!Number.isFinite(polling_rate_hz) || polling_rate_hz < 30 || polling_rate_hz > 240)) {
-      return { valid: false, error: 'Taux de rafraîchissement invalide (30 à 240 Hz)' };
+  if (obj.settings) {
+    if (typeof obj.settings !== 'object' || Array.isArray(obj.settings)) {
+      return { valid: false, error: 'Settings doit être un objet JSON valide' };
     }
-    if (typeof haptic_intensity === 'number' && (!Number.isFinite(haptic_intensity) || haptic_intensity < 0.0 || haptic_intensity > 1.0)) {
-      return { valid: false, error: 'Intensité haptique invalide (0.0 à 1.0)' };
-    }
+    const s = obj.settings;
+    const err =
+      checkNumber(s.polling_rate_hz ?? s.pollingRateHz, 30, 240, 'Settings polling_rate_hz') ||
+      checkNumber(s.haptic_intensity ?? s.hapticIntensity, 0.0, 1.0, 'Settings haptic_intensity') ||
+      checkBoolean(s.haptic_feedback ?? s.hapticFeedback, 'Settings haptic_feedback') ||
+      checkBoolean(s.haptic_device ?? s.hapticDevice, 'Settings haptic_device') ||
+      checkBoolean(s.haptic_controller ?? s.hapticController, 'Settings haptic_controller') ||
+      checkBoolean(s.haptic_fire ?? s.hapticFire, 'Settings haptic_fire') ||
+      checkBoolean(s.haptic_reload ?? s.hapticReload, 'Settings haptic_reload');
+    if (err) return { valid: false, error: err };
   }
+
   return { valid: true };
 }
 
@@ -454,9 +623,9 @@ app.get('/', (c) => {
 
 // 1. List Community Profiles
 app.get('/api/profiles', async (c) => {
-  const clientIp = getClientIp(c);
+  const rateLimitIp = getRateLimitIp(c);
   try {
-    const ipLimit = await checkRateLimit(c.env.DB, `ip:list:${clientIp}`, 60, 60_000, c.executionCtx);
+    const ipLimit = await checkRateLimit(c.env.DB, `ip:list:${rateLimitIp}`, 60, 60_000, c.executionCtx);
     if (!ipLimit.allowed) {
       return c.json({ success: false, error: 'Trop de requêtes sur la liste des profils. Veuillez patienter.' }, 429);
     }
@@ -530,7 +699,7 @@ app.get('/api/profiles', async (c) => {
       page,
       limit,
       total: totalResult?.total || 0,
-      profiles: results
+      profiles: results || []
     });
   } catch (err: any) {
     console.error('[API Error] GET /api/profiles:', err);
@@ -541,9 +710,9 @@ app.get('/api/profiles', async (c) => {
 // 2. Get Single Profile Details (Excluding sensitive PII client_ip & device_hash)
 app.get('/api/profiles/:id', async (c) => {
   const id = c.req.param('id');
-  const clientIp = getClientIp(c);
+  const rateLimitIp = getRateLimitIp(c);
   try {
-    const ipLimit = await checkRateLimit(c.env.DB, `ip:detail:${clientIp}`, 120, 60_000, c.executionCtx);
+    const ipLimit = await checkRateLimit(c.env.DB, `ip:detail:${rateLimitIp}`, 120, 60_000, c.executionCtx);
     if (!ipLimit.allowed) {
       return c.json({ success: false, error: 'Trop de requêtes sur le détail des profils. Veuillez patienter.' }, 429);
     }
@@ -574,6 +743,7 @@ app.get('/api/profiles/:id', async (c) => {
 // 3. Publish a Community Profile
 app.post('/api/profiles', verifySignature, async (c) => {
   const clientIp = getClientIp(c);
+  const rateLimitIp = normalizeIpForRateLimit(clientIp);
   try {
     // Corps déjà authentifié et borné par le middleware verifySignature
     const rawText = c.get('rawBody');
@@ -619,9 +789,9 @@ app.post('/api/profiles', verifySignature, async (c) => {
 
     // 3. Anti-spam & Cooldown: Consolidated Batched Rate Limiting (Single D1 batch execution)
     const multiLimits = await checkMultiRateLimits(c.env.DB, [
-      { key: `ip:pub_cd:${clientIp}`, maxRequests: 1, windowMs: 20_000, errorMessage: 'Veuillez patienter avant de publier à nouveau.' },
+      { key: `ip:pub_cd:${rateLimitIp}`, maxRequests: 1, windowMs: 20_000, errorMessage: 'Veuillez patienter avant de publier à nouveau.' },
       { key: `dev:pub_cd:${deviceIdentity}`, maxRequests: 1, windowMs: 15_000, errorMessage: 'Veuillez patienter entre chaque publication.' },
-      { key: `ip:pub_daily:${clientIp}`, maxRequests: 5, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite journalière atteinte pour cette adresse IP (maximum 5 profils par 24h).' },
+      { key: `ip:pub_daily:${rateLimitIp}`, maxRequests: 5, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite journalière atteinte pour cette adresse IP (maximum 5 profils par 24h).' },
       { key: `dev:pub_daily:${deviceIdentity}`, maxRequests: 10, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite journalière atteinte pour cet appareil (maximum 10 profils par 24h).' }
     ], c.executionCtx);
 
@@ -665,8 +835,8 @@ app.post('/api/profiles', verifySignature, async (c) => {
       (description || '').trim().slice(0, 500),
       game_name.trim().slice(0, 100),
       package_name.trim().slice(0, 150),
-      (author_name || 'Anonymous').trim().slice(0, 50),
-      (controller_type || 'Universal').trim().slice(0, 50),
+      (author_name?.trim() || 'Anonymous').slice(0, 50),
+      (controller_type?.trim() || 'Universal').slice(0, 50),
       finalJsonString,
       deviceIdentity,
       hashedIp,
@@ -689,6 +859,7 @@ app.post('/api/profiles', verifySignature, async (c) => {
 app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
   const profileId = c.req.param('id');
   const clientIp = getClientIp(c);
+  const rateLimitIp = normalizeIpForRateLimit(clientIp);
 
   try {
     let body: any;
@@ -717,7 +888,7 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
     // 1. Anti-Sybil Rate Limiting (IP + cooldown appareil + plafond journalier appareil)
     //    deviceIdentity = hash(deviceToken) : identité opaque, toujours falsifiable (copiable) — PAS une confiance matérielle.
     const multiVoteLimits = await checkMultiRateLimits(c.env.DB, [
-      { key: `ip:vote:${clientIp}`, maxRequests: 30, windowMs: 60_000, errorMessage: 'Trop de votes enregistrés. Veuillez patienter un instant.' },
+      { key: `ip:vote:${rateLimitIp}`, maxRequests: 30, windowMs: 60_000, errorMessage: 'Trop de votes enregistrés. Veuillez patienter un instant.' },
       { key: `dev:vote_cd:${deviceIdentity}`, maxRequests: 10, windowMs: 10_000, errorMessage: 'Votes trop rapides pour cet appareil.' },
       { key: `dev:vote_daily:${deviceIdentity}`, maxRequests: 200, windowMs: 24 * 60 * 60 * 1000, errorMessage: 'Limite de votes journalière atteinte pour cet appareil.' }
     ], c.executionCtx);
@@ -780,7 +951,7 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
 // 5. Increment Download Counter (Profile Check & IP Rate Limiting)
 app.post('/api/profiles/:id/download', verifySignature, async (c) => {
   const profileId = c.req.param('id');
-  const clientIp = getClientIp(c);
+  const rateLimitIp = getRateLimitIp(c);
 
   try {
     let body: any;
@@ -798,7 +969,7 @@ app.post('/api/profiles/:id/download', verifySignature, async (c) => {
     }
 
     // 1. Rate limit downloads per IP: max 60 per hour
-    const ipDlLimit = await checkRateLimit(c.env.DB, `ip:dl:${clientIp}`, 60, 3600_000, c.executionCtx);
+    const ipDlLimit = await checkRateLimit(c.env.DB, `ip:dl:${rateLimitIp}`, 60, 3600_000, c.executionCtx);
     if (!ipDlLimit.allowed) {
       return c.json({ success: false, error: 'Trop de téléchargements enregistrés.' }, 429);
     }
@@ -838,7 +1009,7 @@ app.post('/api/profiles/:id/download', verifySignature, async (c) => {
 
 // 6. Enregistrement d'appareil : émet un token opaque (une seule fois) — identité non dérivable depuis ANDROID_ID
 app.post('/api/device/register', verifySignature, async (c) => {
-  const clientIp = getClientIp(c);
+  const rateLimitIp = getRateLimitIp(c);
   try {
     let body: any;
     try {
@@ -853,8 +1024,8 @@ app.post('/api/device/register', verifySignature, async (c) => {
 
     // Anti-abus : cooldown 30s puis plafond 5/h par IP
     const regLimits = await checkMultiRateLimits(c.env.DB, [
-      { key: `ip:register_cd:${clientIp}`, maxRequests: 1, windowMs: 30_000, errorMessage: 'Trop de tentatives. Réessayez dans un instant.' },
-      { key: `ip:register:${clientIp}`, maxRequests: 5, windowMs: 3600_000, errorMessage: 'Nombre maximal d\'enregistrements atteint pour cette adresse IP (5 par heure).' }
+      { key: `ip:register_cd:${rateLimitIp}`, maxRequests: 1, windowMs: 30_000, errorMessage: 'Trop de tentatives. Réessayez dans un instant.' },
+      { key: `ip:register:${rateLimitIp}`, maxRequests: 5, windowMs: 3600_000, errorMessage: 'Nombre maximal d\'enregistrements atteint pour cette adresse IP (5 par heure).' }
     ], c.executionCtx);
 
     if (!regLimits.allowed) {
@@ -885,7 +1056,7 @@ app.post('/api/device/register', verifySignature, async (c) => {
 
 // 7. Telemetry Ping (Anonymous Unique Devices & Rate-Limited Batch Update)
 app.post('/api/telemetry/ping', verifySignature, async (c) => {
-  const clientIp = getClientIp(c);
+  const rateLimitIp = getRateLimitIp(c);
   try {
     let body: any;
     try {
@@ -907,7 +1078,7 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
 
     // 1. Consolidated Batched Rate Limiting for Telemetry (IP & Device)
     const multiPing = await checkMultiRateLimits(c.env.DB, [
-      { key: `ip:ping:${clientIp}`, maxRequests: 60, windowMs: 3600_000, errorMessage: 'throttled_ip' },
+      { key: `ip:ping:${rateLimitIp}`, maxRequests: 60, windowMs: 3600_000, errorMessage: 'throttled_ip' },
       { key: `ping:${deviceIdentity}`, maxRequests: 30, windowMs: 3600_000, errorMessage: 'throttled_device' }
     ], c.executionCtx);
 
@@ -949,10 +1120,10 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
 
 // 8. Global Statistics & Time-Series History
 app.get('/api/stats', async (c) => {
-  const clientIp = getClientIp(c);
+  const rateLimitIp = getRateLimitIp(c);
   try {
     // Rate limit stats queries per IP: max 15 per minute to protect D1 read quotas
-    const ipLimit = await checkRateLimit(c.env.DB, `ip:stats:${clientIp}`, 15, 60_000, c.executionCtx);
+    const ipLimit = await checkRateLimit(c.env.DB, `ip:stats:${rateLimitIp}`, 15, 60_000, c.executionCtx);
     if (!ipLimit.allowed) {
       return c.json({ success: false, error: 'Trop de requêtes sur les statistiques. Veuillez patienter.' }, 429);
     }
@@ -1064,7 +1235,7 @@ app.get('/api/stats', async (c) => {
   }
 });
 
-export { app };
+export { app, validateProfileStructure };
 
 export default {
   fetch: app.fetch,
@@ -1079,6 +1250,7 @@ export default {
 
       await env.DB.batch([
         env.DB.prepare('DELETE FROM daily_activity WHERE date < ?').bind(activityDate),
+        env.DB.prepare('DELETE FROM daily_downloads WHERE date < ?').bind(activityDate),
         env.DB.prepare('DELETE FROM devices WHERE last_seen < ?').bind(devicesCutoff),
         env.DB.prepare('DELETE FROM rate_limits WHERE window_start < ?').bind(rateLimitCutoff),
       ]);

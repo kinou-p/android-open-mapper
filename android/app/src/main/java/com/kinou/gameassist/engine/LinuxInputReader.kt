@@ -5,6 +5,7 @@ import kotlinx.coroutines.*
 import rikka.shizuku.Shizuku
 import java.io.File
 import java.io.InputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Reads physical controller events directly from the Linux Kernel (/dev/input/event*)
@@ -23,6 +24,7 @@ class LinuxInputReader(
     private val activeStreams = mutableListOf<InputStream>()
     private val childJobs = mutableListOf<Job>()
     private val processLock = Any()
+    private val isStartingOrRunning = AtomicBoolean(false)
     @Volatile
     private var isRunning = false
     private var readerJob: Job? = null
@@ -76,21 +78,39 @@ class LinuxInputReader(
      */
 
     fun start() {
-        if (isRunning) return
+        if (!isStartingOrRunning.compareAndSet(false, true)) return
         isRunning = true
 
         readerJob = scope.launch(Dispatchers.IO) {
             try {
+                if (!isRunning) {
+                    isStartingOrRunning.set(false)
+                    return@launch
+                }
                 val gamepadNodes = findGamepadEventNodes()
+                if (!isRunning) {
+                    isStartingOrRunning.set(false)
+                    return@launch
+                }
                 val is64Bit = isKernel64Bit()
+                if (!isRunning) {
+                    isStartingOrRunning.set(false)
+                    return@launch
+                }
 
                 if (gamepadNodes.isNotEmpty()) {
                     // Multi-node parallel streaming: captures buttons/sticks, touchpad, and motion gyro simultaneously
+                    var launchedCount = 0
                     for (node in gamepadNodes) {
+                        if (!isRunning) break
                         val child = launch(Dispatchers.IO) {
                             val proc = spawnShizukuProcess(arrayOf("cat", node)) ?: return@launch
                             val inStream = proc.inputStream
                             synchronized(processLock) {
+                                if (!isRunning) {
+                                    closeProcessQuietly(proc, inStream)
+                                    return@launch
+                                }
                                 activeProcesses.add(proc)
                                 activeStreams.add(inStream)
                             }
@@ -104,13 +124,34 @@ class LinuxInputReader(
                                 closeProcessQuietly(proc, inStream)
                             }
                         }
-                        synchronized(processLock) { childJobs.add(child) }
+                        synchronized(processLock) {
+                            if (isRunning) {
+                                childJobs.add(child)
+                                launchedCount++
+                            } else {
+                                child.cancel()
+                            }
+                        }
+                    }
+                    if (launchedCount == 0 && isRunning) {
+                        isRunning = false
+                        isStartingOrRunning.set(false)
                     }
                 } else {
                     // Fallback to system getevent in quiet hex mode
-                    val proc = spawnShizukuProcess(arrayOf("getevent", "-q")) ?: return@launch
+                    val proc = spawnShizukuProcess(arrayOf("getevent", "-q"))
+                    if (proc == null) {
+                        isRunning = false
+                        isStartingOrRunning.set(false)
+                        return@launch
+                    }
                     val inStream = proc.inputStream
                     synchronized(processLock) {
+                        if (!isRunning) {
+                            closeProcessQuietly(proc, inStream)
+                            isStartingOrRunning.set(false)
+                            return@launch
+                        }
                         activeProcesses.add(proc)
                         activeStreams.add(inStream)
                     }
@@ -125,6 +166,8 @@ class LinuxInputReader(
                     }
                 }
             } catch (e: Exception) {
+                isStartingOrRunning.set(false)
+                isRunning = false
                 e.printStackTrace()
             }
         }
@@ -151,6 +194,7 @@ class LinuxInputReader(
             }
             activeProcesses.clear()
         }
+        isStartingOrRunning.set(false)
     }
 
     /**

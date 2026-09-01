@@ -202,7 +202,7 @@ class ProfileRepository private constructor(context: Context) {
         synchronized(fileLock) {
             val existing = getProfile(id)
             if (existing?.customScreenshotPath != null) {
-                ScreenshotManager.deleteScreenshot(existing.customScreenshotPath)
+                ScreenshotManager.deleteScreenshot(context, existing.customScreenshotPath)
             }
             profileCache.remove(id)
             val file = File(profilesDir, "$id.json")
@@ -243,13 +243,7 @@ class ProfileRepository private constructor(context: Context) {
      */
     private fun sanitizeImportedScreenshotPath(path: String?): String? {
         if (path.isNullOrBlank()) return null
-        return try {
-            val allowed = File(context.filesDir, "screenshots").canonicalPath + File.separator
-            val candidate = File(path).canonicalPath
-            if (candidate.startsWith(allowed)) path else null
-        } catch (e: Exception) {
-            null
-        }
+        return if (ScreenshotManager.isPathInScreenshotsDir(context, path)) path else null
     }
 
     private fun ensureRolesMigrated(p: GameProfile) {

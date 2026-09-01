@@ -2,7 +2,7 @@ package com.kinou.gameassist.engine
 
 import com.kinou.gameassist.data.model.JoystickConfig
 import com.kinou.gameassist.injector.ShizukuTouchInjector
-import java.util.Random
+import kotlin.random.Random
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -29,7 +29,7 @@ class MovementProcessor(
     private var currentTargetDriftY = 0f
     private var startAmplitudeX = 0f
     private var startDriftY = 0f
-    private val random = Random()
+    private val random = Random
 
     fun process(
         lx: Float,

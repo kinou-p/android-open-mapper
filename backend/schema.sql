@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS profiles (
 
 CREATE INDEX IF NOT EXISTS idx_profiles_pkg ON profiles(package_name);
 CREATE INDEX IF NOT EXISTS idx_profiles_likes ON profiles(likes_count DESC);
+CREATE INDEX IF NOT EXISTS idx_profiles_score ON profiles((likes_count - dislikes_count) DESC, likes_count DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_profiles_downloads ON profiles(downloads_count DESC, likes_count DESC);
 CREATE INDEX IF NOT EXISTS idx_profiles_created ON profiles(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_profiles_device ON profiles(device_hash, created_at);
 CREATE INDEX IF NOT EXISTS idx_profiles_ip ON profiles(client_ip, created_at);
@@ -91,6 +93,7 @@ CREATE TABLE IF NOT EXISTS devices (
 );
 
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen DESC);
+CREATE INDEX IF NOT EXISTS idx_devices_first_seen ON devices(first_seen);
 
 CREATE TABLE IF NOT EXISTS daily_activity (
     date TEXT NOT NULL,

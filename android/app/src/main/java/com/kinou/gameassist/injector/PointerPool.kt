@@ -1,7 +1,7 @@
 package com.kinou.gameassist.injector
 
 import android.view.MotionEvent
-import java.util.Random
+import kotlin.random.Random
 
 data class PointerState(
     var id: Int = 0,
@@ -28,7 +28,7 @@ class PointerPool {
     val cachedProperties = Array(MAX_POINTERS) { MotionEvent.PointerProperties() }
     val cachedCoords = Array(MAX_POINTERS) { MotionEvent.PointerCoords() }
 
-    private val random = Random()
+    private val random = Random
     private var activeCount = 0
 
     fun getActiveCount(): Int = activeCount

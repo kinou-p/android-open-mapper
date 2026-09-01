@@ -2,6 +2,9 @@ package com.kinou.gameassist
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -45,6 +48,10 @@ enum class Screen {
 
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        private const val INTERVAL_BUFFER_CAPACITY = 50
+    }
+
     private lateinit var repository: ProfileRepository
 
     // Live Gamepad Tester States
@@ -54,14 +61,25 @@ class MainActivity : AppCompatActivity() {
     private val liveRy = mutableFloatStateOf(0f)
     private val pressedButtons = mutableStateListOf<String>()
 
-    // Polling Rate & Latency Tracking States
+    // Polling Rate & Latency Tracking States (Zero-allocation circular buffer)
     private val livePollingHz = mutableFloatStateOf(0f)
     private val livePeakHz = mutableFloatStateOf(0f)
     private val liveLatencyMs = mutableFloatStateOf(0f)
     private val liveJitterMs = mutableFloatStateOf(0f)
     private val liveSampleCount = mutableIntStateOf(0)
     private var lastEventNano: Long = 0L
-    private val recentIntervalsNs = ArrayDeque<Long>()
+    private val recentIntervalsNs = LongArray(INTERVAL_BUFFER_CAPACITY)
+    private var intervalBufferHead = 0
+    private var intervalBufferCount = 0
+
+    // High-frequency UI throttle (~30 FPS / 33ms) to prevent Main Thread Compose saturation
+    private var lastUiUpdateTimeMs: Long = 0L
+    private var pendingLx = 0f
+    private var pendingLy = 0f
+    private var pendingRx = 0f
+    private var pendingRy = 0f
+    private val uiHandler = Handler(Looper.getMainLooper())
+    private val flushPendingUiRunnable = Runnable { flushUiStates() }
 
     private fun recordEventTiming() {
         val now = System.nanoTime()
@@ -69,31 +87,46 @@ class MainActivity : AppCompatActivity() {
             val deltaNs = now - lastEventNano
             // Filter realistic active input intervals (0.5ms to 300ms)
             if (deltaNs in 500_000L..300_000_000L) {
-                synchronized(recentIntervalsNs) {
-                    recentIntervalsNs.addLast(deltaNs)
-                    if (recentIntervalsNs.size > 50) recentIntervalsNs.removeFirst()
-
-                    liveSampleCount.intValue++
-                    val avgDeltaNs = recentIntervalsNs.average()
-                    if (avgDeltaNs > 0) {
-                        val hz = (1_000_000_000.0 / avgDeltaNs).toFloat()
-                        livePollingHz.floatValue = hz
-                        if (hz > livePeakHz.floatValue) {
-                            livePeakHz.floatValue = hz
-                        }
-                        liveLatencyMs.floatValue = (avgDeltaNs / 1_000_000.0).toFloat()
-
-                        var varianceSum = 0.0
-                        for (interval in recentIntervalsNs) {
-                            val diff = (interval - avgDeltaNs) / 1_000_000.0
-                            varianceSum += diff * diff
-                        }
-                        liveJitterMs.floatValue = kotlin.math.sqrt(varianceSum / recentIntervalsNs.size).toFloat()
-                    }
+                recentIntervalsNs[intervalBufferHead] = deltaNs
+                intervalBufferHead = (intervalBufferHead + 1) % INTERVAL_BUFFER_CAPACITY
+                if (intervalBufferCount < INTERVAL_BUFFER_CAPACITY) {
+                    intervalBufferCount++
                 }
             }
         }
         lastEventNano = now
+    }
+
+    private fun flushUiStates() {
+        liveLx.floatValue = pendingLx
+        liveLy.floatValue = pendingLy
+        liveRx.floatValue = pendingRx
+        liveRy.floatValue = pendingRy
+
+        val count = intervalBufferCount
+        if (count > 0) {
+            liveSampleCount.intValue += 1
+            var sumNs = 0.0
+            for (i in 0 until count) {
+                sumNs += recentIntervalsNs[i]
+            }
+            val avgDeltaNs = sumNs / count
+            if (avgDeltaNs > 0) {
+                val hz = (1_000_000_000.0 / avgDeltaNs).toFloat()
+                livePollingHz.floatValue = hz
+                if (hz > livePeakHz.floatValue) {
+                    livePeakHz.floatValue = hz
+                }
+                liveLatencyMs.floatValue = (avgDeltaNs / 1_000_000.0).toFloat()
+
+                var varianceSum = 0.0
+                for (i in 0 until count) {
+                    val diff = (recentIntervalsNs[i] - avgDeltaNs) / 1_000_000.0
+                    varianceSum += diff * diff
+                }
+                liveJitterMs.floatValue = kotlin.math.sqrt(varianceSum / count).toFloat()
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -201,7 +234,10 @@ class MainActivity : AppCompatActivity() {
                             Screen.HOME -> HomeScreen(
                                 profiles = profiles,
                                 selectedProfile = selectedProfile,
-                                onSelectProfile = { selectedProfile = it },
+                                onSelectProfile = {
+                                    selectedProfile = it
+                                    OverlayService.updateLiveProfile(it)
+                                },
                                 onStartService = { prof ->
                                     startOverlayService(prof.id)
                                 },
@@ -263,7 +299,11 @@ class MainActivity : AppCompatActivity() {
                                         repository.deleteProfileAsync(id)
                                         val all = repository.getAllProfilesAsync()
                                         profiles = all
-                                        selectedProfile = all.firstOrNull()
+                                        val next = all.firstOrNull()
+                                        selectedProfile = next
+                                        if (next != null) {
+                                            OverlayService.updateLiveProfile(next)
+                                        }
                                     }
                                 },
                                 onDuplicateProfile = { prof ->
@@ -272,6 +312,7 @@ class MainActivity : AppCompatActivity() {
                                         val all = repository.getAllProfilesAsync()
                                         profiles = all
                                         selectedProfile = copy
+                                        OverlayService.updateLiveProfile(copy)
                                     }
                                 },
                                 onImportProfile = { json, onResult ->
@@ -281,6 +322,7 @@ class MainActivity : AppCompatActivity() {
                                             val all = repository.getAllProfilesAsync()
                                             profiles = all
                                             selectedProfile = imp
+                                            OverlayService.updateLiveProfile(imp)
                                             onResult(true)
                                         } else {
                                             onResult(false)
@@ -392,8 +434,8 @@ class MainActivity : AppCompatActivity() {
 
             recordEventTiming()
 
-            liveLx.floatValue = event.getAxisValue(MotionEvent.AXIS_X)
-            liveLy.floatValue = event.getAxisValue(MotionEvent.AXIS_Y)
+            pendingLx = event.getAxisValue(MotionEvent.AXIS_X)
+            pendingLy = event.getAxisValue(MotionEvent.AXIS_Y)
 
             var rx = event.getAxisValue(MotionEvent.AXIS_Z)
             var ry = event.getAxisValue(MotionEvent.AXIS_RZ)
@@ -401,8 +443,18 @@ class MainActivity : AppCompatActivity() {
                 rx = event.getAxisValue(MotionEvent.AXIS_RX)
                 ry = event.getAxisValue(MotionEvent.AXIS_RY)
             }
-            liveRx.floatValue = rx
-            liveRy.floatValue = ry
+            pendingRx = rx
+            pendingRy = ry
+
+            val now = SystemClock.uptimeMillis()
+            if (now - lastUiUpdateTimeMs >= 33L) {
+                lastUiUpdateTimeMs = now
+                uiHandler.removeCallbacks(flushPendingUiRunnable)
+                flushUiStates()
+            } else {
+                uiHandler.removeCallbacks(flushPendingUiRunnable)
+                uiHandler.postDelayed(flushPendingUiRunnable, 35L)
+            }
 
             val ltVal = maxOf(event.getAxisValue(MotionEvent.AXIS_LTRIGGER), event.getAxisValue(MotionEvent.AXIS_BRAKE))
             val rtVal = maxOf(event.getAxisValue(MotionEvent.AXIS_RTRIGGER), event.getAxisValue(MotionEvent.AXIS_GAS))
@@ -454,6 +506,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        uiHandler.removeCallbacks(flushPendingUiRunnable)
         // Ne pas appeler ShizukuManager.destroy() ici : les listeners Shizuku sont globaux
         // et doivent rester actifs tant qu'OverlayService tourne en arrière-plan pendant le jeu.
         // ShizukuManager est un object singleton dont le cycle de vie doit survivre à MainActivity.

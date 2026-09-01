@@ -2,10 +2,12 @@ package com.kinou.gameassist.data.updater
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -334,36 +336,107 @@ object AppUpdateManager {
 
     /**
      * Triggers the Android package installer for the downloaded APK using FileProvider.
-     * Validates that the APK archive is valid and uncorrupted before initiating installation.
+     * Validates that the APK archive is structurally valid, has matching package name,
+     * and is cryptographically signed by the exact same certificate as the running app.
      */
-    fun installApk(context: Context, apkFile: File): Result<Unit> {
-        return try {
+    suspend fun installApk(context: Context, apkFile: File): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
             if (!apkFile.exists() || apkFile.length() <= 0L) {
-                return Result.failure(FileNotFoundException("Fichier APK introuvable ou incomplet"))
+                return@withContext Result.failure(FileNotFoundException("Fichier APK introuvable ou incomplet"))
             }
 
-            // Verify that the APK is structurally valid before launching package installer
+            // 1. Verify that the APK is structurally valid and targets the correct package name
             val archiveInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
             if (archiveInfo == null || archiveInfo.packageName.isNullOrBlank()) {
-                return Result.failure(IllegalStateException("Le fichier APK téléchargé est corrompu ou incomplet"))
+                return@withContext Result.failure(IllegalStateException("Le fichier APK téléchargé est corrompu ou incomplet"))
+            }
+            if (archiveInfo.packageName != context.packageName) {
+                return@withContext Result.failure(SecurityException("Le package cible de l'APK (${archiveInfo.packageName}) ne correspond pas à l'application courante (${context.packageName})."))
             }
 
-            val apkUri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                apkFile
-            )
-
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // 2. Vérification cryptographique : l'APK téléchargé doit être signé par le même certificat que l'app installée
+            val signaturesMatch = verifyApkSignatureAgainstCurrentApp(context, apkFile)
+            if (!signaturesMatch) {
+                return@withContext Result.failure(SecurityException("Échec de vérification cryptographique : le certificat de signature de la mise à jour APK ne correspond pas à l'application installée."))
             }
-            context.startActivity(intent)
+
+            withContext(Dispatchers.Main) {
+                val apkUri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    apkFile
+                )
+
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Vérifie que l'APK téléchargé possède au moins une signature cryptographique correspondant
+     * au certificat de signature de l'application en cours d'exécution.
+     */
+    fun verifyApkSignatureAgainstCurrentApp(context: Context, apkFile: File): Boolean {
+        return try {
+            val pm = context.packageManager
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                PackageManager.GET_SIGNING_CERTIFICATES
+            } else {
+                @Suppress("DEPRECATION")
+                PackageManager.GET_SIGNATURES
+            }
+
+            val archiveInfo = pm.getPackageArchiveInfo(apkFile.absolutePath, flags) ?: return false
+            if (archiveInfo.packageName != context.packageName) {
+                return false
+            }
+
+            val currentPkgInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getPackageInfo(context.packageName, PackageManager.PackageInfoFlags.of(flags.toLong()))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(context.packageName, flags)
+            }
+
+            fun extractSignatures(info: android.content.pm.PackageInfo): List<ByteArray>? {
+                return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val signingInfo = info.signingInfo ?: return null
+                    val sigs = if (signingInfo.hasMultipleSigners()) {
+                        signingInfo.apkContentsSigners
+                    } else {
+                        signingInfo.signingCertificateHistory
+                    }
+                    sigs?.map { it.toByteArray() }
+                } else {
+                    @Suppress("DEPRECATION")
+                    info.signatures?.map { it.toByteArray() }
+                }
+            }
+
+            val archiveSigs = extractSignatures(archiveInfo) ?: return false
+            val currentSigs = extractSignatures(currentPkgInfo) ?: return false
+
+            if (archiveSigs.isEmpty() || currentSigs.isEmpty()) {
+                return false
+            }
+
+            val md = MessageDigest.getInstance("SHA-256")
+            val archiveDigests = archiveSigs.map { md.digest(it).joinToString("") { b -> "%02x".format(b) } }.toSet()
+            val currentDigests = currentSigs.map { md.digest(it).joinToString("") { b -> "%02x".format(b) } }.toSet()
+
+            archiveDigests.intersect(currentDigests).isNotEmpty()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
         }
     }
 

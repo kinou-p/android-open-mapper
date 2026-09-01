@@ -11,12 +11,28 @@ import java.io.FileOutputStream
 
 object ScreenshotManager {
 
-    private fun getScreenshotsDir(context: Context): File {
+    fun getScreenshotsDir(context: Context): File {
         val dir = File(context.filesDir, "screenshots")
         if (!dir.exists()) {
             dir.mkdirs()
         }
         return dir
+    }
+
+    /**
+     * Valide de manière stricte et canonique qu'un chemin de fichier cible
+     * se trouve obligatoirement à l'intérieur du répertoire sécurisé screenshots/ de l'application.
+     * Prévient les attaques par traversée de répertoire (Path Traversal) et l'accès arbitraire aux fichiers internes.
+     */
+    fun isPathInScreenshotsDir(context: Context, path: String?): Boolean {
+        if (path.isNullOrBlank()) return false
+        return try {
+            val allowedDir = getScreenshotsDir(context).canonicalPath + File.separator
+            val candidate = File(path).canonicalPath
+            candidate.startsWith(allowedDir)
+        } catch (_: Exception) {
+            false
+        }
     }
 
     fun saveScreenshotFromUri(context: Context, profileId: String, uri: Uri): String? {
@@ -55,19 +71,19 @@ object ScreenshotManager {
             }
             bitmap.recycle()
             targetFile.absolutePath
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (t: Throwable) {
+            t.printStackTrace()
             null
         }
     }
 
-    suspend fun loadScreenshotBitmapAsync(path: String?, maxWidth: Int = 2560, maxHeight: Int = 1440): Bitmap? = withContext(Dispatchers.IO) {
-        loadScreenshotBitmap(path, maxWidth, maxHeight)
+    suspend fun loadScreenshotBitmapAsync(context: Context, path: String?, maxWidth: Int = 2560, maxHeight: Int = 1440): Bitmap? = withContext(Dispatchers.IO) {
+        loadScreenshotBitmap(context, path, maxWidth, maxHeight)
     }
 
-    fun loadScreenshotBitmap(path: String?, maxWidth: Int = 2560, maxHeight: Int = 1440): Bitmap? {
-        if (path == null) return null
-        val file = File(path)
+    fun loadScreenshotBitmap(context: Context, path: String?, maxWidth: Int = 2560, maxHeight: Int = 1440): Bitmap? {
+        if (!isPathInScreenshotsDir(context, path)) return null
+        val file = File(path!!)
         if (!file.exists()) return null
 
         return try {
@@ -86,21 +102,21 @@ object ScreenshotManager {
                 inPreferredConfig = Bitmap.Config.RGB_565
             }
             BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (t: Throwable) {
+            t.printStackTrace()
             null
         }
     }
 
-    fun deleteScreenshot(path: String?): Boolean {
-        if (path == null) return false
-        val file = File(path)
+    fun deleteScreenshot(context: Context, path: String?): Boolean {
+        if (!isPathInScreenshotsDir(context, path)) return false
+        val file = File(path!!)
         return if (file.exists()) file.delete() else false
     }
 
     fun duplicateScreenshot(context: Context, newProfileId: String, sourcePath: String?): String? {
-        if (sourcePath == null) return null
-        val sourceFile = File(sourcePath)
+        if (!isPathInScreenshotsDir(context, sourcePath)) return null
+        val sourceFile = File(sourcePath!!)
         if (!sourceFile.exists()) return null
 
         return try {
@@ -108,8 +124,8 @@ object ScreenshotManager {
             val targetFile = File(dir, "${newProfileId}_hud.jpg")
             sourceFile.copyTo(targetFile, overwrite = true)
             targetFile.absolutePath
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (t: Throwable) {
+            t.printStackTrace()
             null
         }
     }

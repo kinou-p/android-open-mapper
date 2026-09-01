@@ -597,9 +597,11 @@ fun HomeScreen(
                     } else {
                         Button(
                             onClick = {
-                                val res = AppUpdateManager.installApk(context, downloadedApkFile!!)
-                                if (res.isFailure) {
-                                    Toast.makeText(context, "Erreur install: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                coroutineScope.launch {
+                                    val res = AppUpdateManager.installApk(context, downloadedApkFile!!)
+                                    if (res.isFailure) {
+                                        Toast.makeText(context, "Erreur install: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)

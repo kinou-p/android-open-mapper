@@ -38,9 +38,13 @@ fun VisualHudEditorScreen(
     }
     LaunchedEffect(profile.id, profile.customScreenshotPath) {
         val loaded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            ScreenshotManager.loadScreenshotBitmap(profile.customScreenshotPath)
+            ScreenshotManager.loadScreenshotBitmap(context, profile.customScreenshotPath)
         }
+        val oldBmp = screenshotBitmap
         screenshotBitmap = loaded
+        if (oldBmp != null && !oldBmp.isRecycled && oldBmp != loaded) {
+            oldBmp.recycle()
+        }
     }
 
     var editorViewRef by remember { mutableStateOf<HudEditorOverlayView?>(null) }
@@ -73,16 +77,6 @@ fun VisualHudEditorScreen(
                 if (savedPath != null) {
                     profile.customScreenshotPath = savedPath
                     onSaveProfile(profile)
-
-                    val newBmp = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        ScreenshotManager.loadScreenshotBitmap(savedPath)
-                    }
-                    val oldBmp = screenshotBitmap
-                    editorViewRef?.setScreenshot(newBmp)
-                    screenshotBitmap = newBmp
-                    if (oldBmp != null && !oldBmp.isRecycled && oldBmp != newBmp) {
-                        oldBmp.recycle()
-                    }
                     Toast.makeText(context, context.getString(R.string.screenshot_imported_toast), Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(context, context.getString(R.string.screenshot_import_error), Toast.LENGTH_SHORT).show()
@@ -119,12 +113,8 @@ fun VisualHudEditorScreen(
                         photoPickerLauncher.launch("image/*")
                     },
                     onRemoveScreenshot = {
-                        ScreenshotManager.deleteScreenshot(profile.customScreenshotPath)
+                        ScreenshotManager.deleteScreenshot(ctx, profile.customScreenshotPath)
                         profile.customScreenshotPath = null
-                        val oldBmp = screenshotBitmap
-                        editorViewRef?.setScreenshot(null)
-                        screenshotBitmap = null
-                        oldBmp?.recycle()
                         onSaveProfile(profile)
                         Toast.makeText(ctx, ctx.getString(R.string.screenshot_removed_toast), Toast.LENGTH_SHORT).show()
                     }

@@ -1,5 +1,6 @@
 package com.kinou.gameassist.engine
 
+import android.os.Build
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -121,8 +122,8 @@ class GamepadEngine(
                     nextFrameTimeNanos += intervalNanos
                     val sleepNanos = nextFrameTimeNanos - nowNanos
 
-                    if (sleepNanos > 1_000_000L) {
-                        delay(sleepNanos / 1_000_000L)
+                    if (sleepNanos > 500_000L) {
+                        highPrecisionSleep(sleepNanos)
                     } else if (sleepNanos < -intervalNanos * 2) {
                         // Reset clock if severely lagging behind
                         nextFrameTimeNanos = nowNanos
@@ -139,6 +140,32 @@ class GamepadEngine(
         }
     }
 
+    /**
+     * Sommeil hybride haute précision à 3 phases pour 120 Hz / 240 Hz :
+     * 1. Sommeil grossier par Coroutine (delay) pour les intervalles > 1.5ms en libérant le thread (marge de ~800µs).
+     * 2. Micro-park nanoseconde sans consommation CPU (LockSupport.parkNanos) pour combler l'écart intermédiaire.
+     * 3. Micro-spinlock final (< 60µs) avec Thread.onSpinWait() pour la précision sub-microseconde sans surchauffe.
+     */
+    private suspend fun highPrecisionSleep(targetNanos: Long) {
+        val start = System.nanoTime()
+        // Phase 1: Coarse delay pour libérer le thread Coroutine
+        val coarseSleepMs = (targetNanos - 800_000L) / 1_000_000L
+        if (coarseSleepMs > 0) {
+            delay(coarseSleepMs)
+        }
+        // Phase 2: Micro-park haute résolution au niveau OS (Linux clock_nanosleep / epoll)
+        val remainingAfterDelay = targetNanos - (System.nanoTime() - start)
+        if (remainingAfterDelay > 150_000L) {
+            java.util.concurrent.locks.LockSupport.parkNanos(remainingAfterDelay - 60_000L)
+        }
+        // Phase 3: Spinlock final ultra court (< 60µs)
+        while (System.nanoTime() - start < targetNanos) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Thread.onSpinWait()
+            }
+        }
+    }
+
     fun stop() {
         if (!isRunning && loopJob == null) return
         isRunning = false
@@ -151,26 +178,18 @@ class GamepadEngine(
 
         val job = loopJob
         loopJob = null
-        if (job == null) {
-            injector.resetAllPointers()
-            return
-        }
 
-        // Annule la boucle puis, UNE FOIS la frame courante terminée, réinitialise les
-        // pointeurs pour éviter qu'un touchDown soit injecté après resetAllPointers
-        // (doigt fantôme). Non bloquant : plus de runBlocking sur le thread principal.
-        if (!scope.isActive) {
-            job.cancel()
-            injector.resetAllPointers()
-            return
-        }
-        scope.launch {
-            try {
-                job.cancelAndJoin()
-            } catch (_: CancellationException) {
-                // déjà annulée, normal
-            } finally {
-                injector.resetAllPointers()
+        // Libération immédiate et inconditionnelle des pointeurs physiques
+        injector.resetAllPointers()
+
+        if (job != null && scope.isActive) {
+            scope.launch(NonCancellable) {
+                try {
+                    job.cancelAndJoin()
+                } catch (_: Exception) {
+                } finally {
+                    injector.resetAllPointers()
+                }
             }
         }
     }

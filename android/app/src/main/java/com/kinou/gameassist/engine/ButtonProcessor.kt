@@ -264,8 +264,8 @@ class ButtonProcessor(
                     if (activePointers[tap.btnId] == tap.pointerId) {
                         activePointers.remove(tap.btnId)
                         freePointers.add(tap.pointerId)
-                        if (fireButtonIds.contains(tap.btnId)) activeFireCount.decrementAndGet()
-                        if (adsButtonIds.contains(tap.btnId)) activeAdsCount.decrementAndGet()
+                        if (fireButtonIds.contains(tap.btnId)) activeFireCount.updateAndGet { c -> maxOf(0, c - 1) }
+                        if (adsButtonIds.contains(tap.btnId)) activeAdsCount.updateAndGet { c -> maxOf(0, c - 1) }
                     }
                 }
                 it.remove()

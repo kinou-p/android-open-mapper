@@ -262,38 +262,39 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
      */
     @Suppress("DEPRECATION")
     private fun vibrateSafely(vib: Vibrator, effect: VibrationEffect, durationFallbackMs: Long) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val attributes = VibrationAttributes.Builder()
-                    .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
-                    .build()
-                vib.vibrate(effect, attributes)
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val audioAttributes = AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_GAME)
-                    .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
-                    .build()
-                vib.vibrate(effect, audioAttributes)
-            } else {
-                @Suppress("DEPRECATION")
-                vib.vibrate(durationFallbackMs)
+        val primaryResult = runCatching {
+            when {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> {
+                    val attributes = VibrationAttributes.Builder()
+                        .setUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK)
+                        .build()
+                    vib.vibrate(effect, attributes)
+                }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> {
+                    val audioAttributes = AudioAttributes.Builder()
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(AudioAttributes.USAGE_GAME)
+                        .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
+                        .build()
+                    vib.vibrate(effect, audioAttributes)
+                }
+                else -> {
+                    vib.vibrate(durationFallbackMs)
+                }
             }
-        } catch (e: Exception) {
-            try {
+        }
+
+        if (primaryResult.isFailure) {
+            // Fallback for custom OEM ROMs or legacy drivers rejecting attributes
+            runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     vib.vibrate(effect)
                 } else {
-                    @Suppress("DEPRECATION")
                     vib.vibrate(durationFallbackMs)
                 }
-            } catch (e2: Exception) {
-                try {
-                    @Suppress("DEPRECATION")
-                    vib.vibrate(durationFallbackMs)
-                } catch (e3: Exception) {
-                    // Suppress if hardware level failure
-                }
+            }.onFailure {
+                // Ultimate hardware-level fallback
+                runCatching { vib.vibrate(durationFallbackMs) }
             }
         }
     }

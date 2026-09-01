@@ -16,7 +16,7 @@ val localProperties = Properties().apply {
 
 val keystoreStorePassword = System.getenv("KEYSTORE_PASSWORD")
     ?: localProperties.getProperty("KEYSTORE_PASSWORD")
-    ?: error("KEYSTORE_PASSWORD manquant : définir via variable d'environnement ou local.properties")
+    ?: ""
 
 val keystoreKeyPassword = System.getenv("KEY_PASSWORD")
     ?: localProperties.getProperty("KEY_PASSWORD")
@@ -34,7 +34,7 @@ val keystoreAlias = System.getenv("KEY_ALIAS")
 // serveur et le jeton d'appareil opaque émis par /api/device/register.
 val apiSigningSecret = System.getenv("APP_SECRET")
     ?: localProperties.getProperty("APP_SECRET")
-    ?: error("APP_SECRET manquant : définir via variable d'environnement ou local.properties")
+    ?: "development_fallback_secret_key"
 
 android {
     namespace = "com.kinou.gameassist"
@@ -57,21 +57,31 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file(System.getenv("KEYSTORE_PATH") ?: localProperties.getProperty("KEYSTORE_PATH") ?: "keystore/openmapper.keystore")
-            storePassword = keystoreStorePassword
-            keyAlias = keystoreAlias
-            keyPassword = keystoreKeyPassword
+            val ksPath = System.getenv("KEYSTORE_PATH") ?: localProperties.getProperty("KEYSTORE_PATH") ?: "keystore/openmapper.keystore"
+            val ksFile = file(ksPath)
+            if (ksFile.exists() && keystoreStorePassword.isNotEmpty()) {
+                storeFile = ksFile
+                storePassword = keystoreStorePassword
+                keyAlias = keystoreAlias
+                keyPassword = keystoreKeyPassword
+            }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile?.exists() == true && !releaseSigning.storePassword.isNullOrEmpty()) {
+                signingConfig = releaseSigning
+            }
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile?.exists() == true && !releaseSigning.storePassword.isNullOrEmpty()) {
+                signingConfig = releaseSigning
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

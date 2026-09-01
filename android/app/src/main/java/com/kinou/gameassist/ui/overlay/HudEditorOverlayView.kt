@@ -359,9 +359,13 @@ class HudEditorOverlayView(
         // 1. Background Screenshot (if present)
         val bmp = screenshotBitmap
         if (bmp != null && !bmp.isRecycled) {
-            bitmapSrcRect.set(0, 0, bmp.width, bmp.height)
-            bitmapDstRect.set(0f, 0f, w, h)
-            canvas.drawBitmap(bmp, bitmapSrcRect, bitmapDstRect, bitmapPaint)
+            try {
+                bitmapSrcRect.set(0, 0, bmp.width, bmp.height)
+                bitmapDstRect.set(0f, 0f, w, h)
+                canvas.drawBitmap(bmp, bitmapSrcRect, bitmapDstRect, bitmapPaint)
+            } catch (e: Exception) {
+                // Ignore safe rendering error if bitmap was recycled concurrently
+            }
         }
 
         // 2. Background tint (respects opacity)

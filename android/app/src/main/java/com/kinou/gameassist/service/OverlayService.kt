@@ -5,6 +5,7 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
@@ -72,6 +73,7 @@ class OverlayService : LifecycleService() {
     private var edgeHandleParams: WindowManager.LayoutParams? = null
 
     private var editorView: HudEditorOverlayView? = null
+    private var currentEditorBitmap: Bitmap? = null
     private var inputInterceptorView: View? = null
     private var screenshotLoadJob: kotlinx.coroutines.Job? = null
 
@@ -89,9 +91,13 @@ class OverlayService : LifecycleService() {
 
         lifecycleScope.launch {
             liveProfileUpdateFlow.collect { profile ->
-                if (profile != null && currentProfile?.id == profile.id) {
+                if (profile != null) {
+                    val isDifferent = currentProfile?.id != profile.id
                     currentProfile = profile
                     engine.setProfile(profile)
+                    if (isDifferent) {
+                        updateNotification()
+                    }
                 }
             }
         }
@@ -270,11 +276,17 @@ class OverlayService : LifecycleService() {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
-        // Invisible 1x1 view with focus to capture Gamepad KeyEvents and MotionEvents
+        // Invisible 1x1 fallback interceptor for non-Shizuku mode.
+        // IMPORTANT: FLAG_NOT_FOCUSABLE must NOT be set here, because the Android WindowManager
+        // only delivers Gamepad KeyEvents and GenericMotionEvents to the focused window.
+        // We include FLAG_ALT_FOCUSABLE_IM so this window does not steal IME focus or dismiss
+        // the soft keyboard in the underlying game.
         val params = WindowManager.LayoutParams(
             1, 1,
             layoutFlag,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
+                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -372,16 +384,21 @@ class OverlayService : LifecycleService() {
         screenshotLoadJob?.cancel()
         if (editorProfile.customScreenshotPath != null) {
             screenshotLoadJob = lifecycleScope.launch(Dispatchers.IO) {
-                val bmp = com.kinou.gameassist.data.repository.ScreenshotManager.loadScreenshotBitmapAsync(editorProfile.customScreenshotPath)
+                val bmp = com.kinou.gameassist.data.repository.ScreenshotManager.loadScreenshotBitmapAsync(this@OverlayService, editorProfile.customScreenshotPath)
                 if (!isActive) {
-                    bmp?.recycle()
+                    bmp?.let { if (!it.isRecycled) it.recycle() }
                     return@launch
                 }
                 withContext(Dispatchers.Main) {
                     if (editorView == newEditor) {
+                        val old = currentEditorBitmap
+                        currentEditorBitmap = bmp
                         newEditor.setScreenshot(bmp)
+                        if (old != null && !old.isRecycled && old != bmp) {
+                            old.recycle()
+                        }
                     } else {
-                        bmp?.recycle()
+                        bmp?.let { if (!it.isRecycled) it.recycle() }
                     }
                 }
             }
@@ -418,6 +435,12 @@ class OverlayService : LifecycleService() {
             safeRemoveView(it)
             editorView = null
         }
+        currentEditorBitmap?.let {
+            if (!it.isRecycled) {
+                it.recycle()
+            }
+        }
+        currentEditorBitmap = null
         edgeHandleView?.visibility = View.VISIBLE
         inputInterceptorView?.requestFocus()
     }
@@ -477,6 +500,12 @@ class OverlayService : LifecycleService() {
         screenshotLoadJob = null
 
         editorView?.releaseBitmap()
+        currentEditorBitmap?.let {
+            if (!it.isRecycled) {
+                it.recycle()
+            }
+        }
+        currentEditorBitmap = null
         safeRemoveView(edgeHandleView)
         edgeHandleView = null
         safeRemoveView(editorView)
