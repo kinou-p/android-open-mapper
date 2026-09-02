@@ -218,57 +218,129 @@ object BinaryInputParser {
 
     /**
      * Converts a raw Linux gamepad stick coordinate to normalized Float [-1.0f .. +1.0f].
-     *
-     * Linux / Android Gamepad Drivers (ABS_X, ABS_Y, ABS_RX, ABS_RY, etc.):
-     * - Standard 16-bit Unsigned (0..65535): Center = 32768 (0x8000), Min = 0 (-1.0f), Max = 65535 (+1.0f)
-     * - Signed 16-bit extension (-32768..-1): Negative offset mapping
      */
-    fun normalizeStick(raw: Long): Float {
-        return when {
-            raw in 0L..65535L -> {
-                val delta = (raw - 32768L).toFloat()
-                if (delta > 0f) {
-                    (delta / 32767f).coerceIn(-1.0f, 1.0f)
+    fun normalizeStick(raw: Long, rangeMode: StickRangeMode = StickRangeMode.UNSIGNED_16BIT): Float {
+        return when (rangeMode) {
+            StickRangeMode.UNSIGNED_8BIT -> {
+                val delta = (raw - 128L).toFloat()
+                if (delta > 0f) (delta / 127f).coerceIn(-1.0f, 1.0f)
+                else (delta / 128f).coerceIn(-1.0f, 1.0f)
+            }
+            StickRangeMode.SIGNED_16BIT -> {
+                (raw.toFloat() / 32768f).coerceIn(-1.0f, 1.0f)
+            }
+            StickRangeMode.UNSIGNED_16BIT, StickRangeMode.AUTO -> {
+                if (raw < 0L) {
+                    (raw.toFloat() / 32768f).coerceIn(-1.0f, 1.0f)
                 } else {
-                    (delta / 32768f).coerceIn(-1.0f, 1.0f)
+                    val delta = (raw - 32768L).toFloat()
+                    if (delta > 0f) (delta / 32767f).coerceIn(-1.0f, 1.0f)
+                    else (delta / 32768f).coerceIn(-1.0f, 1.0f)
                 }
             }
-            raw in -32768L..-1L -> {
-                (raw / 32768f).coerceIn(-1.0f, 1.0f)
-            }
-            else -> 0.0f
         }
     }
 
     /**
-     * Fast mapping of Linux EV_KEY keycodes to button names.
+     * Fast mapping of Linux EV_KEY keycodes to button names per controller layout.
      */
-    fun evKeyToButtonName(code: Int): String? {
-        return when (code) {
-            0x0130 -> "BUTTON_A"       // BTN_SOUTH (Cross / A)
-            0x0131 -> "BUTTON_B"       // BTN_EAST (Circle / B)
-            0x0133 -> "BUTTON_X"       // BTN_WEST (Square / X)
-            0x0134 -> "BUTTON_Y"       // BTN_NORTH (Triangle / Y)
-            0x0136 -> "BUTTON_L1"      // BTN_TL
-            0x0137 -> "BUTTON_R1"      // BTN_TR
-            0x0138 -> "BUTTON_L2"      // BTN_TL2
-            0x0139 -> "BUTTON_R2"      // BTN_TR2
-            0x013a -> "BUTTON_SELECT"  // BTN_SELECT / Back / View
-            0x013b -> "BUTTON_START"   // BTN_START / Menu
-            0x013c -> "BUTTON_MODE"    // BTN_MODE (Xbox / PS Logo)
-            0x013d -> "BUTTON_THUMBL"  // BTN_THUMBL (L3)
-            0x013e -> "BUTTON_THUMBR"  // BTN_THUMBR (R3)
+    fun evKeyToButtonName(code: Int, layoutType: ControllerLayoutType = ControllerLayoutType.XBOX_BLUETOOTH): String? {
+        when (layoutType) {
+            ControllerLayoutType.PLAYSTATION -> {
+                when (code) {
+                    0x0130 -> return "BUTTON_A"       // Cross
+                    0x0131 -> return "BUTTON_B"       // Circle
+                    0x0132 -> return "BUTTON_X"       // Square
+                    0x0133 -> return "BUTTON_Y"       // Triangle
+                    0x0134 -> return "BUTTON_L1"      // L1
+                    0x0135 -> return "BUTTON_R1"      // R1
+                    0x0136 -> return "BUTTON_L2"      // L2
+                    0x0137 -> return "BUTTON_R2"      // R2
+                    0x0138 -> return "BUTTON_SELECT"  // Share / Create
+                    0x0139 -> return "BUTTON_START"   // Options
+                    0x013a -> return "BUTTON_MODE"    // PS Button
+                    0x013b -> return "BUTTON_THUMBL"  // L3
+                    0x013c -> return "BUTTON_THUMBR"  // R3
+                }
+            }
+            ControllerLayoutType.NINTENDO_SWITCH -> {
+                when (code) {
+                    0x0130 -> return "BUTTON_B"       // B (Bottom)
+                    0x0131 -> return "BUTTON_A"       // A (Right)
+                    0x0132 -> return "BUTTON_Y"       // Y (Left)
+                    0x0133 -> return "BUTTON_X"       // X (Top)
+                    0x0134 -> return "BUTTON_L1"      // L
+                    0x0135 -> return "BUTTON_R1"      // R
+                    0x0136 -> return "BUTTON_L2"      // ZL
+                    0x0137 -> return "BUTTON_R2"      // ZR
+                    0x0138 -> return "BUTTON_SELECT"  // Minus
+                    0x0139 -> return "BUTTON_START"   // Plus
+                    0x013a -> return "BUTTON_MODE"    // Home
+                    0x013b, 0x013d -> return "BUTTON_THUMBL" // L3
+                    0x013c, 0x013e -> return "BUTTON_THUMBR" // R3
+                }
+            }
+            else -> {
+                // Xbox Wired, Xbox Bluetooth, Generic
+                when (code) {
+                    0x0130 -> return "BUTTON_A"       // A
+                    0x0131 -> return "BUTTON_B"       // B
+                    0x0132 -> return "BUTTON_X"       // X (alternate)
+                    0x0133 -> return "BUTTON_X"       // X (standard Linux xpad BTN_NORTH)
+                    0x0134 -> return "BUTTON_Y"       // Y (standard Linux xpad BTN_WEST)
+                    0x0135 -> return "BUTTON_R1"      // R1 (when 0x134 is L1)
+                    0x0136 -> return "BUTTON_L1"      // LB / L1
+                    0x0137 -> return "BUTTON_R1"      // RB / R1
+                    0x0138 -> return "BUTTON_L2"      // LT / L2
+                    0x0139 -> return "BUTTON_R2"      // RT / R2
+                    0x013a -> return "BUTTON_SELECT"  // View / Back / Select
+                    0x013b -> return "BUTTON_START"   // Menu / Start
+                    0x013c -> return "BUTTON_MODE"    // Xbox Logo / Guide
+                    0x013d -> return "BUTTON_THUMBL"  // L3 / LS
+                    0x013e -> return "BUTTON_THUMBR"  // R3 / RS
+                }
+            }
+        }
 
-            // D-Pad buttons
+        // Common D-Pad, Paddle & Trigger Happy mappings
+        return when (code) {
             0x0220, 0x0103 -> "DPAD_UP"
             0x0221, 0x0104 -> "DPAD_DOWN"
             0x0222, 0x0105 -> "DPAD_LEFT"
             0x0223, 0x0106 -> "DPAD_RIGHT"
 
-            // Generic gamepad extra buttons (M1/M2 or Paddle buttons)
-            0x013f -> "BUTTON_PADDLE1"
-            0x0140 -> "BUTTON_PADDLE2"
+            // Xbox Elite Paddles (P1, P2, P3, P4)
+            0x013f, 0x02c0 -> "BUTTON_PADDLE1" // Upper Right Paddle (P1)
+            0x0140, 0x02c1 -> "BUTTON_PADDLE2" // Upper Left Paddle (P2)
+            0x02c2 -> "BUTTON_PADDLE3"         // Lower Right Paddle (P3)
+            0x02c3 -> "BUTTON_PADDLE4"         // Lower Left Paddle (P4)
+
+            // BTN_TRIGGER_HAPPY (0x02c0 .. 0x02cf)
+            0x02c4 -> "BUTTON_PADDLE1"
+            0x02c5 -> "BUTTON_PADDLE2"
+
+            // Numeric gamepads (0x0100..0x010f)
+            0x0100 -> "BUTTON_A"
+            0x0101 -> "BUTTON_B"
+            0x0102 -> "BUTTON_X"
+
             else -> null
         }
     }
+}
+
+enum class ControllerLayoutType {
+    XBOX_WIRED_USB,
+    XBOX_BLUETOOTH,
+    PLAYSTATION,
+    NINTENDO_SWITCH,
+    GENERIC_BLUETOOTH,
+    GENERIC_USB
+}
+
+enum class StickRangeMode {
+    UNSIGNED_16BIT,
+    UNSIGNED_8BIT,
+    SIGNED_16BIT,
+    AUTO
 }

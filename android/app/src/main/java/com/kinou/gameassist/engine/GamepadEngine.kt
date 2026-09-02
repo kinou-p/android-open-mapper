@@ -1,6 +1,10 @@
 package com.kinou.gameassist.engine
 
+import android.content.Context
+import android.hardware.input.InputManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -9,10 +13,34 @@ import com.kinou.gameassist.injector.ShizukuTouchInjector
 import kotlinx.coroutines.*
 
 class GamepadEngine(
+    private val context: Context,
     private val injector: ShizukuTouchInjector,
     private val scope: CoroutineScope,
     val hapticManager: HapticManager? = null
 ) {
+    private val inputManager = context.applicationContext.getSystemService(Context.INPUT_SERVICE) as? InputManager
+    private val deviceHotplugListener = object : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) {
+            if (isRunning) {
+                hapticManager?.refreshGamepadVibrators()
+                linuxReader.restart()
+            }
+        }
+
+        override fun onInputDeviceRemoved(deviceId: Int) {
+            if (isRunning) {
+                hapticManager?.refreshGamepadVibrators()
+                linuxReader.restart()
+            }
+        }
+
+        override fun onInputDeviceChanged(deviceId: Int) {
+            if (isRunning) {
+                hapticManager?.refreshGamepadVibrators()
+            }
+        }
+    }
+
     val movementProcessor = MovementProcessor(injector)
     val cameraProcessor = CameraProcessor(injector)
     val buttonProcessor = ButtonProcessor(injector, scope, hapticManager)
@@ -131,6 +159,10 @@ class GamepadEngine(
             if (isRunning) return
             isRunning = true
 
+            try {
+                inputManager?.registerInputDeviceListener(deviceHotplugListener, Handler(Looper.getMainLooper()))
+            } catch (_: Exception) {}
+
             hapticManager?.registerListener()
             injector.connect()
             linuxReader.start()
@@ -226,6 +258,9 @@ class GamepadEngine(
         synchronized(lifecycleLock) {
             if (!isRunning && engineThread == null) return
             isRunning = false
+            try {
+                inputManager?.unregisterInputDeviceListener(deviceHotplugListener)
+            } catch (_: Exception) {}
             linuxReader.stop()
             pressedRawButtons.clear()
             movementProcessor.release()

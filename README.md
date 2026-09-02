@@ -23,10 +23,6 @@
 > 
 > If you encounter any bugs, controller recognition issues, or have ideas for improvements, please feel free to [**Open an Issue on GitHub**](https://github.com/kinou-p/android-open-mapper/issues) with your device model, controller model, and Android version!
 
-> [!TIP]
-> **🚀 Free & Modern Alternative to Mantis Gamepad Pro, Panda Gamepad & Octopus**
-> Unlike proprietary apps (*Mantis Gamepad Pro*, *Panda*, *Octopus*), **OpenMapper** is **100% free**, **without annoying ads**, **without paid subscriptions or paywalls**, and **fully open-source**. It offers native sub-millisecond zero-allocation input streaming, e-Sport 180° flick boost curves, full haptic feedback, and a built-in community profile hub!
-
 ---
 
 ## ⚡ Quick Start & Installation
@@ -87,26 +83,37 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
 ## ✨ Key Features & Highlights
 
 ### 🏎️ High-Performance Mapping Engine
-- **Ultra-Low Latency (< 0.5 ms)**: Direct Linux `/dev/input/event*` binary stream parsing with zero memory allocation and zero garbage collection overhead.
-- **120 Hz – 240 Hz Real-Time Loop**: High-priority dedicated engine thread synchronized with modern high-refresh-rate gaming screens.
-- **Seamless 360° Camera**: Dual-pointer handoff technology eliminating screen edge locks and angle snapping during continuous 360° rotations.
-- **Dynamic Flick & Boost Curve**: Micro-precision center deadzone combined with instant 180° turn acceleration at outer stick reach.
+  - **Ultra-Low Latency (< 0.5 ms)**: Direct Linux `/dev/input/event*` binary stream parsing with zero memory allocation and zero garbage collection overhead.
+  - **120 Hz – 240 Hz Real-Time Loop**: High-priority dedicated engine thread synchronized with modern high-refresh-rate gaming screens.
+  - **Seamless 360° Camera**: Dual-pointer handoff technology eliminating screen edge locks and angle snapping during continuous 360° rotations.
+  - **Dynamic Flick & Boost Curve**: Micro-precision center deadzone combined with instant 180° turn acceleration at outer stick reach.
 
 ### 🎯 Tactical Assists & Aim Enhancements
-- **Organic Jiggle Strafe**: Automated left/right dodge patterns during weapon fire with randomized feints and humanized timing variations.
-- **Vertical Anti-Recoil**: Smooth automated pull-down compensation with configurable speed (0.1x – 10.0x) and dedicated ADS-Only mode.
-- **Rotational Aim Assist (RAA) Keep-Alive**: Micro-dithering ensures in-game aim assist rotational tracking remains active even when stationary.
-- **Controller Rumble & Recoil**: Dynamic physical gamepad vibration with continuous firing recoil pulses and mechanical reload double-pulses.
+  - **Organic Jiggle Strafe**: Automated left/right dodge patterns during weapon fire with randomized feints and humanized timing variations.
+  - **Vertical Anti-Recoil**: Smooth automated pull-down compensation with configurable speed (0.1x – 10.0x) and dedicated ADS-Only mode.
+  - **Rotational Aim Assist (RAA) Keep-Alive**: Micro-dithering ensures in-game aim assist rotational tracking remains active even when stationary.
+  - **Controller Rumble & Recoil**: Dynamic physical gamepad vibration with continuous firing recoil pulses and mechanical reload double-pulses.
 
 ### 🪟 In-Game HUD & Key Customization
-- **In-Game Floating HUD Editor**: Retractable side-drawer to drag, scale, and test button mappings live without leaving your match.
-- **Special Button Roles**: One-tap assignment for *Primary Fire*, *Reload Magazine*, and *ADS Scope* with dedicated sensitivities.
-- **Multi-Profile Management**: Create, duplicate, rename, backup, and export custom mappings for any game.
+  - **In-Game Floating HUD Editor**: Retractable side-drawer to drag, scale, and test button mappings live without leaving your match.
+  - **Special Button Roles**: One-tap assignment for *Primary Fire*, *Reload Magazine*, and *ADS Scope* with dedicated sensitivities.
+  - **Multi-Profile Management**: Create, duplicate, rename, backup, and export custom mappings for any game.
 
 ### 🌐 Cloud Community & Hardware Diagnostic
-- **1-Click Community Hub**: Search, download, and vote on community-made game presets backed by Cloudflare D1 edge database.
-- **Hardware Diagnostic Suite**: Real-time analog stick visualizer, 3-second automated drift test, circularity error check, and polling rate (Hz) monitor.
-- **In-App Auto-Updater**: Direct background detection and 1-tap installation of new GitHub releases directly within the app.
+  - **1-Click Community Hub**: Search, download, and vote on community-made game presets backed by Cloudflare D1 edge database.
+  - **Hardware Diagnostic Suite**: Real-time analog stick visualizer, 3-second automated drift test, circularity error check, and polling rate (Hz) monitor.
+  - **In-App Auto-Updater**: Direct background detection and 1-tap installation of new GitHub releases directly within the app.
+
+---
+
+## 🎮 Controller Compatibility
+
+| Controller Type | Supported Models | Connection Modes |
+| :--- | :--- | :---: |
+| **Xbox Controllers** | Xbox Series X/S, Xbox One, **Xbox Elite Series 2**, Xbox Adaptive | Bluetooth / USB-C |
+| **PlayStation** | DualSense (PS5), DualShock 4 (PS4) | Bluetooth / USB |
+| **Telescopic Mobile** | Razer Kishi V1/V2, GameSir (G8 Galileo, X2/X3), Backbone One, BSP-D8 | USB-C OTG / Bluetooth |
+| **Nintendo & Others** | Nintendo Switch Pro Controller, 8BitDo (Ultimate, Pro 2, SN30 Pro) | Bluetooth / USB |
 
 ---
 

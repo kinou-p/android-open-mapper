@@ -98,84 +98,101 @@ object GamepadDetector {
 
     fun getConnectedGamepads(context: Context): List<GamepadDevice> {
         val list = mutableListOf<GamepadDevice>()
-        val deviceIds = InputDevice.getDeviceIds()
-        val usbManager = try {
-            context.getSystemService(Context.USB_SERVICE) as? UsbManager
-        } catch (e: Throwable) {
-            null
-        }
-
-        for (id in deviceIds) {
-            val dev = InputDevice.getDevice(id) ?: continue
-
-            // 1. Android virtual flag check
-            if (dev.isVirtual) continue
-
-            val devName = dev.name ?: continue
-
-            // 2. Ignore known virtual / touch / sensor driver names
-            val isIgnored = IGNORED_DEVICE_KEYWORDS.any { keyword ->
-                devName.contains(keyword, ignoreCase = true)
+        try {
+            val deviceIds = try {
+                InputDevice.getDeviceIds()
+            } catch (_: Throwable) {
+                IntArray(0)
             }
-            if (isIgnored) continue
-
-            val sources = dev.sources
-            val isGamepadSource = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
-            val isJoystickSource = (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-
-            if (!isGamepadSource && !isJoystickSource) continue
-
-            // 3. If it is purely a touchscreen claiming joystick axes, discard
-            val isTouchscreen = (sources and InputDevice.SOURCE_TOUCHSCREEN) == InputDevice.SOURCE_TOUCHSCREEN
-            if (isTouchscreen && !isGamepadSource) continue
-
-            // 4. Validate physical gamepad capabilities
-            val hasKeysResult = try {
-                dev.hasKeys(*STANDARD_GAMEPAD_KEYS)
-            } catch (e: Throwable) {
-                BooleanArray(STANDARD_GAMEPAD_KEYS.size) { false }
+            val usbManager = try {
+                context.getSystemService(Context.USB_SERVICE) as? UsbManager
+            } catch (_: Throwable) {
+                null
             }
-            val hasAnyGamepadKey = hasKeysResult.any { it }
 
-            val hasStickAxes = (dev.getMotionRange(MotionEvent.AXIS_X) != null && dev.getMotionRange(MotionEvent.AXIS_Y) != null) &&
-                    (dev.getMotionRange(MotionEvent.AXIS_Z) != null ||
-                     dev.getMotionRange(MotionEvent.AXIS_RZ) != null ||
-                     dev.getMotionRange(MotionEvent.AXIS_RX) != null ||
-                     dev.getMotionRange(MotionEvent.AXIS_RY) != null ||
-                     dev.getMotionRange(MotionEvent.AXIS_HAT_X) != null ||
-                     dev.getMotionRange(MotionEvent.AXIS_HAT_Y) != null)
-
-            // Must have either real gamepad keys or analog stick axes
-            if (!hasAnyGamepadKey && !hasStickAxes) continue
-
-            // 5. Battery info (Bluetooth controllers on Android 12+)
-            var battery: Int? = null
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            for (id in deviceIds) {
                 try {
-                    val cap = dev.batteryState.capacity
-                    if (cap in 0.0f..1.0f) {
-                        battery = (cap * 100).toInt()
+                    val dev = InputDevice.getDevice(id) ?: continue
+
+                    // 1. Android virtual flag check
+                    if (dev.isVirtual) continue
+
+                    val devName = dev.name ?: continue
+
+                    // 2. Ignore known virtual / touch / sensor driver names
+                    val isIgnored = IGNORED_DEVICE_KEYWORDS.any { keyword ->
+                        devName.contains(keyword, ignoreCase = true)
                     }
-                } catch (e: Throwable) {}
+                    if (isIgnored) continue
+
+                    val sources = dev.sources
+                    val isGamepadSource = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                    val isJoystickSource = (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+
+                    if (!isGamepadSource && !isJoystickSource) continue
+
+                    // 3. If it is purely a touchscreen claiming joystick axes, discard
+                    val isTouchscreen = (sources and InputDevice.SOURCE_TOUCHSCREEN) == InputDevice.SOURCE_TOUCHSCREEN
+                    if (isTouchscreen && !isGamepadSource) continue
+
+                    // 4. Validate physical gamepad capabilities
+                    val hasKeysResult = try {
+                        dev.hasKeys(*STANDARD_GAMEPAD_KEYS)
+                    } catch (e: Throwable) {
+                        BooleanArray(STANDARD_GAMEPAD_KEYS.size) { false }
+                    }
+                    val hasAnyGamepadKey = hasKeysResult.any { it }
+
+                    val hasStickAxes = (dev.getMotionRange(MotionEvent.AXIS_X) != null && dev.getMotionRange(MotionEvent.AXIS_Y) != null) &&
+                            (dev.getMotionRange(MotionEvent.AXIS_Z) != null ||
+                             dev.getMotionRange(MotionEvent.AXIS_RZ) != null ||
+                             dev.getMotionRange(MotionEvent.AXIS_RX) != null ||
+                             dev.getMotionRange(MotionEvent.AXIS_RY) != null ||
+                             dev.getMotionRange(MotionEvent.AXIS_HAT_X) != null ||
+                             dev.getMotionRange(MotionEvent.AXIS_HAT_Y) != null)
+
+                    // Must have either real gamepad keys or analog stick axes
+                    if (!hasAnyGamepadKey && !hasStickAxes) continue
+
+                    // 5. Battery info (Bluetooth controllers on Android 12+)
+                    var battery: Int? = null
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        try {
+                            val cap = dev.batteryState?.capacity
+                            if (cap != null && cap in 0.0f..1.0f) {
+                                battery = (cap * 100).toInt()
+                            }
+                        } catch (_: Throwable) {}
+                    }
+
+                    // 6. Accurately detect USB vs Bluetooth safely
+                    var isUsbByManager = false
+                    try {
+                        val usbList = usbManager?.deviceList
+                        if (usbList != null) {
+                            isUsbByManager = usbList.values.any { usbDev ->
+                                (usbDev.vendorId == dev.vendorId && usbDev.productId == dev.productId && dev.vendorId != 0) ||
+                                usbDev.deviceName.equals(devName, ignoreCase = true)
+                            }
+                        }
+                    } catch (_: Throwable) {}
+
+                    val isUsbByName = devName.contains("usb", ignoreCase = true) ||
+                                      devName.contains("wired", ignoreCase = true) ||
+                                      devName.contains("cable", ignoreCase = true) ||
+                                      devName.contains("scrcpy", ignoreCase = true)
+
+                    val isUsb = isUsbByManager || isUsbByName
+                    val isBt = !isUsb
+
+                    // Clean up name for display
+                    val cleanName = devName.trim()
+                    list.add(GamepadDevice(id, cleanName, isBt, battery))
+                } catch (_: Throwable) {
+                    // Skip device if disconnected concurrently
+                }
             }
-
-            // 6. Accurately detect USB vs Bluetooth
-            val isUsbByManager = usbManager?.deviceList?.values?.any { usbDev ->
-                (usbDev.vendorId == dev.vendorId && usbDev.productId == dev.productId && dev.vendorId != 0) ||
-                usbDev.deviceName.equals(devName, ignoreCase = true)
-            } == true
-
-            val isUsbByName = devName.contains("usb", ignoreCase = true) ||
-                              devName.contains("wired", ignoreCase = true) ||
-                              devName.contains("cable", ignoreCase = true)
-
-            val isUsb = isUsbByManager || isUsbByName
-            val isBt = !isUsb
-
-            // Clean up name for display
-            val cleanName = devName.trim()
-            list.add(GamepadDevice(id, cleanName, isBt, battery))
-        }
+        } catch (_: Throwable) {}
         return list
     }
 }

@@ -170,6 +170,37 @@ class LinuxInputReaderTest {
     }
 
     @Test
+    fun testPlayStationKeyMapping() {
+        val ps = ControllerLayoutType.PLAYSTATION
+        assertEquals("BUTTON_A", BinaryInputParser.evKeyToButtonName(0x0130, ps)) // Cross
+        assertEquals("BUTTON_B", BinaryInputParser.evKeyToButtonName(0x0131, ps)) // Circle
+        assertEquals("BUTTON_X", BinaryInputParser.evKeyToButtonName(0x0132, ps)) // Square
+        assertEquals("BUTTON_Y", BinaryInputParser.evKeyToButtonName(0x0133, ps)) // Triangle
+        assertEquals("BUTTON_L1", BinaryInputParser.evKeyToButtonName(0x0134, ps)) // L1
+        assertEquals("BUTTON_R1", BinaryInputParser.evKeyToButtonName(0x0135, ps)) // R1
+        assertEquals("BUTTON_L2", BinaryInputParser.evKeyToButtonName(0x0136, ps)) // L2
+        assertEquals("BUTTON_R2", BinaryInputParser.evKeyToButtonName(0x0137, ps)) // R2
+    }
+
+    @Test
+    fun testStickRangeModes() {
+        // 8-bit unsigned (0..255, center 128)
+        assertEquals(0.0f, BinaryInputParser.normalizeStick(128L, StickRangeMode.UNSIGNED_8BIT), 0.001f)
+        assertEquals(1.0f, BinaryInputParser.normalizeStick(255L, StickRangeMode.UNSIGNED_8BIT), 0.001f)
+        assertEquals(-1.0f, BinaryInputParser.normalizeStick(0L, StickRangeMode.UNSIGNED_8BIT), 0.001f)
+
+        // 16-bit unsigned (0..65535, center 32768)
+        assertEquals(0.0f, BinaryInputParser.normalizeStick(32768L, StickRangeMode.UNSIGNED_16BIT), 0.001f)
+        assertEquals(1.0f, BinaryInputParser.normalizeStick(65535L, StickRangeMode.UNSIGNED_16BIT), 0.001f)
+        assertEquals(-1.0f, BinaryInputParser.normalizeStick(0L, StickRangeMode.UNSIGNED_16BIT), 0.001f)
+
+        // 16-bit signed (-32768..32767, center 0)
+        assertEquals(0.0f, BinaryInputParser.normalizeStick(0L, StickRangeMode.SIGNED_16BIT), 0.001f)
+        assertEquals(1.0f, BinaryInputParser.normalizeStick(32767L, StickRangeMode.SIGNED_16BIT), 0.001f)
+        assertEquals(-1.0f, BinaryInputParser.normalizeStick(-32768L, StickRangeMode.SIGNED_16BIT), 0.001f)
+    }
+
+    @Test
     fun testParseBinaryEvent64_RightStickAndTriggers() {
         val outEvent = BinaryInputParser.RawInputEvent()
 

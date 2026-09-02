@@ -83,7 +83,7 @@ class OverlayService : LifecycleService() {
         repository = ProfileRepository.getInstance(this)
         injector = ShizukuTouchInjector()
         hapticManager = com.kinou.gameassist.engine.HapticManager(this)
-        engine = GamepadEngine(injector, lifecycleScope, hapticManager)
+        engine = GamepadEngine(this, injector, lifecycleScope, hapticManager)
 
         engine.onHotSwitchProfile = { forward ->
             cycleProfile(forward)

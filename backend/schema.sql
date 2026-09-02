@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS devices (
     first_seen INTEGER NOT NULL,
     last_seen INTEGER NOT NULL,
     app_version TEXT,
+    device_model TEXT,
+    os_version TEXT,
     launch_count INTEGER DEFAULT 1
 );
 
@@ -99,6 +101,8 @@ CREATE TABLE IF NOT EXISTS daily_activity (
     date TEXT NOT NULL,
     device_hash TEXT NOT NULL,
     app_version TEXT,
+    device_model TEXT,
+    os_version TEXT,
     launch_count INTEGER DEFAULT 1,
     last_seen INTEGER NOT NULL,
     PRIMARY KEY (date, device_hash)

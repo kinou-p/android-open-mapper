@@ -1,6 +1,7 @@
 package com.kinou.gameassist.data.community
 
 import android.content.Context
+import android.os.Build
 import com.kinou.gameassist.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -90,7 +91,11 @@ class CommunityApiClient(private val context: Context) {
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("User-Agent", USER_AGENT)
             }
-            val payload = mapOf("appVersion" to BuildConfig.VERSION_NAME)
+            val payload = mapOf(
+                "appVersion" to BuildConfig.VERSION_NAME,
+                "deviceModel" to getDeviceModel(),
+                "osVersion" to getOsVersion()
+            )
             val jsonBody = json.encodeToString(payload)
             val bodyBytes = jsonBody.toByteArray(Charsets.UTF_8)
 
@@ -389,7 +394,9 @@ class CommunityApiClient(private val context: Context) {
 
             val payload = mapOf(
                 "deviceToken" to ensureDeviceToken(),
-                "appVersion" to appVersion
+                "appVersion" to appVersion,
+                "deviceModel" to getDeviceModel(),
+                "osVersion" to getOsVersion()
             )
             val jsonBody = json.encodeToString(payload)
             val bodyBytes = jsonBody.toByteArray(Charsets.UTF_8)
@@ -408,6 +415,22 @@ class CommunityApiClient(private val context: Context) {
         } finally {
             try { conn?.disconnect() } catch (_: Exception) {}
         }
+    }
+
+    private fun getDeviceModel(): String {
+        val manufacturer = Build.MANUFACTURER.orEmpty().trim().replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL.orEmpty().trim()
+        return when {
+            manufacturer.isEmpty() && model.isEmpty() -> "Unknown"
+            manufacturer.isEmpty() -> model
+            model.isEmpty() -> manufacturer
+            model.startsWith(manufacturer, ignoreCase = true) -> model
+            else -> "$manufacturer $model"
+        }.take(64)
+    }
+
+    private fun getOsVersion(): String {
+        return "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})".take(32)
     }
 
     private fun extractServerErrorMessage(rawErr: String, responseCode: Int): String {

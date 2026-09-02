@@ -99,12 +99,12 @@ class LinuxInputReader(
                 }
 
                 if (gamepadNodes.isNotEmpty()) {
-                    // Multi-node parallel streaming: captures buttons/sticks, touchpad, and motion gyro simultaneously
+                    // Multi-node parallel streaming: captures buttons/sticks with per-device layout adaptation
                     var launchedCount = 0
-                    for (node in gamepadNodes) {
+                    for (nodeInfo in gamepadNodes) {
                         if (!isRunning) break
                         val child = launch(Dispatchers.IO) {
-                            val proc = spawnShizukuProcess(arrayOf("cat", node)) ?: return@launch
+                            val proc = spawnShizukuProcess(arrayOf("cat", nodeInfo.nodePath)) ?: return@launch
                             val inStream = proc.inputStream
                             synchronized(processLock) {
                                 if (!isRunning) {
@@ -115,7 +115,7 @@ class LinuxInputReader(
                                 activeStreams.add(inStream)
                             }
                             try {
-                                runBinaryStream(inStream, is64Bit)
+                                runBinaryStream(inStream, is64Bit, nodeInfo)
                             } finally {
                                 synchronized(processLock) {
                                     activeProcesses.remove(proc)
@@ -146,6 +146,13 @@ class LinuxInputReader(
                         return@launch
                     }
                     val inStream = proc.inputStream
+                    val fallbackNode = GamepadNodeInfo(
+                        nodePath = "getevent_fallback",
+                        name = "Generic Fallback",
+                        layoutType = ControllerLayoutType.GENERIC_BLUETOOTH,
+                        stickRange = StickRangeMode.AUTO,
+                        isBluetooth = true
+                    )
                     synchronized(processLock) {
                         if (!isRunning) {
                             closeProcessQuietly(proc, inStream)
@@ -156,7 +163,7 @@ class LinuxInputReader(
                         activeStreams.add(inStream)
                     }
                     try {
-                        runAsciiHexStream(inStream)
+                        runAsciiHexStream(inStream, fallbackNode)
                     } finally {
                         synchronized(processLock) {
                             activeProcesses.remove(proc)
@@ -231,7 +238,7 @@ class LinuxInputReader(
     /**
      * Reads direct binary `struct input_event` without any allocations.
      */
-    private fun runBinaryStream(inStream: InputStream, is64Bit: Boolean) {
+    private fun runBinaryStream(inStream: InputStream, is64Bit: Boolean, nodeInfo: GamepadNodeInfo) {
         val structSize = if (is64Bit) BinaryInputParser.STRUCT_SIZE_64 else BinaryInputParser.STRUCT_SIZE_32
         val buf = ByteArray(structSize)
         val rawEvent = BinaryInputParser.RawInputEvent()
@@ -251,7 +258,7 @@ class LinuxInputReader(
                         BinaryInputParser.parseBinaryEvent32(buf, 0, rawEvent)
                     }
                     if (ok) {
-                        dispatchRawEvent(rawEvent)
+                        dispatchRawEvent(rawEvent, nodeInfo)
                     }
                 }
             }
@@ -267,7 +274,7 @@ class LinuxInputReader(
     /**
      * Reads `getevent -q` ASCII hex stream with ZERO String or Regex allocations.
      */
-    private fun runAsciiHexStream(inStream: InputStream) {
+    private fun runAsciiHexStream(inStream: InputStream, nodeInfo: GamepadNodeInfo) {
         val readBuffer = ByteArray(4096)
         val lineBuffer = ByteArray(256)
         var linePos = 0
@@ -283,7 +290,7 @@ class LinuxInputReader(
                     if (b == '\n'.code.toByte()) {
                         if (linePos > 0) {
                             if (BinaryInputParser.parseAsciiHexLine(lineBuffer, 0, linePos, rawEvent)) {
-                                dispatchRawEvent(rawEvent)
+                                dispatchRawEvent(rawEvent, nodeInfo)
                             }
                             linePos = 0
                         }
@@ -309,11 +316,11 @@ class LinuxInputReader(
     /**
      * Dispatches parsed raw events to GamepadEngine with minimal branching.
      */
-    private fun dispatchRawEvent(event: BinaryInputParser.RawInputEvent) {
+    private fun dispatchRawEvent(event: BinaryInputParser.RawInputEvent, nodeInfo: GamepadNodeInfo) {
         when (event.type) {
             // EV_KEY (0x0001): Buttons
             BinaryInputParser.EV_KEY -> {
-                val btnName = BinaryInputParser.evKeyToButtonName(event.code) ?: return
+                val btnName = BinaryInputParser.evKeyToButtonName(event.code, nodeInfo.layoutType) ?: return
                 if (event.value == 1L) {
                     engine.onRawButtonDown(btnName)
                 } else if (event.value == 0L) {
@@ -323,111 +330,192 @@ class LinuxInputReader(
 
             // EV_ABS (0x0003): Sticks, Triggers, D-Pad
             BinaryInputParser.EV_ABS -> {
-                handleAbsoluteAxis(event.code, event.value)
+                handleAbsoluteAxis(nodeInfo, event.code, event.value)
             }
         }
     }
 
-    private fun isTriggerDown(rawValue: Long): Boolean {
-        if (rawValue < 0L) {
-            val unsigned = rawValue + 32768L
-            return unsigned > 8000L // ~25% threshold for signed -32768..32767 range
-        }
-        return when {
-            rawValue > 32767L -> rawValue > 16000L // 0..65535 (~25%)
-            rawValue > 1023L -> rawValue > 8000L   // 0..32767 (~25% e.g. Xbox 360 controller)
-            rawValue > 255L -> rawValue > 250L     // 0..1023 (~25%)
-            else -> rawValue > 64L                 // 0..255 (~25%)
+    private fun isTriggerDown(rawValue: Long, layoutType: ControllerLayoutType): Boolean {
+        return when (layoutType) {
+            ControllerLayoutType.XBOX_BLUETOOTH -> {
+                // ABS_BRAKE / ABS_GAS: range 0..1023
+                rawValue > 200L
+            }
+            ControllerLayoutType.PLAYSTATION -> {
+                // 0..255
+                rawValue > 60L
+            }
+            ControllerLayoutType.XBOX_WIRED_USB -> {
+                // ABS_Z / ABS_RZ: range 0..32767 or 0..65535 or -32768..32767 or 0..255
+                when {
+                    rawValue < 0L -> (rawValue + 32768L) > 8000L
+                    rawValue > 32767L -> rawValue > 16000L // 0..65535
+                    rawValue > 255L -> rawValue > 8000L    // 0..32767 (threshold 25% = ~8192)
+                    else -> rawValue > 60L                 // 0..255
+                }
+            }
+            ControllerLayoutType.NINTENDO_SWITCH -> {
+                if (rawValue < 0L) (rawValue + 32768L) > 8000L
+                else if (rawValue > 255L) rawValue > 8000L
+                else rawValue > 60L
+            }
+            ControllerLayoutType.GENERIC_BLUETOOTH, ControllerLayoutType.GENERIC_USB -> {
+                when {
+                    rawValue < 0L -> (rawValue + 32768L) > 8000L
+                    rawValue > 32767L -> rawValue > 16000L
+                    rawValue > 1023L -> rawValue > 8000L
+                    rawValue > 255L -> rawValue > 250L
+                    else -> rawValue > 60L
+                }
+            }
         }
     }
 
-    private fun handleAbsoluteAxis(code: Int, rawValue: Long) {
-        when (code) {
-            // ABS_X (0x0000): Left Stick X
-            0x0000 -> {
-                engine.lx = BinaryInputParser.normalizeStick(rawValue)
-            }
-            // ABS_Y (0x0001): Left Stick Y
-            0x0001 -> {
-                engine.ly = BinaryInputParser.normalizeStick(rawValue)
-            }
-            // ABS_RX (0x0003): Right Stick X
-            0x0003 -> {
-                engine.rx = BinaryInputParser.normalizeStick(rawValue)
-            }
-            // ABS_RY (0x0004): Right Stick Y
-            0x0004 -> {
-                engine.ry = BinaryInputParser.normalizeStick(rawValue)
-            }
-
-            // ABS_RZ (0x0005) or ABS_GAS (0x0009): RT Trigger (BUTTON_R2)
-            0x0005, 0x0009 -> {
-                val isDown = isTriggerDown(rawValue)
-                val prev = rtActive.getAndSet(isDown)
-                if (isDown != prev) {
-                    if (isDown) engine.onRawButtonDown("BUTTON_R2")
-                    else engine.onRawButtonUp("BUTTON_R2")
+    private fun handleAbsoluteAxis(nodeInfo: GamepadNodeInfo, code: Int, rawValue: Long) {
+        when (nodeInfo.layoutType) {
+            ControllerLayoutType.PLAYSTATION -> {
+                when (code) {
+                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0002 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0005 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0003, 0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
+                    0x0004, 0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+                    0x0010 -> handleHatX(rawValue)
+                    0x0011 -> handleHatY(rawValue)
                 }
             }
 
-            // ABS_Z (0x0002) or ABS_BRAKE (0x000a): LT Trigger (BUTTON_L2)
-            0x0002, 0x000a -> {
-                val isDown = isTriggerDown(rawValue)
-                val prev = ltActive.getAndSet(isDown)
-                if (isDown != prev) {
-                    if (isDown) engine.onRawButtonDown("BUTTON_L2")
-                    else engine.onRawButtonUp("BUTTON_L2")
+            ControllerLayoutType.XBOX_BLUETOOTH -> {
+                when (code) {
+                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0002 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0005 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x000a, 0x0006 -> handleTriggerL2(rawValue, nodeInfo.layoutType)
+                    0x0009, 0x0007 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+                    0x0010 -> handleHatX(rawValue)
+                    0x0011 -> handleHatY(rawValue)
                 }
             }
 
-            // ABS_HAT0X (0x0010): D-Pad Left / Right (-1, 0, 1)
-            0x0010 -> {
-                val leftNow = rawValue < 0
-                val rightNow = rawValue > 0
-
-                val prevLeft = hatLeft.getAndSet(leftNow)
-                if (leftNow != prevLeft) {
-                    if (leftNow) engine.onRawButtonDown("DPAD_LEFT")
-                    else engine.onRawButtonUp("DPAD_LEFT")
-                }
-                val prevRight = hatRight.getAndSet(rightNow)
-                if (rightNow != prevRight) {
-                    if (rightNow) engine.onRawButtonDown("DPAD_RIGHT")
-                    else engine.onRawButtonUp("DPAD_RIGHT")
+            ControllerLayoutType.XBOX_WIRED_USB -> {
+                when (code) {
+                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0003 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0004 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0002, 0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
+                    0x0005, 0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+                    0x0010 -> handleHatX(rawValue)
+                    0x0011 -> handleHatY(rawValue)
                 }
             }
 
-            // ABS_HAT0Y (0x0011): D-Pad Up / Down (-1, 0, 1)
-            0x0011 -> {
-                val upNow = rawValue < 0
-                val downNow = rawValue > 0
-
-                val prevUp = hatUp.getAndSet(upNow)
-                if (upNow != prevUp) {
-                    if (upNow) engine.onRawButtonDown("DPAD_UP")
-                    else engine.onRawButtonUp("DPAD_UP")
-                }
-                val prevDown = hatDown.getAndSet(downNow)
-                if (downNow != prevDown) {
-                    if (downNow) engine.onRawButtonDown("DPAD_DOWN")
-                    else engine.onRawButtonUp("DPAD_DOWN")
+            ControllerLayoutType.NINTENDO_SWITCH -> {
+                when (code) {
+                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0002, 0x0003 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0005, 0x0004 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
+                    0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+                    0x0010 -> handleHatX(rawValue)
+                    0x0011 -> handleHatY(rawValue)
                 }
             }
+
+            ControllerLayoutType.GENERIC_BLUETOOTH -> {
+                when (code) {
+                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0002 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0005 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x000a, 0x0003 -> handleTriggerL2(rawValue, nodeInfo.layoutType)
+                    0x0009, 0x0004 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+                    0x0010 -> handleHatX(rawValue)
+                    0x0011 -> handleHatY(rawValue)
+                }
+            }
+
+            ControllerLayoutType.GENERIC_USB -> {
+                when (code) {
+                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0003 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0004 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0002, 0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
+                    0x0005, 0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+                    0x0010 -> handleHatX(rawValue)
+                    0x0011 -> handleHatY(rawValue)
+                }
+            }
+        }
+    }
+
+    private fun handleTriggerL2(rawValue: Long, layoutType: ControllerLayoutType) {
+        val isDown = isTriggerDown(rawValue, layoutType)
+        val prev = ltActive.getAndSet(isDown)
+        if (isDown != prev) {
+            if (isDown) engine.onRawButtonDown("BUTTON_L2")
+            else engine.onRawButtonUp("BUTTON_L2")
+        }
+    }
+
+    private fun handleTriggerR2(rawValue: Long, layoutType: ControllerLayoutType) {
+        val isDown = isTriggerDown(rawValue, layoutType)
+        val prev = rtActive.getAndSet(isDown)
+        if (isDown != prev) {
+            if (isDown) engine.onRawButtonDown("BUTTON_R2")
+            else engine.onRawButtonUp("BUTTON_R2")
+        }
+    }
+
+    private fun handleHatX(rawValue: Long) {
+        val leftNow = rawValue < 0
+        val rightNow = rawValue > 0
+
+        val prevLeft = hatLeft.getAndSet(leftNow)
+        if (leftNow != prevLeft) {
+            if (leftNow) engine.onRawButtonDown("DPAD_LEFT")
+            else engine.onRawButtonUp("DPAD_LEFT")
+        }
+        val prevRight = hatRight.getAndSet(rightNow)
+        if (rightNow != prevRight) {
+            if (rightNow) engine.onRawButtonDown("DPAD_RIGHT")
+            else engine.onRawButtonUp("DPAD_RIGHT")
+        }
+    }
+
+    private fun handleHatY(rawValue: Long) {
+        val upNow = rawValue < 0
+        val downNow = rawValue > 0
+
+        val prevUp = hatUp.getAndSet(upNow)
+        if (upNow != prevUp) {
+            if (upNow) engine.onRawButtonDown("DPAD_UP")
+            else engine.onRawButtonUp("DPAD_UP")
+        }
+        val prevDown = hatDown.getAndSet(downNow)
+        if (downNow != prevDown) {
+            if (downNow) engine.onRawButtonDown("DPAD_DOWN")
+            else engine.onRawButtonUp("DPAD_DOWN")
         }
     }
 
     /**
-     * Inspects `/proc/bus/input/devices` (via Shizuku UID 2000 process to bypass SELinux restrictions)
-     * to locate the event nodes corresponding to physical controllers.
+     * Inspects input devices (via Shizuku `getevent -p` or `/proc/bus/input/devices`)
+     * to locate the event nodes and accurately identify their controller layout profile.
      */
-    private fun findGamepadEventNodes(): List<String> {
-        val nodes = mutableListOf<String>()
+    private fun findGamepadEventNodes(): List<GamepadNodeInfo> {
+        val nodes = mutableListOf<GamepadNodeInfo>()
+        val seenPaths = mutableSetOf<String>()
         try {
             var content: String? = null
 
-            // 1. Primary: Use Shizuku process (UID 2000 ADB) to bypass untrusted_app SELinux limitations
+            // 1. Primary: Use `getevent -p` (UID 2000 ADB via Shizuku) which works reliably on all Android versions
             try {
-                val proc = spawnShizukuProcess(arrayOf("cat", "/proc/bus/input/devices"))
+                val proc = spawnShizukuProcess(arrayOf("getevent", "-p"))
                 if (proc != null) {
                     try {
                         content = proc.inputStream.bufferedReader().use { it.readText() }
@@ -437,7 +525,21 @@ class LinuxInputReader(
                 }
             } catch (_: Exception) {}
 
-            // 2. Secondary fallback: Direct file reading (for rooted environments or non-restricted SELinux)
+            // 2. Secondary fallback: `/proc/bus/input/devices` via Shizuku
+            if (content.isNullOrBlank()) {
+                try {
+                    val proc = spawnShizukuProcess(arrayOf("cat", "/proc/bus/input/devices"))
+                    if (proc != null) {
+                        try {
+                            content = proc.inputStream.bufferedReader().use { it.readText() }
+                        } finally {
+                            closeProcessQuietly(proc)
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 3. Tertiary fallback: Direct file reading (for root environments)
             if (content.isNullOrBlank()) {
                 val f = File("/proc/bus/input/devices")
                 if (f.exists() && f.canRead()) {
@@ -446,35 +548,16 @@ class LinuxInputReader(
             }
 
             if (!content.isNullOrBlank()) {
-                val blocks = content.split("\n\n")
+                val blocks = if (content.contains("add device ")) {
+                    content.split(Regex("""(?=add device \d+:)"""))
+                } else {
+                    content.split("\n\n")
+                }
+
                 for (block in blocks) {
-                    val isVirtualOrInternal = block.contains("uinput", ignoreCase = true) ||
-                                              block.contains("xiaomi", ignoreCase = true) ||
-                                              block.contains("touchscreen", ignoreCase = true) ||
-                                              block.contains("touch_dev", ignoreCase = true) ||
-                                              block.contains("sensor", ignoreCase = true) ||
-                                              block.contains("goodix", ignoreCase = true) ||
-                                              block.contains("fts_ts", ignoreCase = true)
-
-                    if (isVirtualOrInternal) continue
-
-                    val isGamepad = block.contains("gamepad", ignoreCase = true) ||
-                                    block.contains("controller", ignoreCase = true) ||
-                                    block.contains("joystick", ignoreCase = true) ||
-                                    block.contains("dualsense", ignoreCase = true) ||
-                                    block.contains("dualshock", ignoreCase = true) ||
-                                    block.contains("xbox", ignoreCase = true) ||
-                                    block.contains("pro controller", ignoreCase = true) ||
-                                    block.contains("EV=1b") || block.contains("EV=13")
-
-                    if (isGamepad) {
-                        val match = Regex("""Handlers=.*?(event\d+)""").find(block)
-                        match?.let {
-                            val eventNode = "/dev/input/${it.groupValues[1]}"
-                            if (!nodes.contains(eventNode)) {
-                                nodes.add(eventNode)
-                            }
-                        }
+                    val info = parseGamepadNodeInfo(block)
+                    if (info != null && seenPaths.add(info.nodePath)) {
+                        nodes.add(info)
                     }
                 }
             }
@@ -482,6 +565,101 @@ class LinuxInputReader(
             // Silently fallback
         }
         return nodes
+    }
+
+    private fun parseGamepadNodeInfo(block: String): GamepadNodeInfo? {
+        val isVirtualOrInternal = block.contains("uinput", ignoreCase = true) ||
+                                  block.contains("xiaomi", ignoreCase = true) ||
+                                  block.contains("touchscreen", ignoreCase = true) ||
+                                  block.contains("touch_dev", ignoreCase = true) ||
+                                  block.contains("sensor", ignoreCase = true) ||
+                                  block.contains("goodix", ignoreCase = true) ||
+                                  block.contains("fts_ts", ignoreCase = true) ||
+                                  block.contains("gpio-keys", ignoreCase = true) ||
+                                  block.contains("pmic", ignoreCase = true) ||
+                                  block.contains("snd-card", ignoreCase = true) ||
+                                  block.contains("jack", ignoreCase = true) ||
+                                  block.contains("headset", ignoreCase = true)
+
+        if (isVirtualOrInternal) return null
+
+        val isGamepad = block.contains("gamepad", ignoreCase = true) ||
+                        block.contains("controller", ignoreCase = true) ||
+                        block.contains("joystick", ignoreCase = true) ||
+                        block.contains("dualsense", ignoreCase = true) ||
+                        block.contains("dualshock", ignoreCase = true) ||
+                        block.contains("xbox", ignoreCase = true) ||
+                        block.contains("x-box", ignoreCase = true) ||
+                        block.contains("pro controller", ignoreCase = true) ||
+                        block.contains("switch", ignoreCase = true) ||
+                        block.contains("8bitdo", ignoreCase = true) ||
+                        block.contains("gamesir", ignoreCase = true) ||
+                        block.contains("ipega", ignoreCase = true) ||
+                        block.contains("scrcpy", ignoreCase = true) ||
+                        block.contains("pad", ignoreCase = true) ||
+                        block.contains("0130") || block.contains("BTN_GAMEPAD") || block.contains("BTN_SOUTH") ||
+                        block.contains("EV=1b") || block.contains("EV=13")
+
+        if (!isGamepad) return null
+
+        val eventNode = Regex("""add device \d+:\s*(/dev/input/event\d+)""").find(block)?.groupValues?.get(1)
+            ?: Regex("""Handlers=.*?(event\d+)""").find(block)?.let { "/dev/input/${it.groupValues[1]}" }
+            ?: Regex("""(/dev/input/event\d+)""").find(block)?.groupValues?.get(1)
+            ?: return null
+
+        val nameMatch = Regex("""name:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(block)
+            ?: Regex("""N:\s*Name="([^"]+)"""", RegexOption.IGNORE_CASE).find(block)
+        val devName = nameMatch?.groupValues?.get(1)?.trim() ?: "Gamepad"
+
+        val hasAbsGasOrBrake = block.contains("0009") || block.contains("000a") ||
+                               block.contains("ABS_GAS", ignoreCase = true) ||
+                               block.contains("ABS_BRAKE", ignoreCase = true)
+
+        val isBluetooth = block.contains("Bus=0005", ignoreCase = true) ||
+                          devName.contains("wireless", ignoreCase = true) ||
+                          devName.contains("bluetooth", ignoreCase = true) ||
+                          devName.contains("bt", ignoreCase = true)
+
+        val vendorMatch = Regex("""Vendor=([0-9a-fA-F]+)""").find(block)
+        val vendorHex = vendorMatch?.groupValues?.get(1)?.lowercase() ?: ""
+
+        val isPlayStation = vendorHex == "054c" ||
+                            devName.contains("sony", ignoreCase = true) ||
+                            devName.contains("dualsense", ignoreCase = true) ||
+                            devName.contains("dualshock", ignoreCase = true) ||
+                            devName.contains("playstation", ignoreCase = true) ||
+                            (devName.contains("wireless controller", ignoreCase = true) && !devName.contains("xbox", ignoreCase = true))
+
+        val isSwitch = vendorHex == "057e" ||
+                       devName.contains("nintendo", ignoreCase = true) ||
+                       devName.contains("joy-con", ignoreCase = true) ||
+                       devName.contains("switch", ignoreCase = true)
+
+        val (layoutType: ControllerLayoutType, stickRange: StickRangeMode) = when {
+            isPlayStation -> {
+                ControllerLayoutType.PLAYSTATION to (if (isBluetooth) StickRangeMode.UNSIGNED_8BIT else StickRangeMode.UNSIGNED_16BIT)
+            }
+
+            isSwitch -> {
+                ControllerLayoutType.NINTENDO_SWITCH to StickRangeMode.SIGNED_16BIT
+            }
+
+            isBluetooth || hasAbsGasOrBrake -> {
+                ControllerLayoutType.XBOX_BLUETOOTH to StickRangeMode.UNSIGNED_16BIT
+            }
+
+            else -> {
+                ControllerLayoutType.XBOX_WIRED_USB to StickRangeMode.UNSIGNED_16BIT
+            }
+        }
+
+        return GamepadNodeInfo(
+            nodePath = eventNode,
+            name = devName,
+            layoutType = layoutType,
+            stickRange = stickRange,
+            isBluetooth = isBluetooth
+        )
     }
 
     private fun isKernel64Bit(): Boolean {
@@ -493,3 +671,11 @@ class LinuxInputReader(
         }
     }
 }
+
+data class GamepadNodeInfo(
+    val nodePath: String,
+    val name: String,
+    val layoutType: ControllerLayoutType,
+    val stickRange: StickRangeMode,
+    val isBluetooth: Boolean
+)

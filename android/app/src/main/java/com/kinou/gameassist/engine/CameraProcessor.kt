@@ -54,7 +54,7 @@ class CameraProcessor(
         // Anti-Recoil computation: pulls camera downwards (positive delta Y) during weapon fire
         val isRecoilActive = cfg.antiRecoilEnabled && isFiring && (!cfg.antiRecoilAdsOnly || isAiming)
         val recoilDy = if (isRecoilActive) {
-            cfg.antiRecoilSpeed.coerceIn(0.0f, 20.0f) * (baseStep * 0.12f)
+            cfg.antiRecoilSpeed.coerceIn(0.0f, 20.0f) * (baseStep * 0.012f)
         } else {
             0.0f
         }

@@ -1107,12 +1107,16 @@ app.post('/api/device/register', verifySignature, async (c) => {
     }
     const now = Date.now();
     const version = typeof body.appVersion === 'string' ? body.appVersion.slice(0, 20) : '1.0.0';
+    const rawModel = typeof body.deviceModel === 'string' ? body.deviceModel.trim().slice(0, 64) : null;
+    const rawOs = typeof body.osVersion === 'string' ? body.osVersion.trim().slice(0, 32) : null;
+    const model = rawModel && rawModel.length > 0 ? rawModel : null;
+    const os = rawOs && rawOs.length > 0 ? rawOs : null;
 
     await c.env.DB.prepare(`
-      INSERT INTO devices (device_hash, first_seen, last_seen, app_version, launch_count)
-      VALUES (?, ?, ?, ?, 1)
+      INSERT INTO devices (device_hash, first_seen, last_seen, app_version, device_model, os_version, launch_count)
+      VALUES (?, ?, ?, ?, ?, ?, 1)
       ON CONFLICT(device_hash) DO NOTHING
-    `).bind(tokenHash, now, now, version).run();
+    `).bind(tokenHash, now, now, version, model, os).run();
 
     return c.json({ success: true, deviceToken: rawToken });
   } catch (err: any) {
@@ -1136,7 +1140,7 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
       return c.json({ success: false, error: 'Corps de requête invalide' }, 400);
     }
 
-    const { deviceToken, appVersion } = body;
+    const { deviceToken, appVersion, deviceModel, osVersion } = body;
 
     const deviceIdentity = await normalizeDeviceToken(deviceToken);
     if (!deviceIdentity) {
@@ -1155,27 +1159,35 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
 
     const now = Date.now();
     const version = typeof appVersion === 'string' ? appVersion.slice(0, 20) : '1.0.0';
+    const rawModel = typeof deviceModel === 'string' ? deviceModel.trim().slice(0, 64) : null;
+    const rawOs = typeof osVersion === 'string' ? osVersion.trim().slice(0, 32) : null;
+    const model = rawModel && rawModel.length > 0 ? rawModel : null;
+    const os = rawOs && rawOs.length > 0 ? rawOs : null;
     const todayStr = new Date(now).toISOString().slice(0, 10);
 
     // Batch best-effort (non transactionnel) : chaque upsert est atomique individuellement,
     // et une dérive éventuelle de la télémétrie est sans gravité.
     await c.env.DB.batch([
       c.env.DB.prepare(`
-        INSERT INTO devices (device_hash, first_seen, last_seen, app_version, launch_count)
-        VALUES (?, ?, ?, ?, 1)
+        INSERT INTO devices (device_hash, first_seen, last_seen, app_version, device_model, os_version, launch_count)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
         ON CONFLICT(device_hash) DO UPDATE SET
           last_seen = excluded.last_seen,
           app_version = excluded.app_version,
+          device_model = COALESCE(excluded.device_model, devices.device_model),
+          os_version = COALESCE(excluded.os_version, devices.os_version),
           launch_count = launch_count + 1
-      `).bind(deviceIdentity, now, now, version),
+      `).bind(deviceIdentity, now, now, version, model, os),
       c.env.DB.prepare(`
-        INSERT INTO daily_activity (date, device_hash, app_version, launch_count, last_seen)
-        VALUES (?, ?, ?, 1, ?)
+        INSERT INTO daily_activity (date, device_hash, app_version, device_model, os_version, launch_count, last_seen)
+        VALUES (?, ?, ?, ?, ?, 1, ?)
         ON CONFLICT(date, device_hash) DO UPDATE SET
           launch_count = launch_count + 1,
           app_version = excluded.app_version,
+          device_model = COALESCE(excluded.device_model, daily_activity.device_model),
+          os_version = COALESCE(excluded.os_version, daily_activity.os_version),
           last_seen = excluded.last_seen
-      `).bind(todayStr, deviceIdentity, version, now)
+      `).bind(todayStr, deviceIdentity, version, model, os, now)
     ]);
 
     return c.json({ success: true });
@@ -1279,6 +1291,18 @@ app.get('/api/stats', async (c) => {
       FROM devices GROUP BY app_version ORDER BY device_count DESC
     `).all();
 
+    // Models breakdown (Top 20)
+    const { results: modelResults } = await c.env.DB.prepare(`
+      SELECT COALESCE(device_model, 'Unknown') as model, COUNT(*) as device_count
+      FROM devices WHERE device_model IS NOT NULL GROUP BY device_model ORDER BY device_count DESC LIMIT 20
+    `).all();
+
+    // OS versions breakdown (Top 20)
+    const { results: osResults } = await c.env.DB.prepare(`
+      SELECT COALESCE(os_version, 'Unknown') as os_version, COUNT(*) as device_count
+      FROM devices WHERE os_version IS NOT NULL GROUP BY os_version ORDER BY device_count DESC LIMIT 20
+    `).all();
+
     return c.json({
       success: true,
       devices: {
@@ -1294,6 +1318,8 @@ app.get('/api/stats', async (c) => {
         total_profile_likes: profileStats?.total_likes || 0
       },
       versions: versionResults || [],
+      models: modelResults || [],
+      os_versions: osResults || [],
       history: Array.from(historyMap.values())
     });
   } catch (err: any) {

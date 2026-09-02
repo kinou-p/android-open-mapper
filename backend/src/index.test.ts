@@ -471,3 +471,85 @@ describe('CORS Configuration', () => {
   });
 });
 
+describe('Telemetry & Device Metadata (deviceModel + osVersion)', () => {
+  const mockEnv = {
+    APP_SECRET: 'test-app-secret-1234567890',
+    DB: {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => ({ count: 0, window_start: Date.now() }),
+          all: async () => ({ results: [] }),
+          run: async () => ({ success: true })
+        })
+      }),
+      batch: async (statements: any[]) => {
+        return statements.map(() => ({
+          results: [{ count: 1, window_start: Date.now() }],
+          success: true
+        }));
+      }
+    }
+  };
+
+  const mockExecCtx = {
+    waitUntil: (_promise: Promise<any>) => {},
+    passThroughOnException: () => {}
+  };
+
+  it('accepte les champs deviceModel et osVersion lors de /api/device/register', async () => {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const body = JSON.stringify({
+      appVersion: '1.2.0',
+      deviceModel: 'Samsung Galaxy S23',
+      osVersion: 'Android 14 (API 34)'
+    });
+    const bodyHash = await sha256Hex(body);
+    const canonical = `POST\n/api/device/register\n${timestamp}\n${bodyHash}`;
+    const signature = await hmacSha256Hex(mockEnv.APP_SECRET, canonical);
+
+    const req = new Request('http://localhost/api/device/register', {
+      method: 'POST',
+      headers: {
+        'x-timestamp': timestamp,
+        'x-signature': signature,
+        'content-type': 'application/json'
+      },
+      body
+    });
+
+    const res = await app.fetch(req, mockEnv as any, mockExecCtx as any);
+    expect(res.status).toBe(200);
+    const json = await res.json() as any;
+    expect(json.success).toBe(true);
+    expect(json.deviceToken).toBeDefined();
+  });
+
+  it('accepte les champs deviceModel et osVersion lors de /api/telemetry/ping', async () => {
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const body = JSON.stringify({
+      deviceToken: 'a'.repeat(64),
+      appVersion: '1.2.0',
+      deviceModel: 'Google Pixel 7',
+      osVersion: 'Android 14 (API 34)'
+    });
+    const bodyHash = await sha256Hex(body);
+    const canonical = `POST\n/api/telemetry/ping\n${timestamp}\n${bodyHash}`;
+    const signature = await hmacSha256Hex(mockEnv.APP_SECRET, canonical);
+
+    const req = new Request('http://localhost/api/telemetry/ping', {
+      method: 'POST',
+      headers: {
+        'x-timestamp': timestamp,
+        'x-signature': signature,
+        'content-type': 'application/json'
+      },
+      body
+    });
+
+    const res = await app.fetch(req, mockEnv as any, mockExecCtx as any);
+    expect(res.status).toBe(200);
+    const json = await res.json() as any;
+    expect(json.success).toBe(true);
+  });
+});
+
