@@ -282,4 +282,7 @@
     <string name="community_import_error">Error al decodificar el perfil</string>
     <string name="community_download_error">Error de descarga: %1$s</string>
     <string name="community_vote_error">Error de votación: %1$s</string>
+    <string name="gamepad_rumble_detected">Vibración física detectada (%1$d motores)</string>
+    <string name="gamepad_rumble_not_supported">Vibración no soportada por este mando</string>
+    <string name="gamepad_none_connected">Ningún mando conectado</string>
 </resources>

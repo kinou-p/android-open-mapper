@@ -151,17 +151,9 @@ class ButtonProcessor(
                 val isReload = reloadButtonIds.contains(btn.id)
 
                 if (isFire && settings.hapticFire) {
-                    hapticManager?.playFireHaptic(
-                        intensity = settings.hapticIntensity,
-                        targetDevice = settings.hapticDevice,
-                        targetController = settings.hapticController
-                    )
+                    hapticManager?.playFireHaptic(intensity = settings.hapticIntensity)
                 } else if (isReload && settings.hapticReload) {
-                    hapticManager?.playReloadHaptic(
-                        intensity = settings.hapticIntensity,
-                        targetDevice = settings.hapticDevice,
-                        targetController = settings.hapticController
-                    )
+                    hapticManager?.playReloadHaptic(intensity = settings.hapticIntensity)
                 }
             }
 

@@ -274,6 +274,32 @@ class OverlayService : LifecycleService() {
                     val stateMsg = if (prof.joystick.jiggleStrafe) "⚡ Auto Jiggle Strafe ACTIVÉ" else "Auto Jiggle Strafe DÉSACTIVÉ"
                     android.widget.Toast.makeText(this, stateMsg, android.widget.Toast.LENGTH_SHORT).show()
                 }
+            },
+            isAntiRecoilActive = {
+                currentProfile?.camera?.antiRecoilEnabled == true
+            },
+            onToggleAntiRecoil = {
+                currentProfile?.let { prof ->
+                    prof.camera.antiRecoilEnabled = !prof.camera.antiRecoilEnabled
+                    repository.saveProfile(prof)
+                    engine.setProfile(prof)
+                    val stateMsg = if (prof.camera.antiRecoilEnabled) {
+                        "🎯 Anti-Recul (${String.format(java.util.Locale.US, "%.1fx", prof.camera.antiRecoilSpeed)}) ACTIVÉ"
+                    } else {
+                        "Anti-Recul DÉSACTIVÉ"
+                    }
+                    android.widget.Toast.makeText(this, stateMsg, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            getAntiRecoilSpeed = {
+                currentProfile?.camera?.antiRecoilSpeed ?: 1.0f
+            },
+            onSetAntiRecoilSpeed = { speed ->
+                currentProfile?.let { prof ->
+                    prof.camera.antiRecoilSpeed = speed
+                    repository.saveProfile(prof)
+                    engine.setProfile(prof)
+                }
             }
         )
 

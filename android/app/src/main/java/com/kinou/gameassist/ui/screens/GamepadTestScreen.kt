@@ -35,12 +35,14 @@ import com.kinou.gameassist.R
 import com.kinou.gameassist.engine.HapticManager
 import com.kinou.gameassist.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 
 enum class TestTab {
     VISUALIZER,
+    RUMBLE,
     DRIFT_CALIBRATION,
     CIRCULARITY,
     POLLING_RATE
@@ -176,9 +178,10 @@ fun GamepadTestScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Tab Selector (2 par ligne)
+            // Tab Selector
             val tabs = listOf(
                 TestTab.VISUALIZER to stringResource(R.string.tab_visualizer),
+                TestTab.RUMBLE to stringResource(R.string.tab_rumble),
                 TestTab.DRIFT_CALIBRATION to stringResource(R.string.tab_drift),
                 TestTab.CIRCULARITY to stringResource(R.string.tab_circularity),
                 TestTab.POLLING_RATE to stringResource(R.string.tab_polling_rate)
@@ -188,10 +191,10 @@ fun GamepadTestScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                tabs.chunked(2).forEach { rowTabs ->
+                tabs.chunked(3).forEach { rowTabs ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         rowTabs.forEach { (tab, title) ->
                             val active = selectedTab == tab
@@ -203,14 +206,14 @@ fun GamepadTestScreen(
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(44.dp),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                                    .height(42.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = title,
                                     color = if (active) DarkBackground else TextPrimary,
                                     fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 12.5.sp,
+                                    fontSize = 11.5.sp,
                                     textAlign = TextAlign.Center,
                                     maxLines = 1
                                 )
@@ -251,7 +254,14 @@ fun GamepadTestScreen(
                     )
                 }
 
-                // TAB 2: Mesure & Auto-Calibration de Drift
+                // TAB 2: Vibration & Retour de Force (Rumble)
+                TestTab.RUMBLE -> {
+                    GamepadRumbleDiagnosticView(
+                        hapticManager = hapticManager
+                    )
+                }
+
+                // TAB 3: Mesure & Auto-Calibration de Drift
                 TestTab.DRIFT_CALIBRATION -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -1461,6 +1471,278 @@ fun PollingRateDiagnosticView(
                     Text("250 Hz (BT Pro)", fontSize = 10.sp, color = TextSecondary)
                     Text("500 Hz (USB)", fontSize = 10.sp, color = TextSecondary)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Diagnostic and live interactive test view for gamepad rumble motors.
+ */
+@Composable
+fun GamepadRumbleDiagnosticView(
+    hapticManager: com.kinou.gameassist.engine.HapticManager,
+    modifier: Modifier = Modifier
+) {
+    var intensity by remember { mutableFloatStateOf(0.8f) }
+    var isContinuousRumbling by remember { mutableStateOf(false) }
+    var lastTriggeredEffect by remember { mutableStateOf<String?>(null) }
+    var connectedGamepads by remember { mutableStateOf(hapticManager.getConnectedGamepadsInfo()) }
+
+    // Continuous rumble loop when holding the burst button
+    LaunchedEffect(isContinuousRumbling, intensity) {
+        if (isContinuousRumbling) {
+            while (isActive && isContinuousRumbling) {
+                hapticManager.playFireHaptic(intensity)
+                delay(110)
+            }
+        }
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = DarkCard),
+        shape = RoundedCornerShape(16.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        stringResource(R.string.rumble_test_title),
+                        fontWeight = FontWeight.Bold,
+                        color = NeonCyan,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        stringResource(R.string.rumble_test_desc),
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        hapticManager.refreshGamepadVibrators()
+                        connectedGamepads = hapticManager.getConnectedGamepadsInfo()
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.rumble_rescan_btn),
+                        tint = NeonCyan
+                    )
+                }
+            }
+
+            // Connected Controllers Cards
+            if (connectedGamepads.isNotEmpty()) {
+                connectedGamepads.forEach { info ->
+                    Surface(
+                        color = if (info.hasRumble) NeonGreen.copy(alpha = 0.12f) else NeonOrange.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (info.hasRumble) NeonGreen.copy(alpha = 0.6f) else NeonOrange.copy(alpha = 0.6f)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.SportsEsports,
+                                contentDescription = null,
+                                tint = if (info.hasRumble) NeonGreen else NeonOrange,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = info.name,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    text = if (info.hasRumble) {
+                                        stringResource(R.string.gamepad_rumble_detected, info.motorCount) + if (info.hasAmplitudeControl) " • Contrôle PWM supporté" else ""
+                                    } else {
+                                        stringResource(R.string.gamepad_rumble_not_supported)
+                                    },
+                                    color = if (info.hasRumble) NeonGreen else NeonOrange,
+                                    fontSize = 11.5.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    color = DarkSurface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.SportsEsports,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.gamepad_none_connected),
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
+
+            // Test Controls
+            Text(
+                text = "Motifs de vibration tactiles",
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                fontSize = 13.sp
+            )
+
+            // Grid of test buttons (2x2)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            lastTriggeredEffect = "Tir Simple"
+                            hapticManager.playFireHaptic(intensity)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(44.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.rumble_test_fire_btn),
+                            color = DarkBackground,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                            maxLines = 1
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            lastTriggeredEffect = "Rechargement"
+                            hapticManager.playReloadHaptic(intensity)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonPink),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(44.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.rumble_test_reload_btn),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Continuous Burst Button (press/hold toggle)
+                    Button(
+                        onClick = {
+                            isContinuousRumbling = !isContinuousRumbling
+                            lastTriggeredEffect = if (isContinuousRumbling) "Rafale Continue" else null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isContinuousRumbling) NeonGreen else DarkSurface
+                        ),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isContinuousRumbling) NeonGreen else NeonGreen.copy(alpha = 0.6f)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(44.dp)
+                    ) {
+                        Text(
+                            if (isContinuousRumbling) "⏹ Arrêter Rafale" else stringResource(R.string.rumble_test_burst_btn),
+                            color = if (isContinuousRumbling) DarkBackground else NeonGreen,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                            maxLines = 1
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            lastTriggeredEffect = "Impulsion 500ms"
+                            hapticManager.playTestHaptic(500L, intensity)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = DarkSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonOrange.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(44.dp)
+                    ) {
+                        Text(
+                            stringResource(R.string.rumble_test_long_btn),
+                            color = NeonOrange,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            // Intensity Slider
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        stringResource(R.string.haptic_intensity_label),
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        "${(intensity * 100).toInt()}%",
+                        color = NeonCyan,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+                Slider(
+                    value = intensity,
+                    onValueChange = { intensity = it },
+                    valueRange = 0.1f..1.0f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = NeonCyan,
+                        activeTrackColor = NeonCyan,
+                        inactiveTrackColor = DarkCardBorder
+                    )
+                )
             }
         }
     }

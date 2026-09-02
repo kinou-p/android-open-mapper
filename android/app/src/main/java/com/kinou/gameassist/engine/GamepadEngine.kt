@@ -148,6 +148,9 @@ class GamepadEngine(
                 }
 
                 var nextFrameTimeNanos = System.nanoTime()
+                var lastRecoilNanos = 0L
+                val recoilIntervalNanos = 110_000_000L // 110ms (~545 RPM tactile recoil cadence)
+
                 while (isRunning) {
                     try {
                         val camCfg = cameraProcessor.config
@@ -159,6 +162,19 @@ class GamepadEngine(
 
                         val nowNanos = System.nanoTime()
                         buttonProcessor.processPendingTaps(nowNanos)
+
+                        // Continuous firing gamepad rumble recoil
+                        if (isFiring) {
+                            val hapticCfg = currentProfile?.settings
+                            if (hapticCfg?.hapticFeedback == true && hapticCfg.hapticFire) {
+                                if (nowNanos - lastRecoilNanos >= recoilIntervalNanos) {
+                                    lastRecoilNanos = nowNanos
+                                    hapticManager?.playFireHaptic(hapticCfg.hapticIntensity)
+                                }
+                            }
+                        } else {
+                            lastRecoilNanos = 0L
+                        }
 
                         nextFrameTimeNanos += intervalNanos
                         val sleepNanos = nextFrameTimeNanos - nowNanos

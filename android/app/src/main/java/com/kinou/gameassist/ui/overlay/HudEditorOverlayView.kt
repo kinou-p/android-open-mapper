@@ -296,6 +296,7 @@ class HudEditorOverlayView(
     private val btnSaveRect = RectF()
     private val btnHideRect = RectF()
     private val btnStrafeRect = RectF()
+    private val btnRecoilRect = RectF()
     private val btnOpacRect = RectF()
     private val btnDetailsRect = RectF()
     private val btnAddRect = RectF()
@@ -323,6 +324,9 @@ class HudEditorOverlayView(
     private val btnModeRect = RectF()
     private val btnAssignRect = RectF()
     private val btnJoyStrafeRect = RectF()
+    private val btnCamRecoilRect = RectF()
+    private val btnCamRecoilIncRect = RectF()
+    private val btnCamRecoilDecRect = RectF()
 
     init {
         isFocusable = true
@@ -521,6 +525,7 @@ class HudEditorOverlayView(
             btnSaveRect.setEmpty()
             btnHideRect.setEmpty()
             btnStrafeRect.setEmpty()
+            btnRecoilRect.setEmpty()
             btnOpacRect.setEmpty()
             btnDetailsRect.setEmpty()
             btnAddRect.setEmpty()
@@ -625,6 +630,20 @@ class HudEditorOverlayView(
         canvas.drawRoundRect(btnStrafeRect, btnRadius, btnRadius, uiBtnStrokePaint)
         canvas.drawText(strafeLabel, btnStrafeRect.centerX(), btnStrafeRect.centerY() + 5f * density, uiBtnTextPaint)
         curRight -= (strafeW + btnSpacing)
+
+        // 4b. Button: 🎯 Recul Quick Toggle
+        val recoilActive = profile.camera.antiRecoilEnabled
+        val recoilLabel = if (recoilActive) "🎯 Recul: ON" else "🎯 Recul: OFF"
+        uiBtnTextPaint.color = if (recoilActive) Color.BLACK else Color.WHITE
+        uiBtnTextPaint.textSize = 13.5f * density
+        val recoilW = max(94f * density, uiBtnTextPaint.measureText(recoilLabel) + 20f * density)
+        btnRecoilRect.set(curRight - recoilW, btnTop, curRight, btnBottom)
+        uiBtnBgPaint.color = if (recoilActive) 0xFFFF9900.toInt() else 0xFF1E2633.toInt()
+        uiBtnStrokePaint.color = if (recoilActive) 0xFFFF9900.toInt() else 0xFF445566.toInt()
+        canvas.drawRoundRect(btnRecoilRect, btnRadius, btnRadius, uiBtnBgPaint)
+        canvas.drawRoundRect(btnRecoilRect, btnRadius, btnRadius, uiBtnStrokePaint)
+        canvas.drawText(recoilLabel, btnRecoilRect.centerX(), btnRecoilRect.centerY() + 5f * density, uiBtnTextPaint)
+        curRight -= (recoilW + btnSpacing)
 
         // 5. Button: 🎨 Opacité Toggle
         val opacPercent = (opacitySteps[opacityIndex] * 100).toInt()
@@ -826,6 +845,9 @@ class HudEditorOverlayView(
             btnRoleRect.setEmpty()
             btnModeRect.setEmpty()
             btnAssignRect.setEmpty()
+            btnCamRecoilRect.setEmpty()
+            btnCamRecoilIncRect.setEmpty()
+            btnCamRecoilDecRect.setEmpty()
 
             val strafeActive = profile.joystick.jiggleStrafe
             val strafeLabel = if (strafeActive) "⚡ Strafe: ON" else "⚡ Strafe: OFF"
@@ -839,11 +861,64 @@ class HudEditorOverlayView(
             canvas.drawRoundRect(btnJoyStrafeRect, btnRadius, btnRadius, uiBtnStrokePaint)
             canvas.drawText(strafeLabel, btnJoyStrafeRect.centerX(), btnJoyStrafeRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (strafeW + btnSpacing)
+        } else if (isCameraSelected) {
+            btnRoleRect.setEmpty()
+            btnModeRect.setEmpty()
+            btnAssignRect.setEmpty()
+            btnJoyStrafeRect.setEmpty()
+
+            val recoilActive = profile.camera.antiRecoilEnabled
+            val recoilLabel = if (recoilActive) "🎯 Recul: ON" else "🎯 Recul: OFF"
+            uiBtnBgPaint.color = if (recoilActive) 0xFFFF9900.toInt() else 0xFF243040.toInt()
+            uiBtnStrokePaint.color = if (recoilActive) 0xFFFF9900.toInt() else 0xFF00F0FF.toInt()
+            uiBtnTextPaint.color = if (recoilActive) Color.BLACK else Color.WHITE
+            uiBtnTextPaint.textSize = 13f * density
+            val recoilW = max(96f * density, uiBtnTextPaint.measureText(recoilLabel) + 20f * density)
+            btnCamRecoilRect.set(rightX - recoilW, btnTop, rightX, btnBottom)
+            canvas.drawRoundRect(btnCamRecoilRect, btnRadius, btnRadius, uiBtnBgPaint)
+            canvas.drawRoundRect(btnCamRecoilRect, btnRadius, btnRadius, uiBtnStrokePaint)
+            canvas.drawText(recoilLabel, btnCamRecoilRect.centerX(), btnCamRecoilRect.centerY() + 5f * density, uiBtnTextPaint)
+            rightX -= (recoilW + btnSpacing)
+
+            if (recoilActive) {
+                // Minus and Plus buttons for recoil speed + text display
+                val spdText = String.format(java.util.Locale.US, "%.1fx", profile.camera.antiRecoilSpeed)
+                val spdW = 42f * density
+
+                btnCamRecoilIncRect.set(rightX - sizeW, btnTop, rightX, btnBottom)
+                uiBtnBgPaint.color = 0xFF243040.toInt()
+                canvas.drawRoundRect(btnCamRecoilIncRect, btnRadius, btnRadius, uiBtnBgPaint)
+                uiBtnTextPaint.color = 0xFFFF9900.toInt()
+                uiBtnTextPaint.textSize = 16f * density
+                canvas.drawText("➕", btnCamRecoilIncRect.centerX(), btnCamRecoilIncRect.centerY() + 5f * density, uiBtnTextPaint)
+                rightX -= (sizeW + btnSpacing)
+
+                btnCamRecoilDecRect.set(rightX - sizeW, btnTop, rightX, btnBottom)
+                canvas.drawRoundRect(btnCamRecoilDecRect, btnRadius, btnRadius, uiBtnBgPaint)
+                canvas.drawText("➖", btnCamRecoilDecRect.centerX(), btnCamRecoilDecRect.centerY() + 5f * density, uiBtnTextPaint)
+                rightX -= (sizeW + btnSpacing)
+
+                val spdRect = RectF(rightX - spdW, btnTop, rightX, btnBottom)
+                uiBtnBgPaint.color = 0xFF141A22.toInt()
+                uiBtnStrokePaint.color = 0xFFFF9900.toInt()
+                canvas.drawRoundRect(spdRect, btnRadius, btnRadius, uiBtnBgPaint)
+                canvas.drawRoundRect(spdRect, btnRadius, btnRadius, uiBtnStrokePaint)
+                uiBtnTextPaint.color = 0xFFFF9900.toInt()
+                uiBtnTextPaint.textSize = 12f * density
+                canvas.drawText(spdText, spdRect.centerX(), spdRect.centerY() + 4.5f * density, uiBtnTextPaint)
+                rightX -= (spdW + btnSpacing + 4f * density)
+            } else {
+                btnCamRecoilIncRect.setEmpty()
+                btnCamRecoilDecRect.setEmpty()
+            }
         } else {
             btnRoleRect.setEmpty()
             btnModeRect.setEmpty()
             btnAssignRect.setEmpty()
             btnJoyStrafeRect.setEmpty()
+            btnCamRecoilRect.setEmpty()
+            btnCamRecoilIncRect.setEmpty()
+            btnCamRecoilDecRect.setEmpty()
         }
 
         // Title on the left of bottom bar
@@ -918,6 +993,14 @@ class HudEditorOverlayView(
                     // ⚡ Strafe Quick Toggle
                     if (btnStrafeRect.contains(tx, ty)) {
                         profile.joystick.jiggleStrafe = !profile.joystick.jiggleStrafe
+                        performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                        invalidate()
+                        return true
+                    }
+
+                    // 🎯 Recul Quick Toggle
+                    if (btnRecoilRect.contains(tx, ty)) {
+                        profile.camera.antiRecoilEnabled = !profile.camera.antiRecoilEnabled
                         performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                         invalidate()
                         return true
@@ -1070,6 +1153,28 @@ class HudEditorOverlayView(
                         performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                         invalidate()
                         return true
+                    }
+
+                    // 🎯 Camera Recoil Toggle & Speed
+                    if (isCameraSelected) {
+                        if (btnCamRecoilRect.contains(tx, ty)) {
+                            profile.camera.antiRecoilEnabled = !profile.camera.antiRecoilEnabled
+                            performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            invalidate()
+                            return true
+                        }
+                        if (btnCamRecoilDecRect.contains(tx, ty)) {
+                            profile.camera.antiRecoilSpeed = Math.round((profile.camera.antiRecoilSpeed - 0.2f).coerceIn(0.1f, 10.0f) * 10f) / 10f
+                            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            invalidate()
+                            return true
+                        }
+                        if (btnCamRecoilIncRect.contains(tx, ty)) {
+                            profile.camera.antiRecoilSpeed = Math.round((profile.camera.antiRecoilSpeed + 0.2f).coerceIn(0.1f, 10.0f) * 10f) / 10f
+                            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            invalidate()
+                            return true
+                        }
                     }
 
                     // If tap inside the bottom bar card, consume it

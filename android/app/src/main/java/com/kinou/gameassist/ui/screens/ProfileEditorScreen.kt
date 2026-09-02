@@ -1083,8 +1083,83 @@ fun ProfileCard(
                 // ==========================================
                 // TAB 2 : 📳 HAPTIQUE & VIBRATIONS
                 // ==========================================
+                // TAB 3 : HAPTIQUE MANETTE (RUMBLE)
+                // ==========================================
                 if (selectedTab == 2) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val gamepadInfos = remember { hapticManager.getConnectedGamepadsInfo() }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Gamepad Status Card
+                        if (gamepadInfos.isNotEmpty()) {
+                            gamepadInfos.forEach { info ->
+                                Surface(
+                                    color = if (info.hasRumble) NeonGreen.copy(alpha = 0.12f) else NeonOrange.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (info.hasRumble) NeonGreen.copy(alpha = 0.6f) else NeonOrange.copy(alpha = 0.6f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.SportsEsports,
+                                            contentDescription = null,
+                                            tint = if (info.hasRumble) NeonGreen else NeonOrange,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = info.name,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary,
+                                                fontSize = 12.sp
+                                            )
+                                            Text(
+                                                text = if (info.hasRumble) {
+                                                    stringResource(R.string.gamepad_rumble_detected, info.motorCount)
+                                                } else {
+                                                    stringResource(R.string.gamepad_rumble_not_supported)
+                                                },
+                                                color = if (info.hasRumble) NeonGreen else NeonOrange,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Surface(
+                                color = DarkSurface,
+                                shape = RoundedCornerShape(10.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.SportsEsports,
+                                        contentDescription = null,
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.gamepad_none_connected),
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        // Master Vibration Toggle
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1099,6 +1174,7 @@ fun ProfileCard(
                                 onCheckedChange = {
                                     hapticFeedback = it
                                     profile.settings.hapticFeedback = it
+                                    profile.settings.hapticController = it
                                     onSave()
                                 },
                                 colors = SwitchDefaults.colors(
@@ -1112,58 +1188,6 @@ fun ProfileCard(
 
                         AnimatedVisibility(visible = hapticFeedback) {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                // Target 1 : Phone Vibration
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(stringResource(R.string.haptic_target_phone), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                        Text(stringResource(R.string.haptic_target_phone_desc), color = TextSecondary, fontSize = 11.sp)
-                                    }
-                                    Switch(
-                                        checked = hapticDevice,
-                                        onCheckedChange = {
-                                            hapticDevice = it
-                                            profile.settings.hapticDevice = it
-                                            onSave()
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = DarkBackground,
-                                            checkedTrackColor = NeonOrange,
-                                            uncheckedThumbColor = TextSecondary,
-                                            uncheckedTrackColor = DarkSurface
-                                        )
-                                    )
-                                }
-
-                                // Target 2 : Gamepad Rumble
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(stringResource(R.string.haptic_target_controller), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                        Text(stringResource(R.string.haptic_target_controller_desc), color = TextSecondary, fontSize = 11.sp)
-                                    }
-                                    Switch(
-                                        checked = hapticController,
-                                        onCheckedChange = {
-                                            hapticController = it
-                                            profile.settings.hapticController = it
-                                            onSave()
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = DarkBackground,
-                                            checkedTrackColor = NeonOrange,
-                                            uncheckedThumbColor = TextSecondary,
-                                            uncheckedTrackColor = DarkSurface
-                                        )
-                                    )
-                                }
-
                                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
 
                                 // Event 1 : Fire
@@ -1178,7 +1202,7 @@ fun ProfileCard(
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         OutlinedButton(
-                                            onClick = { hapticManager.playFireHaptic(hapticIntensity, hapticDevice, hapticController) },
+                                            onClick = { hapticManager.playFireHaptic(hapticIntensity) },
                                             shape = RoundedCornerShape(8.dp),
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                             modifier = Modifier.height(30.dp)
@@ -1214,7 +1238,7 @@ fun ProfileCard(
                                     }
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                         OutlinedButton(
-                                            onClick = { hapticManager.playReloadHaptic(hapticIntensity, hapticDevice, hapticController) },
+                                            onClick = { hapticManager.playReloadHaptic(hapticIntensity) },
                                             shape = RoundedCornerShape(8.dp),
                                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                             modifier = Modifier.height(30.dp)

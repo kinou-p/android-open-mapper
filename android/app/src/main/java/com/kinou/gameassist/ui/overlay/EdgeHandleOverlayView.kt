@@ -26,7 +26,11 @@ class EdgeHandleOverlayView(
     private val onOpenApp: () -> Unit,
     private val onStopService: () -> Unit,
     private val isStrafeActive: (() -> Boolean)? = null,
-    private val onToggleStrafe: (() -> Unit)? = null
+    private val onToggleStrafe: (() -> Unit)? = null,
+    private val isAntiRecoilActive: (() -> Boolean)? = null,
+    private val onToggleAntiRecoil: (() -> Unit)? = null,
+    private val getAntiRecoilSpeed: (() -> Float)? = null,
+    private val onSetAntiRecoilSpeed: ((Float) -> Unit)? = null
 ) : View(context) {
 
     enum class ScreenEdge { LEFT, RIGHT }
@@ -37,7 +41,11 @@ class EdgeHandleOverlayView(
     val restingWidth = (16 * density).toInt()
     val restingHeight = (90 * density).toInt()
     val menuWidth = (210 * density).toInt()
-    val menuHeight = (248 * density).toInt()
+    val menuHeight = (268 * density).toInt()
+
+    // Dynamic height when anti-recoil is active
+    val currentMenuHeight: Int
+        get() = if (isAntiRecoilActive?.invoke() == true) (316 * density).toInt() else menuHeight
 
     private val triggerThreshold = 55 * density
     private val cornerRadius = 14 * density
@@ -56,8 +64,14 @@ class EdgeHandleOverlayView(
     private var isSlidingToOpen = false
     private var hasHapticPlayed = false
 
-    private enum class MenuButton { HUD, STRAFE, APP, STOP, CLOSE }
+    private enum class MenuButton { HUD, STRAFE, RECOIL, RECOIL_DEC, RECOIL_INC, APP, STOP, CLOSE }
     private var pressedButton: MenuButton? = null
+
+    // Recoil slider drag tracking & button rects
+    private val btnRecoilDecRect = RectF()
+    private val btnRecoilIncRect = RectF()
+    private val sliderTrackRect = RectF()
+    private var isDraggingRecoilSlider = false
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val dimRunnable = Runnable {
@@ -163,7 +177,7 @@ class EdgeHandleOverlayView(
 
     fun openMenu() {
         isMenuOpen = true
-        ensureWindowSize(menuWidth, menuHeight)
+        ensureWindowSize(menuWidth, currentMenuHeight)
         menuAnimator?.cancel()
         menuAnimator = ValueAnimator.ofFloat(menuProgress, 1f).apply {
             duration = 220
@@ -222,7 +236,7 @@ class EdgeHandleOverlayView(
 
         // Interpolated drawer size
         val currentDrawerW = restingWidth + (menuWidth - restingWidth) * menuProgress
-        val currentDrawerH = restingHeight + (menuHeight - restingHeight) * menuProgress
+        val currentDrawerH = restingHeight + (currentMenuHeight - restingHeight) * menuProgress
 
         // Draw outer card
         val path = Path()
@@ -295,10 +309,10 @@ class EdgeHandleOverlayView(
         // 2. Action Buttons
         val btnLeft = left + 12 * density
         val btnRight = right - 12 * density
-        val btnHeight = 40 * density
+        val btnHeight = 38 * density
 
         // Button 1: 🎮 Éditeur HUD
-        val btn1Top = 38 * density
+        val btn1Top = 36 * density
         val btn1Bottom = btn1Top + btnHeight
         drawMenuButton(
             canvas, RectF(btnLeft, btn1Top, btnRight, btn1Bottom),
@@ -309,7 +323,7 @@ class EdgeHandleOverlayView(
         )
 
         // Button 2: ⚡ Auto Strafe Toggle
-        val btn2Top = 86 * density
+        val btn2Top = 78 * density
         val btn2Bottom = btn2Top + btnHeight
         val strafeOn = isStrafeActive?.invoke() ?: false
         val strafeLabel = if (strafeOn) "Strafe: ACTIF" else "Strafe: OFF"
@@ -322,22 +336,114 @@ class EdgeHandleOverlayView(
             alpha = a
         )
 
-        // Button 3: 📱 Ouvrir l'App
-        val btn3Top = 134 * density
+        // Button 3: 🎯 Anti-Recul Toggle
+        val btn3Top = 120 * density
         val btn3Bottom = btn3Top + btnHeight
+        val recoilOn = isAntiRecoilActive?.invoke() ?: false
+        val recoilLabel = if (recoilOn) "Recul: ACTIF" else "Recul: OFF"
+        val recoilColor = if (recoilOn) 0xFFFF9900.toInt() else 0xFF8899AA.toInt()
         drawMenuButton(
             canvas, RectF(btnLeft, btn3Top, btnRight, btn3Bottom),
+            label = recoilLabel, icon = "🎯",
+            accentColor = recoilColor,
+            isPressed = pressedButton == MenuButton.RECOIL,
+            alpha = a
+        )
+
+        var curTop = 162 * density
+
+        // Anti-Recoil Speed Slider (if Anti-Recoil is active)
+        if (recoilOn) {
+            val sliderBoxH = 42 * density
+            val sliderBoxRect = RectF(btnLeft, curTop, btnRight, curTop + sliderBoxH)
+
+            // Slider container background
+            btnBgPaint.color = 0xFF101620.toInt()
+            btnBgPaint.alpha = (0xEE * (alpha / 255f)).toInt()
+            canvas.drawRoundRect(sliderBoxRect, btnCornerRadius, btnCornerRadius, btnBgPaint)
+            btnStrokePaint.color = 0xFFFF9900.toInt()
+            btnStrokePaint.alpha = (alpha * 0.4f).toInt()
+            canvas.drawRoundRect(sliderBoxRect, btnCornerRadius, btnCornerRadius, btnStrokePaint)
+
+            val curSpeed = getAntiRecoilSpeed?.invoke() ?: 1.0f
+
+            // Speed Title Text
+            textPaint.textAlign = Paint.Align.LEFT
+            textPaint.textSize = 11.5f * density
+            textPaint.color = 0xFFFF9900.toInt()
+            textPaint.alpha = a
+            canvas.drawText("Vitesse : ${String.format(java.util.Locale.US, "%.1fx", curSpeed)}", btnLeft + 10 * density, curTop + 14 * density, textPaint)
+
+            // Minus button [ ➖ ]
+            val stepBtnW = 24 * density
+            val stepBtnH = 20 * density
+            val stepBtnY = curTop + 18 * density
+            btnRecoilDecRect.set(btnLeft + 8 * density, stepBtnY, btnLeft + 8 * density + stepBtnW, stepBtnY + stepBtnH)
+            btnBgPaint.color = if (pressedButton == MenuButton.RECOIL_DEC) 0xFFFF9900.toInt() else 0xFF1C2430.toInt()
+            btnBgPaint.alpha = a
+            canvas.drawRoundRect(btnRecoilDecRect, 4 * density, 4 * density, btnBgPaint)
+            textPaint.textAlign = Paint.Align.CENTER
+            textPaint.textSize = 11 * density
+            textPaint.color = if (pressedButton == MenuButton.RECOIL_DEC) Color.BLACK else Color.WHITE
+            canvas.drawText("➖", btnRecoilDecRect.centerX(), btnRecoilDecRect.centerY() + 4 * density, textPaint)
+
+            // Plus button [ ➕ ]
+            btnRecoilIncRect.set(btnRight - 8 * density - stepBtnW, stepBtnY, btnRight - 8 * density, stepBtnY + stepBtnH)
+            btnBgPaint.color = if (pressedButton == MenuButton.RECOIL_INC) 0xFFFF9900.toInt() else 0xFF1C2430.toInt()
+            btnBgPaint.alpha = a
+            canvas.drawRoundRect(btnRecoilIncRect, 4 * density, 4 * density, btnBgPaint)
+            textPaint.color = if (pressedButton == MenuButton.RECOIL_INC) Color.BLACK else 0xFFFF9900.toInt()
+            canvas.drawText("➕", btnRecoilIncRect.centerX(), btnRecoilIncRect.centerY() + 4 * density, textPaint)
+
+            // Track & Thumb
+            val trackLeft = btnRecoilDecRect.right + 8 * density
+            val trackRight = btnRecoilIncRect.left - 8 * density
+            val trackY = stepBtnY + stepBtnH / 2f
+            sliderTrackRect.set(trackLeft, trackY - 10 * density, trackRight, trackY + 10 * density)
+
+            // Background Track Line
+            btnStrokePaint.color = 0xFF2A3644.toInt()
+            btnStrokePaint.strokeWidth = 3.5f * density
+            btnStrokePaint.alpha = a
+            canvas.drawLine(trackLeft, trackY, trackRight, trackY, btnStrokePaint)
+
+            // Active Track Line
+            val speedT = ((curSpeed - 0.1f) / 9.9f).coerceIn(0f, 1f)
+            val thumbX = trackLeft + speedT * (trackRight - trackLeft)
+            btnStrokePaint.color = 0xFFFF9900.toInt()
+            canvas.drawLine(trackLeft, trackY, thumbX, trackY, btnStrokePaint)
+
+            // Draggable Thumb Circle
+            btnBgPaint.color = 0xFFFF9900.toInt()
+            btnBgPaint.alpha = a
+            canvas.drawCircle(thumbX, trackY, 5.5f * density, btnBgPaint)
+            btnStrokePaint.color = Color.WHITE
+            btnStrokePaint.strokeWidth = 1.5f * density
+            canvas.drawCircle(thumbX, trackY, 5.5f * density, btnStrokePaint)
+
+            curTop += sliderBoxH + 6 * density
+        } else {
+            btnRecoilDecRect.setEmpty()
+            btnRecoilIncRect.setEmpty()
+            sliderTrackRect.setEmpty()
+        }
+
+        // Button 4: 📱 Ouvrir l'App
+        val btn4Top = curTop
+        val btn4Bottom = btn4Top + btnHeight
+        drawMenuButton(
+            canvas, RectF(btnLeft, btn4Top, btnRight, btn4Bottom),
             label = context.getString(com.kinou.gameassist.R.string.overlay_open_app), icon = "📱",
             accentColor = 0xFF00E5FF.toInt(),
             isPressed = pressedButton == MenuButton.APP,
             alpha = a
         )
 
-        // Button 4: ⏹ Arrêter
-        val btn4Top = 182 * density
-        val btn4Bottom = btn4Top + btnHeight
+        // Button 5: ⏹ Arrêter
+        val btn5Top = btn4Bottom + 4 * density
+        val btn5Bottom = btn5Top + btnHeight
         drawMenuButton(
-            canvas, RectF(btnLeft, btn4Top, btnRight, btn4Bottom),
+            canvas, RectF(btnLeft, btn5Top, btnRight, btn5Bottom),
             label = context.getString(com.kinou.gameassist.R.string.overlay_stop_mapping), icon = "⏹",
             accentColor = 0xFFFF0055.toInt(),
             isPressed = pressedButton == MenuButton.STOP,
@@ -390,19 +496,33 @@ class EdgeHandleOverlayView(
             return MenuButton.CLOSE
         }
 
-        if (x in btnLeft..btnRight) {
-            val btnHeight = 40 * density
-            val btn1Top = 38 * density
-            if (y in btn1Top..(btn1Top + btnHeight)) return MenuButton.HUD
+        val recoilOn = isAntiRecoilActive?.invoke() ?: false
 
-            val btn2Top = 86 * density
-            if (y in btn2Top..(btn2Top + btnHeight)) return MenuButton.STRAFE
+        val btnHeight = 38 * density
+        val btn1Top = 36 * density
+        if (x in btnLeft..btnRight && y in btn1Top..(btn1Top + btnHeight)) return MenuButton.HUD
 
-            val btn3Top = 134 * density
-            if (y in btn3Top..(btn3Top + btnHeight)) return MenuButton.APP
+        val btn2Top = 78 * density
+        if (x in btnLeft..btnRight && y in btn2Top..(btn2Top + btnHeight)) return MenuButton.STRAFE
 
-            val btn4Top = 182 * density
-            if (y in btn4Top..(btn4Top + btnHeight)) return MenuButton.STOP
+        val btn3Top = 120 * density
+        if (x in btnLeft..btnRight && y in btn3Top..(btn3Top + btnHeight)) return MenuButton.RECOIL
+
+        if (recoilOn) {
+            if (btnRecoilDecRect.contains(x, y)) return MenuButton.RECOIL_DEC
+            if (btnRecoilIncRect.contains(x, y)) return MenuButton.RECOIL_INC
+
+            val btn4Top = 162 * density + 42 * density + 6 * density
+            if (x in btnLeft..btnRight && y in btn4Top..(btn4Top + btnHeight)) return MenuButton.APP
+
+            val btn5Top = btn4Top + btnHeight + 4 * density
+            if (x in btnLeft..btnRight && y in btn5Top..(btn5Top + btnHeight)) return MenuButton.STOP
+        } else {
+            val btn4Top = 162 * density
+            if (x in btnLeft..btnRight && y in btn4Top..(btn4Top + btnHeight)) return MenuButton.APP
+
+            val btn5Top = btn4Top + btnHeight + 4 * density
+            if (x in btnLeft..btnRight && y in btn5Top..(btn5Top + btnHeight)) return MenuButton.STOP
         }
         return null
     }
@@ -410,9 +530,22 @@ class EdgeHandleOverlayView(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (isMenuOpen) {
+            val recoilOn = isAntiRecoilActive?.invoke() ?: false
+
             // Touch handling when menu is OPEN
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    // Check if touching inside the slider track
+                    if (recoilOn && sliderTrackRect.contains(event.x, event.y)) {
+                        isDraggingRecoilSlider = true
+                        val progress = ((event.x - sliderTrackRect.left) / sliderTrackRect.width()).coerceIn(0f, 1f)
+                        val newSpeed = Math.round((0.1f + progress * 9.9f) * 10f) / 10f
+                        onSetAntiRecoilSpeed?.invoke(newSpeed)
+                        performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        invalidate()
+                        return true
+                    }
+
                     val btn = getButtonAt(event.x, event.y)
                     if (btn != null) {
                         pressedButton = btn
@@ -421,9 +554,9 @@ class EdgeHandleOverlayView(
                         return true
                     } else {
                         val isInsideMenu = if (currentEdge == ScreenEdge.RIGHT) {
-                            event.x >= width - menuWidth && event.y <= menuHeight
+                            event.x >= width - menuWidth && event.y <= currentMenuHeight
                         } else {
-                            event.x <= menuWidth && event.y <= menuHeight
+                            event.x <= menuWidth && event.y <= currentMenuHeight
                         }
                         if (!isInsideMenu) {
                             closeMenu()
@@ -434,6 +567,14 @@ class EdgeHandleOverlayView(
                 }
 
                 MotionEvent.ACTION_MOVE -> {
+                    if (isDraggingRecoilSlider && recoilOn && sliderTrackRect.width() > 0) {
+                        val progress = ((event.x - sliderTrackRect.left) / sliderTrackRect.width()).coerceIn(0f, 1f)
+                        val newSpeed = Math.round((0.1f + progress * 9.9f) * 10f) / 10f
+                        onSetAntiRecoilSpeed?.invoke(newSpeed)
+                        invalidate()
+                        return true
+                    }
+
                     val btn = getButtonAt(event.x, event.y)
                     if (btn != pressedButton) {
                         pressedButton = btn
@@ -443,6 +584,12 @@ class EdgeHandleOverlayView(
                 }
 
                 MotionEvent.ACTION_UP -> {
+                    if (isDraggingRecoilSlider) {
+                        isDraggingRecoilSlider = false
+                        invalidate()
+                        return true
+                    }
+
                     val targetBtn = pressedButton
                     pressedButton = null
                     invalidate()
@@ -454,14 +601,34 @@ class EdgeHandleOverlayView(
                             performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                             invalidate()
                         }
+                        MenuButton.RECOIL -> {
+                            onToggleAntiRecoil?.invoke()
+                            ensureWindowSize(menuWidth, currentMenuHeight)
+                            performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            invalidate()
+                        }
+                        MenuButton.RECOIL_DEC -> {
+                            val cur = getAntiRecoilSpeed?.invoke() ?: 1.0f
+                            val newSpd = Math.round((cur - 0.2f).coerceIn(0.1f, 10.0f) * 10f) / 10f
+                            onSetAntiRecoilSpeed?.invoke(newSpd)
+                            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            invalidate()
+                        }
+                        MenuButton.RECOIL_INC -> {
+                            val cur = getAntiRecoilSpeed?.invoke() ?: 1.0f
+                            val newSpd = Math.round((cur + 0.2f).coerceIn(0.1f, 10.0f) * 10f) / 10f
+                            onSetAntiRecoilSpeed?.invoke(newSpd)
+                            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            invalidate()
+                        }
                         MenuButton.APP -> closeMenu { onOpenApp() }
                         MenuButton.STOP -> closeMenu { onStopService() }
                         MenuButton.CLOSE -> closeMenu()
                         null -> {
                             val isInsideMenu = if (currentEdge == ScreenEdge.RIGHT) {
-                                event.x >= width - menuWidth && event.y <= menuHeight
+                                event.x >= width - menuWidth && event.y <= currentMenuHeight
                             } else {
-                                event.x <= menuWidth && event.y <= menuHeight
+                                event.x <= menuWidth && event.y <= currentMenuHeight
                             }
                             if (!isInsideMenu) {
                                 closeMenu()
@@ -473,6 +640,7 @@ class EdgeHandleOverlayView(
 
                 MotionEvent.ACTION_CANCEL -> {
                     pressedButton = null
+                    isDraggingRecoilSlider = false
                     invalidate()
                     return true
                 }
