@@ -84,17 +84,29 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
 
 ---
 
-## ✨ Features
+## ✨ Key Features & Highlights
 
-- **🌐 Serverless Community Hub**: Explore, vote (👍/👎), search, and download community-made game presets in 1 click (powered by Cloudflare D1).
-- **🏎️ Zero-Allocation Binary Input Engine**: Direct streaming from `/dev/input/event*` with zero garbage collection and $< 0.5\text{ ms}$ input lag.
-- **🎯 Seamless 360° Camera (Dual-Pointer Handoff)**: No screen edge stutters or sudden angle snapping during infinite rotations.
-- **🚀 Dynamic Boost & 180° Instant Flick**: Micro-precision center aim combined with fast 180° turns at stick edge + ADS Scope Safety lock.
-- **🧲 RAA Keep-Alive & Organic Jiggle Strafe**: Rotational Aim Assist micro-dithering and humanized anti-detection strafe dodge during fire.
-- **📳 Dynamic Haptic Feedback**: Realistic weapon recoil vibration and mechanical reload pulses with in-app test buttons.
-- **🎮 Visual HUD Editor & Key Rebinding**: Easily position buttons directly over the game with live preview, assign roles (Fire, Reload, ADS), customize Hold/Tap modes, and freely rename, duplicate, or export profiles.
-- **🪄 Built-in Gamepad Diagnostic**: Real-time stick visualizer, 3-second automatic drift test, and circularity/outer-deadzone calibration.
-- **🔄 In-App Auto-Updater**: Directly detects and downloads new GitHub releases within the app.
+### 🏎️ High-Performance Mapping Engine
+- **Ultra-Low Latency (< 0.5 ms)**: Direct Linux `/dev/input/event*` binary stream parsing with zero memory allocation and zero garbage collection overhead.
+- **120 Hz – 240 Hz Real-Time Loop**: High-priority dedicated engine thread synchronized with modern high-refresh-rate gaming screens.
+- **Seamless 360° Camera**: Dual-pointer handoff technology eliminating screen edge locks and angle snapping during continuous 360° rotations.
+- **Dynamic Flick & Boost Curve**: Micro-precision center deadzone combined with instant 180° turn acceleration at outer stick reach.
+
+### 🎯 Tactical Assists & Aim Enhancements
+- **Organic Jiggle Strafe**: Automated left/right dodge patterns during weapon fire with randomized feints and humanized timing variations.
+- **Vertical Anti-Recoil**: Smooth automated pull-down compensation with configurable speed (0.1x – 10.0x) and dedicated ADS-Only mode.
+- **Rotational Aim Assist (RAA) Keep-Alive**: Micro-dithering ensures in-game aim assist rotational tracking remains active even when stationary.
+- **Controller Rumble & Recoil**: Dynamic physical gamepad vibration with continuous firing recoil pulses and mechanical reload double-pulses.
+
+### 🪟 In-Game HUD & Key Customization
+- **In-Game Floating HUD Editor**: Retractable side-drawer to drag, scale, and test button mappings live without leaving your match.
+- **Special Button Roles**: One-tap assignment for *Primary Fire*, *Reload Magazine*, and *ADS Scope* with dedicated sensitivities.
+- **Multi-Profile Management**: Create, duplicate, rename, backup, and export custom mappings for any game.
+
+### 🌐 Cloud Community & Hardware Diagnostic
+- **1-Click Community Hub**: Search, download, and vote on community-made game presets backed by Cloudflare D1 edge database.
+- **Hardware Diagnostic Suite**: Real-time analog stick visualizer, 3-second automated drift test, circularity error check, and polling rate (Hz) monitor.
+- **In-App Auto-Updater**: Direct background detection and 1-tap installation of new GitHub releases directly within the app.
 
 ---
 
