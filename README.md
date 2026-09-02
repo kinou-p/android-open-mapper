@@ -98,6 +98,13 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
 
 ---
 
+## 🗺️ Roadmap & Planned Features
+
+Check out our [**TODO.md**](TODO.md) roadmap for upcoming features and technical improvements (Virtual Mouse mode, e-Sport Macros, Radial Menus, Per-App Auto-Switching, Advanced Community Filters, Adaptive Polling, and more).
+
+
+---
+
 ## 🏛️ System Architecture
 
 ```mermaid
