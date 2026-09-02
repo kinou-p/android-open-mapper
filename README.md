@@ -105,56 +105,6 @@ Check out our [**TODO.md**](TODO.md) roadmap for upcoming features and technical
 
 ---
 
-## 🏛️ System Architecture
-
-```mermaid
-flowchart TB
-    subgraph KERNEL ["Linux Kernel & Hardware Devices"]
-        DEV["/dev/input/event* (Gamepad USB/BT)"]
-        SYS_INPUT["Android InputManager Service"]
-    end
-
-    subgraph ENGINE ["OpenMapper Core Engine"]
-        LIR["LinuxInputReader<br/>(Shizuku elevated cat / getevent)"]
-        BIP["BinaryInputParser<br/>(Zero-Alloc 24B / 16B Parsing)"]
-        GE["GamepadEngine (Loop 120-240 Hz)"]
-        
-        MP["MovementProcessor<br/>(RAA Dither & Jiggle Strafe)"]
-        CP["CameraProcessor<br/>(Dual-Pointer Handoff & 180° Flick)"]
-        BP["ButtonProcessor<br/>(Hold / Tap)"]
-    end
-
-    subgraph INJECTION ["Shizuku Touch Injection Layer"]
-        STI["ShizukuTouchInjector (ReentrantLock)"]
-        PP["PointerPool (Humanized Jitter & Pressure)"]
-        IIH["IInputManagerHelper (AIDL / Reflection)"]
-    end
-
-    subgraph OVERLAY ["UI & Android Services"]
-        OS["OverlayService (Foreground Special Use)"]
-        EHO["EdgeHandleOverlayView (Drawer 16dp)"]
-        HEO["HudEditorOverlayView (Canvas 2D + Pinch-to-Resize)"]
-    end
-
-    subgraph CLOUD ["Cloudflare Serverless Backend"]
-        HONO["Worker Hono (REST API)"]
-        D1[("Cloudflare D1 (SQLite Edge)")]
-    end
-
-    DEV -->|Binary struct input_event stream| LIR
-    LIR --> BIP --> GE
-    GE --> MP & CP & BP
-    MP & CP & BP --> STI
-    STI --> PP --> IIH
-    IIH -->|injectInputEvent mode 0 ASYNC| SYS_INPUT
-
-    OS --> EHO & HEO & GE
-    OS -.->|JSON Profiles & Community Votes| HONO
-    HONO --> D1
-```
-
----
-
 ## 🛠️ Building from Source
 
 ```bash
