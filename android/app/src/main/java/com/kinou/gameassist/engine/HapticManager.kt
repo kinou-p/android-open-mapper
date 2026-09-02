@@ -58,14 +58,26 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
 
         try {
             val deviceIds = InputDevice.getDeviceIds()
+            val ignoredKeywords = listOf(
+                "uinput", "xiaomi", "touchscreen", "touch_dev", "fts_ts",
+                "focaltech", "goodix", "synaptics", "novatek", "virtual",
+                "gpio-keys", "pmic_pwrkey", "pmic_resin", "snd-card", "headset"
+            )
+
             for (id in deviceIds) {
                 val dev = InputDevice.getDevice(id) ?: continue
-                val sources = dev.sources
-                val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
-                                (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK ||
-                                (!dev.isVirtual && (sources and InputDevice.SOURCE_KEYBOARD) != 0 && dev.keyboardType != InputDevice.KEYBOARD_TYPE_ALPHABETIC)
+                if (dev.isVirtual) continue
 
-                if (isGamepad) {
+                val devName = dev.name ?: ""
+                val isIgnored = ignoredKeywords.any { devName.contains(it, ignoreCase = true) }
+                if (isIgnored) continue
+
+                val sources = dev.sources
+                val isGamepadSource = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+                val isJoystickSource = (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+                if (!isGamepadSource && !isJoystickSource) continue
+
+                if (true) {
                     val devVibrators = mutableListOf<Vibrator>()
                     var amplitudeSupport = false
 
