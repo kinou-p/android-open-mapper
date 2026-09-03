@@ -10,6 +10,8 @@
 
     <!-- Détection manettes et vibration -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <!-- Accès réseau pour la vérification et le téléchargement des mises à jour GitHub -->
     <uses-permission android:name="android.permission.INTERNET" />

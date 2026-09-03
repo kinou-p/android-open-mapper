@@ -2,7 +2,9 @@ package com.kinou.gameassist.injector
 
 import android.hardware.input.IInputManager
 import android.os.IBinder
+import android.os.RemoteException
 import android.view.InputEvent
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 
 class IInputManagerHelper(private val binder: IBinder) {
@@ -22,13 +24,13 @@ class IInputManagerHelper(private val binder: IBinder) {
         try {
             iInputManager = IInputManager.Stub.asInterface(binder)
             targetObject = iInputManager
-        } catch (e: Throwable) {
-            // Fallback via reflection
+        } catch (_: Throwable) {
+            // Fallback via reflection Stub
             try {
                 val stubClass = Class.forName("android.hardware.input.IInputManager\$Stub")
                 val asInterfaceMethod = stubClass.getMethod("asInterface", IBinder::class.java)
                 targetObject = asInterfaceMethod.invoke(null, binder)
-            } catch (ex: Exception) {
+            } catch (_: Exception) {
                 // Ignore
             }
         }
@@ -47,77 +49,71 @@ class IInputManagerHelper(private val binder: IBinder) {
                 }
             }
         }
+
+        // Déterminer de manière déterministe le mode d'injection dès l'initialisation
+        val method = injectMethod
+        if (method != null && method.parameterTypes.size == 3) {
+            // Android 11 à 15+: injectInputEvent(InputEvent, int mode, int displayId)
+            injectionMode = InjectionMode.REFLECTION_3_PARAMS
+        } else if (iInputManager != null) {
+            // AIDL direct compilé 2 params: injectInputEvent(InputEvent, int mode)
+            injectionMode = InjectionMode.DIRECT_AIDL_2_PARAMS
+        } else if (method != null && method.parameterTypes.size == 2) {
+            // Réflexion 2 params: injectInputEvent(InputEvent, int mode)
+            injectionMode = InjectionMode.REFLECTION_2_PARAMS
+        }
     }
 
     /**
      * Injects an input event into the system.
      * mode: 0 = INJECT_INPUT_EVENT_MODE_ASYNC (< 0.5ms non-blocking)
+     *
+     * Propagates RemoteException and SecurityException so higher-level injectors
+     * can detect Binder death and trigger auto-reconnection.
      */
+    @Throws(RemoteException::class)
     fun injectInputEvent(event: InputEvent, mode: Int = 0): Boolean {
         return when (injectionMode) {
             InjectionMode.DIRECT_AIDL_2_PARAMS -> {
                 try {
                     iInputManager?.injectInputEvent(event, mode) ?: false
-                } catch (e: Throwable) {
-                    // Switch to fallback if signature changed at runtime
-                    injectionMode = InjectionMode.UNSET
-                    iInputManager = null
-                    injectInputEventFallback(event, mode)
+                } catch (e: RemoteException) {
+                    throw e // Propager la mort du Binder Shizuku / service Input
+                } catch (e: SecurityException) {
+                    throw e
+                } catch (_: Exception) {
+                    false
                 }
             }
             InjectionMode.REFLECTION_3_PARAMS -> {
+                val target = targetObject ?: return false
+                val method = injectMethod ?: return false
                 try {
-                    injectMethod?.invoke(targetObject, event, mode, 0) as? Boolean ?: true
-                } catch (e: Throwable) {
+                    method.invoke(target, event, mode, 0) as? Boolean ?: true
+                } catch (e: InvocationTargetException) {
+                    val cause = e.cause ?: e.targetException
+                    if (cause is RemoteException) throw cause
+                    if (cause is SecurityException) throw cause
+                    false
+                } catch (_: Exception) {
                     false
                 }
             }
             InjectionMode.REFLECTION_2_PARAMS -> {
+                val target = targetObject ?: return false
+                val method = injectMethod ?: return false
                 try {
-                    injectMethod?.invoke(targetObject, event, mode) as? Boolean ?: true
-                } catch (e: Throwable) {
+                    method.invoke(target, event, mode) as? Boolean ?: true
+                } catch (e: InvocationTargetException) {
+                    val cause = e.cause ?: e.targetException
+                    if (cause is RemoteException) throw cause
+                    if (cause is SecurityException) throw cause
+                    false
+                } catch (_: Exception) {
                     false
                 }
             }
-            InjectionMode.UNSET -> {
-                injectInputEventFallback(event, mode)
-            }
+            InjectionMode.UNSET -> false
         }
-    }
-
-    private fun injectInputEventFallback(event: InputEvent, mode: Int): Boolean {
-        // 1. Try Direct AIDL (2 params)
-        if (iInputManager != null) {
-            try {
-                val res = iInputManager!!.injectInputEvent(event, mode)
-                injectionMode = InjectionMode.DIRECT_AIDL_2_PARAMS
-                return res
-            } catch (e: Throwable) {
-                // Disable direct AIDL permanently to avoid repeated exceptions across frames
-                iInputManager = null
-            }
-        }
-
-        // 2. Try Reflection method (supports Android 11 to 15: 2 params or 3 params with displayId=0)
-        val method = injectMethod
-        val target = targetObject
-        if (method != null && target != null) {
-            val paramCount = method.parameterTypes.size
-            if (paramCount == 3) {
-                try {
-                    val res = method.invoke(target, event, mode, 0) as? Boolean ?: true
-                    injectionMode = InjectionMode.REFLECTION_3_PARAMS
-                    return res
-                } catch (e: Throwable) {}
-            } else if (paramCount == 2) {
-                try {
-                    val res = method.invoke(target, event, mode) as? Boolean ?: true
-                    injectionMode = InjectionMode.REFLECTION_2_PARAMS
-                    return res
-                } catch (e: Throwable) {}
-            }
-        }
-
-        return false
     }
 }

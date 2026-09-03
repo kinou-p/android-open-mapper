@@ -3,6 +3,8 @@ package com.kinou.gameassist.engine
 import android.content.Context
 import android.hardware.input.InputManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.InputDevice
@@ -28,7 +30,8 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
 
     private val appContext: Context = context.applicationContext
     private val inputManager = appContext.getSystemService(Context.INPUT_SERVICE) as? InputManager
-    private val hapticScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val hapticJob = SupervisorJob()
+    private val hapticScope = CoroutineScope(Dispatchers.Default + hapticJob)
 
     @Volatile private var cachedGamepadVibrators: List<Vibrator> = emptyList()
     @Volatile private var cachedGamepadInfos: List<GamepadHapticInfo> = emptyList()
@@ -44,7 +47,7 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
     fun registerListener() {
         try {
             inputManager?.unregisterInputDeviceListener(this)
-            inputManager?.registerInputDeviceListener(this, null)
+            inputManager?.registerInputDeviceListener(this, Handler(Looper.getMainLooper()))
         } catch (_: Exception) {}
         refreshGamepadVibrators()
     }
@@ -84,13 +87,11 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                         val vm = dev.vibratorManager
                         val vIds = vm?.vibratorIds
-                        if (vm != null && vIds != null && vIds.isNotEmpty()) {
+                        if (vIds != null && vIds.isNotEmpty()) {
                             for (vId in vIds) {
                                 val v = vm.getVibrator(vId)
-                                if (v != null && v.hasVibrator()) {
-                                    devVibrators.add(v)
-                                    if (v.hasAmplitudeControl()) amplitudeSupport = true
-                                }
+                                devVibrators.add(v)
+                                if (v.hasAmplitudeControl()) amplitudeSupport = true
                             }
                         }
                     }
@@ -134,7 +135,28 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
         try {
             inputManager?.unregisterInputDeviceListener(this)
         } catch (_: Exception) {}
-        hapticScope.cancel()
+        stopAllVibrations()
+        hapticJob.cancelChildren()
+    }
+
+    /**
+     * Immediately stops any ongoing vibrations on all known gamepads.
+     */
+    fun stopAllVibrations() {
+        try {
+            val targets = cachedGamepadVibrators
+            for (i in targets.indices) {
+                targets[i].cancel()
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Completely destroys this manager and permanently cancels its coroutine scope.
+     */
+    fun destroy() {
+        release()
+        hapticJob.cancel()
     }
 
     /**

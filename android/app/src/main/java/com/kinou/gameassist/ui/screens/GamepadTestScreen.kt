@@ -667,6 +667,89 @@ fun RealisticGamepadVisualizer(
                     )
                 }
             }
+
+            // BACK PADDLES CLUSTER (P1, P2, P3, P4 / M1, M2)
+            HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "PALETTES ARRIÈRE (ELITE / SCUF / M1-M4)",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextSecondary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    // Left Paddles: P3 (Top Left), P4 (Bottom Left)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PaddleBadge(
+                            label = "P3 (UL)",
+                            isPressed = pressedButtons.contains("BUTTON_PADDLE3")
+                        )
+                        PaddleBadge(
+                            label = "P4 (LL)",
+                            isPressed = pressedButtons.contains("BUTTON_PADDLE4")
+                        )
+                    }
+
+                    // Right Paddles: P1 (Top Right), P2 (Bottom Right)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PaddleBadge(
+                            label = "P1 (UR)",
+                            isPressed = pressedButtons.contains("BUTTON_PADDLE1")
+                        )
+                        PaddleBadge(
+                            label = "P2 (LR)",
+                            isPressed = pressedButtons.contains("BUTTON_PADDLE2")
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Back Paddle Badge (P1 - P4 / M1 - M4).
+ */
+@Composable
+fun PaddleBadge(label: String, isPressed: Boolean) {
+    val bgColor by animateColorAsState(
+        targetValue = if (isPressed) NeonCyan else DarkSurface,
+        animationSpec = tween(120),
+        label = "paddleBg"
+    )
+    val textColor by animateColorAsState(
+        targetValue = if (isPressed) DarkBackground else TextSecondary,
+        animationSpec = tween(120),
+        label = "paddleText"
+    )
+
+    Surface(
+        color = bgColor,
+        shape = RoundedCornerShape(8.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isPressed) NeonCyan else DarkCardBorder
+        ),
+        modifier = Modifier
+            .width(68.dp)
+            .height(28.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                color = textColor,
+                fontSize = 11.sp,
+                fontWeight = if (isPressed) FontWeight.Bold else FontWeight.Medium
+            )
         }
     }
 }

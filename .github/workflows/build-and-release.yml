@@ -141,6 +141,16 @@ jobs:
           TAG_NAME="${{ github.ref_name }}"
           TAG_MESSAGE=$(git tag -l --format='%(contents)' "$TAG_NAME" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
+          # Calcul du checksum SHA-256 de l'APK de release
+          TARGET_APK="dist/OpenMapper-${TAG_NAME}.apk"
+          if [ ! -f "$TARGET_APK" ]; then
+            TARGET_APK="dist/OpenMapper-latest.apk"
+          fi
+          APK_SHA256=""
+          if [ -f "$TARGET_APK" ]; then
+            APK_SHA256=$(sha256sum "$TARGET_APK" | cut -d' ' -f1)
+          fi
+
           cat << 'EOF' > release_body.md
           ## 🎮 OpenMapper ${{ github.ref_name }}
 
@@ -152,6 +162,11 @@ jobs:
           3. Assurez-vous que **[Shizuku](https://shizuku.rikka.app/)** est actif sur votre téléphone pour profiter du mapping et de l'injection tactile à ultra-faible latence (< 0.5 ms).
 
           EOF
+
+          if [ -n "$APK_SHA256" ]; then
+            echo "**SHA-256:** \`${APK_SHA256}\`" >> release_body.md
+            echo "" >> release_body.md
+          fi
 
           if [ -n "$TAG_MESSAGE" ] && [ "$TAG_MESSAGE" != "$TAG_NAME" ]; then
             echo "### 📝 Notes de cette version" >> release_body.md

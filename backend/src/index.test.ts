@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { app, normalizeIpForRateLimit } from './index';
+import { app, normalizeIpForRateLimit, hashIp } from './index';
 
 async function hmacSha256Hex(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -552,4 +552,148 @@ describe('Telemetry & Device Metadata (deviceModel + osVersion)', () => {
     expect(json.success).toBe(true);
   });
 });
+
+describe('IP Anonymization & Privacy (hashIp)', () => {
+  it('retourne null si aucun sel n\'est fourni (pas de fallback secret)', async () => {
+    const resUndef = await hashIp('192.168.1.1', undefined);
+    expect(resUndef).toBeNull();
+
+    const resEmpty = await hashIp('192.168.1.1', '');
+    expect(resEmpty).toBeNull();
+  });
+
+  it('calcule une empreinte de 32 caractères hexadécimaux si un sel dédié est fourni', async () => {
+    const res = await hashIp('192.168.1.1', 'secret-server-salt-12345');
+    expect(res).toBeTypeOf('string');
+    expect(res).toHaveLength(32);
+    expect(res).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('produit des empreintes distinctes pour des IPs ou des sels différents', async () => {
+    const h1 = await hashIp('1.1.1.1', 'salt-A');
+    const h2 = await hashIp('1.1.1.2', 'salt-A');
+    const h3 = await hashIp('1.1.1.1', 'salt-B');
+
+    expect(h1).not.toBe(h2);
+    expect(h1).not.toBe(h3);
+  });
+
+  it('ne persiste pas de hash d\'IP basé sur APP_SECRET lors de la publication d\'un profil si IP_SALT est absent', async () => {
+    let capturedClientIp: any = undefined;
+    const testEnv = {
+      APP_SECRET: 'leaked-app-secret-from-apk',
+      DB: {
+        prepare: (query: string) => ({
+          bind: (...args: any[]) => {
+            if (query.includes('INSERT INTO profiles')) {
+              capturedClientIp = args[9]; // 10th argument: client_ip
+            }
+            return {
+              first: async () => ({ count: 0, window_start: Date.now() }),
+              all: async () => ({ results: [] }),
+              run: async () => ({ success: true })
+            };
+          }
+        }),
+        batch: async (statements: any[]) => statements.map(() => ({ results: [{ count: 0, window_start: Date.now() }], success: true }))
+      }
+    };
+
+    const mockExecCtx = {
+      waitUntil: (_promise: Promise<any>) => {},
+      passThroughOnException: () => {}
+    };
+
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const body = JSON.stringify({
+      deviceToken: 'c'.repeat(64),
+      title: 'Valid Profile',
+      game_name: 'CODM',
+      package_name: 'com.activision.callofduty.shooter',
+      profile_json: JSON.stringify({
+        name: 'Profile 1',
+        mappings: []
+      })
+    });
+    const bodyHash = await sha256Hex(body);
+    const canonical = `POST\n/api/profiles\n${timestamp}\n${bodyHash}`;
+    const signature = await hmacSha256Hex(testEnv.APP_SECRET, canonical);
+
+    const req = new Request('http://localhost/api/profiles', {
+      method: 'POST',
+      headers: {
+        'x-timestamp': timestamp,
+        'x-signature': signature,
+        'content-type': 'application/json',
+        'cf-connecting-ip': '203.0.113.195'
+      },
+      body
+    });
+
+    const res = await app.fetch(req, testEnv as any, mockExecCtx as any);
+    expect(res.status).toBe(201);
+    expect(capturedClientIp).toBeNull();
+  });
+
+  it('persiste le hash anonymisé avec IP_SALT lorsque IP_SALT est configuré', async () => {
+    let capturedClientIp: any = undefined;
+    const testEnv = {
+      APP_SECRET: 'leaked-app-secret-from-apk',
+      IP_SALT: 'secure-server-salt-not-in-apk',
+      DB: {
+        prepare: (query: string) => ({
+          bind: (...args: any[]) => {
+            if (query.includes('INSERT INTO profiles')) {
+              capturedClientIp = args[9]; // 10th argument: client_ip
+            }
+            return {
+              first: async () => ({ count: 0, window_start: Date.now() }),
+              all: async () => ({ results: [] }),
+              run: async () => ({ success: true })
+            };
+          }
+        }),
+        batch: async (statements: any[]) => statements.map(() => ({ results: [{ count: 0, window_start: Date.now() }], success: true }))
+      }
+    };
+
+    const mockExecCtx = {
+      waitUntil: (_promise: Promise<any>) => {},
+      passThroughOnException: () => {}
+    };
+
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const body = JSON.stringify({
+      deviceToken: 'd'.repeat(64),
+      title: 'Valid Profile 2',
+      game_name: 'CODM',
+      package_name: 'com.activision.callofduty.shooter',
+      profile_json: JSON.stringify({
+        name: 'Profile 2',
+        mappings: []
+      })
+    });
+    const bodyHash = await sha256Hex(body);
+    const canonical = `POST\n/api/profiles\n${timestamp}\n${bodyHash}`;
+    const signature = await hmacSha256Hex(testEnv.APP_SECRET, canonical);
+
+    const req = new Request('http://localhost/api/profiles', {
+      method: 'POST',
+      headers: {
+        'x-timestamp': timestamp,
+        'x-signature': signature,
+        'content-type': 'application/json',
+        'cf-connecting-ip': '203.0.113.195'
+      },
+      body
+    });
+
+    const res = await app.fetch(req, testEnv as any, mockExecCtx as any);
+    expect(res.status).toBe(201);
+    expect(capturedClientIp).toBeTypeOf('string');
+    expect(capturedClientIp).toHaveLength(32);
+    expect(capturedClientIp).toBe(await hashIp('203.0.113.195', 'secure-server-salt-not-in-apk'));
+  });
+});
+
 

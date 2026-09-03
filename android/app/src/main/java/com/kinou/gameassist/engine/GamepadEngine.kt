@@ -8,6 +8,7 @@ import android.os.Looper
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import com.kinou.gameassist.data.model.GamepadDetector
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import kotlinx.coroutines.*
@@ -19,8 +20,44 @@ class GamepadEngine(
     val hapticManager: HapticManager? = null
 ) {
     private val inputManager = context.applicationContext.getSystemService(Context.INPUT_SERVICE) as? InputManager
+    @Volatile var hasConnectedGamepad = true
+
+    fun checkConnectedGamepads(): Boolean {
+        val connected = GamepadDetector.getConnectedGamepads(context).isNotEmpty()
+        hasConnectedGamepad = connected
+        return connected
+    }
+
+    /**
+     * Complete failsafe reset: zeroes all sticks, triggers, DPad, releases all touch pointers,
+     * stops all running rapid-fire jobs, and silences all vibrations.
+     * Prevents ghost firing, stuck strafing, and continuous rumble on Bluetooth disconnect.
+     */
+    fun resetAllInputs() {
+        lx = 0.0f
+        ly = 0.0f
+        rx = 0.0f
+        ry = 0.0f
+        ltPressed = false
+        rtPressed = false
+        hatUp = false
+        hatDown = false
+        hatLeft = false
+        hatRight = false
+        isSelectHeld = false
+        selectUsedInCombo = false
+        pressedRawButtons.clear()
+
+        movementProcessor.release()
+        cameraProcessor.release()
+        buttonProcessor.releaseAll()
+        hapticManager?.stopAllVibrations()
+        injector.resetAllPointers()
+    }
+
     private val deviceHotplugListener = object : InputManager.InputDeviceListener {
         override fun onInputDeviceAdded(deviceId: Int) {
+            hasConnectedGamepad = true
             if (isRunning) {
                 hapticManager?.refreshGamepadVibrators()
                 linuxReader.restart()
@@ -29,6 +66,8 @@ class GamepadEngine(
 
         override fun onInputDeviceRemoved(deviceId: Int) {
             if (isRunning) {
+                resetAllInputs()
+                checkConnectedGamepads()
                 hapticManager?.refreshGamepadVibrators()
                 linuxReader.restart()
             }
@@ -36,6 +75,7 @@ class GamepadEngine(
 
         override fun onInputDeviceChanged(deviceId: Int) {
             if (isRunning) {
+                checkConnectedGamepads()
                 hapticManager?.refreshGamepadVibrators()
             }
         }
@@ -74,8 +114,31 @@ class GamepadEngine(
     @Volatile private var engineThread: Thread? = null
     private val lifecycleLock = Any()
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
+    var onTacticalToggle: ((message: String) -> Unit)? = null
     @Volatile private var isSelectHeld = false
     @Volatile private var selectUsedInCombo = false
+
+    init {
+        buttonProcessor.onToggleRecoil = {
+            val cam = currentProfile?.camera
+            if (cam != null) {
+                cam.antiRecoilEnabled = !cam.antiRecoilEnabled
+                cameraProcessor.config = cam.copy()
+                onTacticalToggle?.invoke("🎯 Anti-Recul: " + if (cam.antiRecoilEnabled) "ACTIF (${cam.antiRecoilSpeed}x)" else "DÉSACTIVÉ")
+            }
+        }
+        buttonProcessor.onToggleStrafe = {
+            val joy = currentProfile?.joystick
+            if (joy != null) {
+                joy.jiggleStrafe = !joy.jiggleStrafe
+                movementProcessor.config = joy.copy()
+                onTacticalToggle?.invoke("⚡ Jiggle Strafe: " + if (joy.jiggleStrafe) "ACTIF" else "DÉSACTIVÉ")
+            }
+        }
+        buttonProcessor.onSwitchProfile = {
+            onHotSwitchProfile?.invoke(true)
+        }
+    }
 
     fun onRawButtonDown(btnName: String) {
         val normalizedName = btnName.trim().uppercase()
@@ -158,6 +221,7 @@ class GamepadEngine(
 
             if (isRunning) return
             isRunning = true
+            checkConnectedGamepads()
 
             try {
                 inputManager?.registerInputDeviceListener(deviceHotplugListener, Handler(Looper.getMainLooper()))
@@ -188,6 +252,12 @@ class GamepadEngine(
                         val camCfg = cameraProcessor.config
                         val isFiring = rtPressed || buttonProcessor.isFireActive()
                         val isAds = ltPressed || buttonProcessor.isAdsActive()
+
+                        // Failsafe : si aucune manette physique n'est présente, interdire tout tir ou déplacement fantôme
+                        if (!hasConnectedGamepad && (isFiring || isAds || lx != 0f || ly != 0f || rx != 0f || ry != 0f)) {
+                            resetAllInputs()
+                            continue
+                        }
                         val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
                         movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
                         cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
@@ -262,10 +332,7 @@ class GamepadEngine(
                 inputManager?.unregisterInputDeviceListener(deviceHotplugListener)
             } catch (_: Exception) {}
             linuxReader.stop()
-            pressedRawButtons.clear()
-            movementProcessor.release()
-            cameraProcessor.release()
-            buttonProcessor.releaseAll()
+            resetAllInputs()
             hapticManager?.release()
 
             threadToJoin = engineThread
@@ -404,6 +471,10 @@ class GamepadEngine(
             KeyEvent.KEYCODE_DPAD_DOWN -> "DPAD_DOWN"
             KeyEvent.KEYCODE_DPAD_LEFT -> "DPAD_LEFT"
             KeyEvent.KEYCODE_DPAD_RIGHT -> "DPAD_RIGHT"
+            KeyEvent.KEYCODE_BUTTON_1, KeyEvent.KEYCODE_BUTTON_5, KeyEvent.KEYCODE_BUTTON_C -> "BUTTON_PADDLE1"
+            KeyEvent.KEYCODE_BUTTON_2, KeyEvent.KEYCODE_BUTTON_6, KeyEvent.KEYCODE_BUTTON_Z -> "BUTTON_PADDLE2"
+            KeyEvent.KEYCODE_BUTTON_3, KeyEvent.KEYCODE_BUTTON_7 -> "BUTTON_PADDLE3"
+            KeyEvent.KEYCODE_BUTTON_4, KeyEvent.KEYCODE_BUTTON_8 -> "BUTTON_PADDLE4"
             else -> null
         }
     }

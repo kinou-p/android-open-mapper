@@ -82,19 +82,20 @@ class LinuxInputReader(
         isRunning = true
 
         readerJob = scope.launch(Dispatchers.IO) {
+            val currentJob = coroutineContext[Job]
             try {
                 if (!isRunning) {
-                    isStartingOrRunning.set(false)
+                    if (readerJob === currentJob) isStartingOrRunning.set(false)
                     return@launch
                 }
                 val gamepadNodes = findGamepadEventNodes()
                 if (!isRunning) {
-                    isStartingOrRunning.set(false)
+                    if (readerJob === currentJob) isStartingOrRunning.set(false)
                     return@launch
                 }
                 val is64Bit = isKernel64Bit()
                 if (!isRunning) {
-                    isStartingOrRunning.set(false)
+                    if (readerJob === currentJob) isStartingOrRunning.set(false)
                     return@launch
                 }
 
@@ -122,6 +123,9 @@ class LinuxInputReader(
                                     activeStreams.remove(inStream)
                                 }
                                 closeProcessQuietly(proc, inStream)
+                                if (isRunning && readerJob === currentJob) {
+                                    engine.resetAllInputs()
+                                }
                             }
                         }
                         synchronized(processLock) {
@@ -134,15 +138,19 @@ class LinuxInputReader(
                         }
                     }
                     if (launchedCount == 0 && isRunning) {
-                        isRunning = false
-                        isStartingOrRunning.set(false)
+                        if (readerJob === currentJob) {
+                            isRunning = false
+                            isStartingOrRunning.set(false)
+                        }
                     }
                 } else {
                     // Fallback to system getevent in quiet hex mode
                     val proc = spawnShizukuProcess(arrayOf("getevent", "-q"))
                     if (proc == null) {
-                        isRunning = false
-                        isStartingOrRunning.set(false)
+                        if (readerJob === currentJob) {
+                            isRunning = false
+                            isStartingOrRunning.set(false)
+                        }
                         return@launch
                     }
                     val inStream = proc.inputStream
@@ -156,7 +164,7 @@ class LinuxInputReader(
                     synchronized(processLock) {
                         if (!isRunning) {
                             closeProcessQuietly(proc, inStream)
-                            isStartingOrRunning.set(false)
+                            if (readerJob === currentJob) isStartingOrRunning.set(false)
                             return@launch
                         }
                         activeProcesses.add(proc)
@@ -170,12 +178,24 @@ class LinuxInputReader(
                             activeStreams.remove(inStream)
                         }
                         closeProcessQuietly(proc, inStream)
+                        if (isRunning && readerJob === currentJob) {
+                            engine.resetAllInputs()
+                        }
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                isStartingOrRunning.set(false)
-                isRunning = false
+                if (readerJob === currentJob) {
+                    isStartingOrRunning.set(false)
+                    isRunning = false
+                }
                 e.printStackTrace()
+            } finally {
+                if (readerJob === currentJob) {
+                    isStartingOrRunning.set(false)
+                    isRunning = false
+                }
             }
         }
     }
@@ -208,6 +228,7 @@ class LinuxInputReader(
         hatLeft.set(false)
         hatRight.set(false)
         isStartingOrRunning.set(false)
+        engine.resetAllInputs()
     }
 
     /**

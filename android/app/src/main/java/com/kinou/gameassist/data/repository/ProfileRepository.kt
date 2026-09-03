@@ -3,10 +3,12 @@ package com.kinou.gameassist.data.repository
 import android.content.Context
 import androidx.core.util.AtomicFile
 import com.kinou.gameassist.data.model.*
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -100,13 +102,31 @@ class ProfileRepository private constructor(context: Context) {
     }
 
     init {
+        // Pre-populate in-memory cache with default profiles immediately (0ms, no disk I/O)
+        // so synchronous access during startup is instant and non-blocking.
         synchronized(fileLock) {
-            if (!profilesDir.exists()) {
-                profilesDir.mkdirs()
-                initializeDefaultProfiles()
-            } else {
-                loadCacheLocked()
+            val codmMp = createDefaultCodmProfile()
+            val codmBr = createDefaultCodmBrProfile()
+            profileCache[codmMp.id] = codmMp
+            profileCache[codmBr.id] = codmBr
+            updateFlowLocked()
+        }
+        // Load profiles from disk asynchronously on Dispatchers.IO to avoid StrictMode violations
+        CoroutineScope(Dispatchers.IO).launch {
+            synchronized(fileLock) {
+                if (!isCacheLoaded) {
+                    ensureDiskLoadedLocked()
+                }
             }
+        }
+    }
+
+    private fun ensureDiskLoadedLocked() {
+        if (!profilesDir.exists()) {
+            profilesDir.mkdirs()
+            initializeDefaultProfiles()
+        } else {
+            loadCacheLocked()
         }
     }
 
@@ -149,7 +169,7 @@ class ProfileRepository private constructor(context: Context) {
     fun getAllProfiles(): List<GameProfile> {
         synchronized(fileLock) {
             if (!isCacheLoaded) {
-                loadCacheLocked()
+                ensureDiskLoadedLocked()
             }
             return _profilesFlow.value
         }
@@ -173,6 +193,9 @@ class ProfileRepository private constructor(context: Context) {
     fun getProfile(id: String): GameProfile? {
         if (!SAFE_ID_REGEX.matches(id)) return null
         synchronized(fileLock) {
+            if (!isCacheLoaded) {
+                ensureDiskLoadedLocked()
+            }
             profileCache[id]?.let { return it.deepCopy() }
 
             val file = getProfileFile(id) ?: return null

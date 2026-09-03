@@ -889,7 +889,7 @@ app.post('/api/profiles', verifySignature, async (c) => {
 
     const now = Date.now();
     const id = crypto.randomUUID();
-    const hashedIp = await hashIp(clientIp, c.env.IP_SALT || c.env.APP_SECRET);
+    const hashedIp = await hashIp(clientIp, c.env.IP_SALT);
 
     await c.env.DB.prepare(`
       INSERT INTO profiles (
@@ -975,7 +975,7 @@ app.post('/api/profiles/:id/vote', verifySignature, async (c) => {
     }
 
     const now = Date.now();
-    const hashedIp = await hashIp(clientIp, c.env.IP_SALT || c.env.APP_SECRET);
+    const hashedIp = await hashIp(clientIp, c.env.IP_SALT);
 
     // Les compteurs likes_count/dislikes_count sont maintenus de façon ATOMIQUE par des
     // triggers SQLite (voir schema.sql) déclenchés dans la même transaction que l'écriture
@@ -1328,7 +1328,7 @@ app.get('/api/stats', async (c) => {
   }
 });
 
-export { app, validateProfileStructure };
+export { app, validateProfileStructure, hashIp };
 
 export default {
   fetch: app.fetch,
@@ -1340,13 +1340,14 @@ export default {
       const activityDate = new Date(now - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const devicesCutoff = now - 365 * 24 * 60 * 60 * 1000;
       const rateLimitCutoff = now - 24 * 60 * 60 * 1000;
+      const cooldownCutoff = now - 60 * 60 * 1000; // 1h pour les cooldowns courts (ex: *_cd:*)
       const sigCutoff = now - 300 * 1000; // 5 min TTL pour les signatures HMAC
 
       await env.DB.batch([
         env.DB.prepare('DELETE FROM daily_activity WHERE date < ?').bind(activityDate),
         env.DB.prepare('DELETE FROM daily_downloads WHERE date < ?').bind(activityDate),
         env.DB.prepare('DELETE FROM devices WHERE last_seen < ?').bind(devicesCutoff),
-        env.DB.prepare("DELETE FROM rate_limits WHERE (key LIKE 'sig:%' AND window_start < ?1) OR window_start < ?2").bind(sigCutoff, rateLimitCutoff),
+        env.DB.prepare("DELETE FROM rate_limits WHERE (key LIKE 'sig:%' AND window_start < ?1) OR (key LIKE '%_cd:%' AND window_start < ?2) OR window_start < ?3").bind(sigCutoff, cooldownCutoff, rateLimitCutoff),
       ]);
       console.log('[Cron] cleanup effectué:', controller.cron);
     } catch (err) {

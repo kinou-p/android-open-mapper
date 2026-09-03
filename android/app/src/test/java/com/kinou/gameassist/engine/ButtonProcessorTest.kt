@@ -196,4 +196,96 @@ class ButtonProcessorTest {
         assertTrue(ButtonProcessor.isReloadButtonStatic(reloadExplicit))
         assertTrue(ButtonProcessor.isReloadButtonStatic(reloadByKeyword))
     }
+
+    @Test
+    fun testTacticalShortcutCallbacks() {
+        var recoilToggled = false
+        var strafeToggled = false
+        var profileSwitched = false
+
+        processor.onToggleRecoil = { recoilToggled = true }
+        processor.onToggleStrafe = { strafeToggled = true }
+        processor.onSwitchProfile = { profileSwitched = true }
+
+        val btnRecoil = ButtonConfig(id = "p1", label = "P1 Recoil", gamepadButton = "BUTTON_PADDLE1", x = 0.5f, y = 0.5f, role = ButtonRole.TOGGLE_RECOIL)
+        val btnStrafe = ButtonConfig(id = "p2", label = "P2 Strafe", gamepadButton = "BUTTON_PADDLE2", x = 0.5f, y = 0.5f, role = ButtonRole.TOGGLE_STRAFE)
+        val btnSwitch = ButtonConfig(id = "p3", label = "P3 Profile", gamepadButton = "BUTTON_PADDLE3", x = 0.5f, y = 0.5f, role = ButtonRole.SWITCH_PROFILE)
+
+        processor.updateButtons(listOf(btnRecoil, btnStrafe, btnSwitch))
+
+        processor.onButtonDown("BUTTON_PADDLE1")
+        assertTrue(recoilToggled)
+
+        processor.onButtonDown("BUTTON_PADDLE2")
+        assertTrue(strafeToggled)
+
+        processor.onButtonDown("BUTTON_PADDLE3")
+        assertTrue(profileSwitched)
+    }
+
+    @Test
+    fun testPaddleButtonMapping() {
+        val btnP4 = ButtonConfig(id = "p4", label = "P4 Slide", gamepadButton = "BUTTON_PADDLE4", x = 0.7f, y = 0.8f, mode = ButtonMode.HOLD)
+        processor.updateButtons(listOf(btnP4))
+
+        assertFalse(processor.isButtonActive { it.id == "p4" })
+        processor.onButtonDown("BUTTON_PADDLE4")
+        assertTrue(processor.isButtonActive { it.id == "p4" })
+        processor.onButtonUp("BUTTON_PADDLE4")
+        assertFalse(processor.isButtonActive { it.id == "p4" })
+    }
+
+    @Test
+    fun testReleaseAllCancelsRapidFireAndClearsPointers() {
+        val btnFire = ButtonConfig(
+            id = "btn_fire_rapid",
+            label = "Rapid Fire",
+            gamepadButton = "BUTTON_R2",
+            x = 0.8f,
+            y = 0.5f,
+            mode = ButtonMode.RAPID_FIRE,
+            role = ButtonRole.FIRE,
+            rapidFireRateHz = 10
+        )
+        processor.updateButtons(listOf(btnFire))
+
+        processor.onButtonDown("BUTTON_R2")
+        assertTrue(processor.isFireActive())
+
+        // Simule une déconnexion inattendue sans événement UP
+        processor.releaseAll()
+
+        assertFalse(processor.isFireActive())
+        assertFalse(processor.isButtonActive { it.id == "btn_fire_rapid" })
+    }
+
+    @Test
+    fun testRapidFireConsecutivePressDoesNotCorruptPointerPool() {
+        val btnFire = ButtonConfig(
+            id = "btn_fire_rapid",
+            label = "Rapid Fire",
+            gamepadButton = "BUTTON_R2",
+            x = 0.8f,
+            y = 0.5f,
+            mode = ButtonMode.RAPID_FIRE,
+            role = ButtonRole.FIRE,
+            rapidFireRateHz = 10
+        )
+        processor.updateButtons(listOf(btnFire))
+
+        // Premier appui Down
+        processor.onButtonDown("BUTTON_R2")
+        assertTrue(processor.isFireActive())
+        assertTrue(processor.isButtonActive { it.id == "btn_fire_rapid" })
+
+        // Second appui Down immédiat sans UP (re-trigger / hot reload)
+        processor.onButtonDown("BUTTON_R2")
+        assertTrue(processor.isFireActive())
+        assertTrue(processor.isButtonActive { it.id == "btn_fire_rapid" })
+
+        // Relâchement normal
+        processor.onButtonUp("BUTTON_R2")
+        assertFalse(processor.isFireActive())
+        assertFalse(processor.isButtonActive { it.id == "btn_fire_rapid" })
+    }
 }

@@ -8,7 +8,9 @@ enum class ButtonMode {
     @SerialName("hold")
     HOLD,
     @SerialName("tap")
-    TAP
+    TAP,
+    @SerialName("rapid_fire")
+    RAPID_FIRE
 }
 
 @Serializable
@@ -20,7 +22,13 @@ enum class ButtonRole {
     @SerialName("reload")
     RELOAD,
     @SerialName("ads")
-    ADS
+    ADS,
+    @SerialName("toggle_recoil")
+    TOGGLE_RECOIL,
+    @SerialName("toggle_strafe")
+    TOGGLE_STRAFE,
+    @SerialName("switch_profile")
+    SWITCH_PROFILE
 }
 
 @Serializable
@@ -32,7 +40,7 @@ data class ButtonConfig(
     var label: String,
 
     @SerialName("gamepad_button")
-    var gamepadButton: String, // e.g. "BUTTON_A", "BUTTON_X", "BUTTON_R1", "TRIGGER_R2"
+    var gamepadButton: String, // e.g. "BUTTON_A", "BUTTON_X", "BUTTON_R1", "TRIGGER_R2", "BUTTON_PADDLE1"
 
     @SerialName("x")
     var x: Float, // Normalized 0.0 .. 1.0
@@ -47,5 +55,8 @@ data class ButtonConfig(
     var mode: ButtonMode = ButtonMode.HOLD,
 
     @SerialName("role")
-    var role: ButtonRole = ButtonRole.NORMAL
+    var role: ButtonRole = ButtonRole.NORMAL,
+
+    @SerialName("rapid_fire_rate_hz")
+    var rapidFireRateHz: Int = 14
 )

@@ -371,6 +371,7 @@ open class ShizukuTouchInjector {
                     )
                     h.injectInputEvent(ev, 0)
                 } catch (e: Throwable) {
+                    handleInjectionError(e)
                 } finally {
                     try { ev?.recycle() } catch (_: Throwable) {}
                 }

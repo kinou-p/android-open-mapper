@@ -5,7 +5,7 @@ import com.kinou.gameassist.data.model.ButtonMode
 import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.data.model.GameSettings
 import com.kinou.gameassist.injector.ShizukuTouchInjector
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -113,8 +113,12 @@ class ButtonProcessor(
                 }
             }
 
-            // Nettoie également les taps asynchrones en cours pour les boutons supprimés
+            // Nettoie également les taps asynchrones et rapid fire en cours pour les boutons supprimés
             pendingTaps.removeIf { it.btnId !in newIds }
+            val removedRapidJobs = activeRapidFireJobs.keys.filter { it !in newIds }
+            for (id in removedRapidJobs) {
+                activeRapidFireJobs.remove(id)?.cancel()
+            }
 
             buttons = snapshot
             buttonsByGamepadKey = snapshot.groupBy { it.gamepadButton.trim().uppercase() }
@@ -134,6 +138,13 @@ class ButtonProcessor(
         }
     }
 
+    // Tactical shortcuts callbacks
+    var onToggleRecoil: (() -> Unit)? = null
+    var onToggleStrafe: (() -> Unit)? = null
+    var onSwitchProfile: (() -> Unit)? = null
+
+    private val activeRapidFireJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
     fun updateSettings(newSettings: GameSettings) {
         synchronized(lock) {
             settings = newSettings.copy()
@@ -145,6 +156,32 @@ class ButtonProcessor(
         if (matchedButtons.isEmpty()) return
 
         for (btn in matchedButtons) {
+            // Handle Tactical Shortcut Roles (No touch injection)
+            when (btn.role) {
+                ButtonRole.TOGGLE_RECOIL -> {
+                    onToggleRecoil?.invoke()
+                    if (settings.hapticFeedback) {
+                        hapticManager?.playProfileSwitchHaptic()
+                    }
+                    continue
+                }
+                ButtonRole.TOGGLE_STRAFE -> {
+                    onToggleStrafe?.invoke()
+                    if (settings.hapticFeedback) {
+                        hapticManager?.playProfileSwitchHaptic()
+                    }
+                    continue
+                }
+                ButtonRole.SWITCH_PROFILE -> {
+                    onSwitchProfile?.invoke()
+                    if (settings.hapticFeedback) {
+                        hapticManager?.playProfileSwitchHaptic()
+                    }
+                    continue
+                }
+                else -> {}
+            }
+
             // Trigger haptic feedback for Fire and Reload actions
             if (settings.hapticFeedback) {
                 val isFire = fireButtonIds.contains(btn.id)
@@ -155,6 +192,86 @@ class ButtonProcessor(
                 } else if (isReload && settings.hapticReload) {
                     hapticManager?.playReloadHaptic(intensity = settings.hapticIntensity)
                 }
+            }
+
+            val mode = (btn.mode as ButtonMode?) ?: ButtonMode.HOLD
+
+            // Mode 1: RAPID FIRE (Turbo semi-auto loop)
+            if (mode == ButtonMode.RAPID_FIRE) {
+                activeRapidFireJobs.remove(btn.id)?.cancel()
+
+                var pid: Int? = null
+                synchronized(lock) {
+                    if (!activePointers.containsKey(btn.id)) {
+                        val allocated = freePointers.minOrNull()
+                        if (allocated != null) {
+                            freePointers.remove(allocated)
+                            activePointers[btn.id] = allocated
+                            pid = allocated
+                            if (fireButtonIds.contains(btn.id)) activeFireCount.incrementAndGet()
+                            if (adsButtonIds.contains(btn.id)) activeAdsCount.incrementAndGet()
+                        }
+                    } else {
+                        pid = activePointers[btn.id]
+                    }
+                }
+
+                val assignedPid = pid ?: continue
+
+                val job = scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+                    val rateHz = btn.rapidFireRateHz.coerceIn(4, 30)
+                    val cycleNanos = 1_000_000_000L / rateHz
+                    val downNanos = (cycleNanos * 0.45f).toLong()
+                    val screenW = injector.screenWidth
+                    val screenH = injector.screenHeight
+
+                    try {
+                        while (isActive) {
+                            val driftX = (Random.nextFloat() * 2f - 1f) * 2.5f
+                            val driftY = (Random.nextFloat() * 2f - 1f) * 2.5f
+                            val tx = btn.x * screenW + driftX
+                            val ty = btn.y * screenH + driftY
+
+                            injector.touchDown(assignedPid, tx, ty)
+                            if (settings.hapticFeedback && settings.hapticFire && fireButtonIds.contains(btn.id)) {
+                                hapticManager?.playFireHaptic(intensity = settings.hapticIntensity)
+                            }
+
+                            val actualDownMs = ((downNanos / 1_000_000L) + Random.nextLong(-4, 5)).coerceAtLeast(15L)
+                            kotlinx.coroutines.delay(actualDownMs)
+
+                            injector.touchUp(assignedPid, tx, ty)
+
+                            val upNanos = cycleNanos - downNanos
+                            val actualUpMs = ((upNanos / 1_000_000L) + Random.nextLong(-4, 5)).coerceAtLeast(15L)
+                            kotlinx.coroutines.delay(actualUpMs)
+                        }
+                    } finally {
+                        withContext(NonCancellable) {
+                            var shouldTouchUp = false
+                            val tx = btn.x * screenW
+                            val ty = btn.y * screenH
+                            val currentJob = coroutineContext[Job]
+                            synchronized(lock) {
+                                if (activeRapidFireJobs[btn.id] === currentJob) {
+                                    activeRapidFireJobs.remove(btn.id)
+                                    if (activePointers[btn.id] == assignedPid) {
+                                        activePointers.remove(btn.id)
+                                        freePointers.add(assignedPid)
+                                        if (fireButtonIds.contains(btn.id)) activeFireCount.updateAndGet { c -> maxOf(0, c - 1) }
+                                        if (adsButtonIds.contains(btn.id)) activeAdsCount.updateAndGet { c -> maxOf(0, c - 1) }
+                                        shouldTouchUp = true
+                                    }
+                                }
+                            }
+                            if (shouldTouchUp) {
+                                injector.touchUp(assignedPid, tx, ty)
+                            }
+                        }
+                    }
+                }
+                activeRapidFireJobs[btn.id] = job
+                continue
             }
 
             var isAlreadyActive = false
@@ -189,7 +306,6 @@ class ButtonProcessor(
                 val screenH = injector.screenHeight
                 val tx = btn.x * screenW
                 val ty = btn.y * screenH
-                val mode = (btn.mode as ButtonMode?) ?: ButtonMode.HOLD
 
                 when (mode) {
                     ButtonMode.HOLD -> {
@@ -221,6 +337,7 @@ class ButtonProcessor(
                             )
                         )
                     }
+                    ButtonMode.RAPID_FIRE -> {}
                 }
             }
         }
@@ -232,6 +349,27 @@ class ButtonProcessor(
 
         for (btn in matchedButtons) {
             val mode = (btn.mode as ButtonMode?) ?: ButtonMode.HOLD
+            if (mode == ButtonMode.RAPID_FIRE) {
+                activeRapidFireJobs.remove(btn.id)?.cancel()
+                val screenW = injector.screenWidth
+                val screenH = injector.screenHeight
+                val tx = btn.x * screenW
+                val ty = btn.y * screenH
+                var pointerId: Int?
+                synchronized(lock) {
+                    pointerId = activePointers.remove(btn.id)
+                    pointerId?.let {
+                        freePointers.add(it)
+                        if (fireButtonIds.contains(btn.id)) activeFireCount.updateAndGet { c -> maxOf(0, c - 1) }
+                        if (adsButtonIds.contains(btn.id)) activeAdsCount.updateAndGet { c -> maxOf(0, c - 1) }
+                    }
+                }
+                pointerId?.let { pid ->
+                    injector.touchUp(pid, tx, ty)
+                }
+                continue
+            }
+
             if (mode == ButtonMode.HOLD) {
                 val screenW = injector.screenWidth
                 val screenH = injector.screenHeight
@@ -287,6 +425,10 @@ class ButtonProcessor(
     fun releaseAll() {
         synchronized(lock) {
             pendingTaps.clear()
+            for ((_, job) in activeRapidFireJobs) {
+                job.cancel()
+            }
+            activeRapidFireJobs.clear()
 
             for ((btnId, pid) in activePointers) {
                 val btn = buttons.find { it.id == btnId }

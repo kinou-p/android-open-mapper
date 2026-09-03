@@ -460,7 +460,7 @@ object AppUpdateManager {
      */
     private fun extractSha256FromBody(body: String): String? {
         if (body.isBlank()) return null
-        val regex = Regex("""(?i)(?:sha-?256|checksum)\s*[:=]\s*([a-f0-9]{64})""")
+        val regex = Regex("""(?i)(?:sha-?256|checksum)\s*[:=]\s*[`*]*([a-f0-9]{64})[`*]*""")
         return regex.find(body)?.groupValues?.get(1)?.lowercase()
     }
 

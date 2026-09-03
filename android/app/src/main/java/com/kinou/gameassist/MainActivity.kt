@@ -398,6 +398,10 @@ class MainActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_DPAD_DOWN -> "DPAD_DOWN"
             KeyEvent.KEYCODE_DPAD_LEFT -> "DPAD_LEFT"
             KeyEvent.KEYCODE_DPAD_RIGHT -> "DPAD_RIGHT"
+            KeyEvent.KEYCODE_BUTTON_1, KeyEvent.KEYCODE_BUTTON_5, KeyEvent.KEYCODE_BUTTON_C -> "BUTTON_PADDLE1"
+            KeyEvent.KEYCODE_BUTTON_2, KeyEvent.KEYCODE_BUTTON_6, KeyEvent.KEYCODE_BUTTON_Z -> "BUTTON_PADDLE2"
+            KeyEvent.KEYCODE_BUTTON_3, KeyEvent.KEYCODE_BUTTON_7 -> "BUTTON_PADDLE3"
+            KeyEvent.KEYCODE_BUTTON_4, KeyEvent.KEYCODE_BUTTON_8 -> "BUTTON_PADDLE4"
             else -> null
         }
 

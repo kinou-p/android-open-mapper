@@ -88,6 +88,9 @@ class OverlayService : LifecycleService() {
         engine.onHotSwitchProfile = { forward ->
             cycleProfile(forward)
         }
+        engine.onTacticalToggle = { message ->
+            showHotSwitchToast(message)
+        }
 
         lifecycleScope.launch {
             liveProfileUpdateFlow.collect { profile ->
@@ -133,6 +136,31 @@ class OverlayService : LifecycleService() {
 
         updateScreenMetrics()
         createNotificationChannel()
+
+        val btFilter = android.content.IntentFilter().apply {
+            addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+        }
+        try {
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                bluetoothDisconnectReceiver,
+                btFilter,
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+            )
+        } catch (_: Exception) {}
+    }
+
+    private val bluetoothDisconnectReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
+                android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    engine.resetAllInputs()
+                    hapticManager.stopAllVibrations()
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -269,8 +297,10 @@ class OverlayService : LifecycleService() {
             onToggleStrafe = {
                 currentProfile?.let { prof ->
                     prof.joystick.jiggleStrafe = !prof.joystick.jiggleStrafe
-                    repository.saveProfile(prof)
                     engine.setProfile(prof)
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        repository.saveProfileAsync(prof)
+                    }
                     val stateMsg = if (prof.joystick.jiggleStrafe) "⚡ Auto Jiggle Strafe ACTIVÉ" else "Auto Jiggle Strafe DÉSACTIVÉ"
                     android.widget.Toast.makeText(this, stateMsg, android.widget.Toast.LENGTH_SHORT).show()
                 }
@@ -281,8 +311,10 @@ class OverlayService : LifecycleService() {
             onToggleAntiRecoil = {
                 currentProfile?.let { prof ->
                     prof.camera.antiRecoilEnabled = !prof.camera.antiRecoilEnabled
-                    repository.saveProfile(prof)
                     engine.setProfile(prof)
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        repository.saveProfileAsync(prof)
+                    }
                     val stateMsg = if (prof.camera.antiRecoilEnabled) {
                         "🎯 Anti-Recul (${String.format(java.util.Locale.US, "%.1fx", prof.camera.antiRecoilSpeed)}) ACTIVÉ"
                     } else {
@@ -297,8 +329,16 @@ class OverlayService : LifecycleService() {
             onSetAntiRecoilSpeed = { speed ->
                 currentProfile?.let { prof ->
                     prof.camera.antiRecoilSpeed = speed
-                    repository.saveProfile(prof)
                     engine.setProfile(prof)
+                }
+            },
+            onPersistAntiRecoilSpeed = { speed ->
+                currentProfile?.let { prof ->
+                    prof.camera.antiRecoilSpeed = speed
+                    engine.setProfile(prof)
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        repository.saveProfileAsync(prof)
+                    }
                 }
             }
         )
@@ -535,7 +575,11 @@ class OverlayService : LifecycleService() {
 
     override fun onDestroy() {
         _isServiceRunning.value = false
+        try {
+            unregisterReceiver(bluetoothDisconnectReceiver)
+        } catch (_: Exception) {}
         engine.stop()
+        hapticManager.destroy()
 
         screenshotLoadJob?.cancel()
         screenshotLoadJob = null

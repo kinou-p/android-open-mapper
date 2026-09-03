@@ -30,7 +30,8 @@ class EdgeHandleOverlayView(
     private val isAntiRecoilActive: (() -> Boolean)? = null,
     private val onToggleAntiRecoil: (() -> Unit)? = null,
     private val getAntiRecoilSpeed: (() -> Float)? = null,
-    private val onSetAntiRecoilSpeed: ((Float) -> Unit)? = null
+    private val onSetAntiRecoilSpeed: ((Float) -> Unit)? = null,
+    private val onPersistAntiRecoilSpeed: ((Float) -> Unit)? = null
 ) : View(context) {
 
     enum class ScreenEdge { LEFT, RIGHT }
@@ -586,6 +587,8 @@ class EdgeHandleOverlayView(
                 MotionEvent.ACTION_UP -> {
                     if (isDraggingRecoilSlider) {
                         isDraggingRecoilSlider = false
+                        val curSpeed = getAntiRecoilSpeed?.invoke() ?: 1.0f
+                        (onPersistAntiRecoilSpeed ?: onSetAntiRecoilSpeed)?.invoke(curSpeed)
                         invalidate()
                         return true
                     }
@@ -610,14 +613,14 @@ class EdgeHandleOverlayView(
                         MenuButton.RECOIL_DEC -> {
                             val cur = getAntiRecoilSpeed?.invoke() ?: 1.0f
                             val newSpd = Math.round((cur - 0.2f).coerceIn(0.1f, 10.0f) * 10f) / 10f
-                            onSetAntiRecoilSpeed?.invoke(newSpd)
+                            (onPersistAntiRecoilSpeed ?: onSetAntiRecoilSpeed)?.invoke(newSpd)
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
                         }
                         MenuButton.RECOIL_INC -> {
                             val cur = getAntiRecoilSpeed?.invoke() ?: 1.0f
                             val newSpd = Math.round((cur + 0.2f).coerceIn(0.1f, 10.0f) * 10f) / 10f
-                            onSetAntiRecoilSpeed?.invoke(newSpd)
+                            (onPersistAntiRecoilSpeed ?: onSetAntiRecoilSpeed)?.invoke(newSpd)
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
                         }
@@ -639,6 +642,10 @@ class EdgeHandleOverlayView(
                 }
 
                 MotionEvent.ACTION_CANCEL -> {
+                    if (isDraggingRecoilSlider) {
+                        val curSpeed = getAntiRecoilSpeed?.invoke() ?: 1.0f
+                        (onPersistAntiRecoilSpeed ?: onSetAntiRecoilSpeed)?.invoke(curSpeed)
+                    }
                     pressedButton = null
                     isDraggingRecoilSlider = false
                     invalidate()

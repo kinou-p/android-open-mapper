@@ -479,16 +479,19 @@ class HudEditorOverlayView(
             canvas.drawText(displayKey, bx, by - 6f, textPaint)
             canvas.drawText(b.label, bx, by + 18f, subTextPaint)
 
-            // Mode badge (HOLD or TAP)
+            // Mode badge (HOLD, TAP, or RAPID)
             val modeBadge = when (b.mode) {
                 ButtonMode.HOLD -> "HOLD"
                 ButtonMode.TAP -> "TAP"
+                ButtonMode.RAPID_FIRE -> "RAPID ⚡"
             }
             badgeBgPaint.color = when (b.mode) {
                 ButtonMode.HOLD -> 0xCC00F0FF.toInt()
                 ButtonMode.TAP -> 0xCCFFAA00.toInt()
+                ButtonMode.RAPID_FIRE -> 0xCCFF0055.toInt()
             }
-            canvas.drawRoundRect(bx - 32f, by + br + 4f, bx + 32f, by + br + 22f, 6f, 6f, badgeBgPaint)
+            val modeBadgeW = if (b.mode == ButtonMode.RAPID_FIRE) 38f * density else 32f * density
+            canvas.drawRoundRect(bx - modeBadgeW, by + br + 4f, bx + modeBadgeW, by + br + 22f, 6f, 6f, badgeBgPaint)
             canvas.drawText(modeBadge, bx, by + br + 18f, badgeTextPaint)
 
             // Role badge (if not normal)
@@ -497,10 +500,13 @@ class HudEditorOverlayView(
                     ButtonRole.FIRE -> "🔥 TIR" to 0xEEFF0055.toInt()
                     ButtonRole.RELOAD -> "🔄 RECH" to 0xEEFFAA00.toInt()
                     ButtonRole.ADS -> "🎯 ADS" to 0xEE00FF66.toInt()
+                    ButtonRole.TOGGLE_RECOIL -> "🎯 RECUL" to 0xEE00F0FF.toInt()
+                    ButtonRole.TOGGLE_STRAFE -> "⚡ STRAFE" to 0xEE00FF66.toInt()
+                    ButtonRole.SWITCH_PROFILE -> "🎮 PROFIL" to 0xEE9C27B0.toInt()
                     ButtonRole.NORMAL -> "" to 0
                 }
                 roleBadgeBgPaint.color = roleBgColor
-                val badgeW = 34f * density
+                val badgeW = if (b.role == ButtonRole.SWITCH_PROFILE || b.role == ButtonRole.TOGGLE_RECOIL || b.role == ButtonRole.TOGGLE_STRAFE) 42f * density else 34f * density
                 val badgeH = 16f * density
                 val topY = by - br - badgeH - 2f
                 canvas.drawRoundRect(bx - badgeW, topY, bx + badgeW, topY + badgeH, 6f, 6f, roleBadgeBgPaint)
@@ -798,19 +804,25 @@ class HudEditorOverlayView(
                 ButtonRole.FIRE -> "🔥 Tir"
                 ButtonRole.RELOAD -> "🔄 Rech."
                 ButtonRole.ADS -> "🎯 ADS"
+                ButtonRole.TOGGLE_RECOIL -> "🎯 Recul"
+                ButtonRole.TOGGLE_STRAFE -> "⚡ Strafe"
+                ButtonRole.SWITCH_PROFILE -> "🎮 Profil"
                 ButtonRole.NORMAL -> "Normal"
             }
             uiBtnBgPaint.color = when (btn.role) {
                 ButtonRole.FIRE -> 0xFFFF0055.toInt()
                 ButtonRole.RELOAD -> 0xFFFFAA00.toInt()
                 ButtonRole.ADS -> 0xFF00FF66.toInt()
+                ButtonRole.TOGGLE_RECOIL -> 0xFF00F0FF.toInt()
+                ButtonRole.TOGGLE_STRAFE -> 0xFF00FF66.toInt()
+                ButtonRole.SWITCH_PROFILE -> 0xFF9C27B0.toInt()
                 ButtonRole.NORMAL -> 0xFF243040.toInt()
             }
-            val roleW = 86f * density
+            val roleW = 96f * density
             btnRoleRect.set(rightX - roleW, btnTop, rightX, btnBottom)
             canvas.drawRoundRect(btnRoleRect, btnRadius, btnRadius, uiBtnBgPaint)
-            uiBtnTextPaint.color = if (btn.role == ButtonRole.NORMAL) 0xFF00F0FF.toInt() else Color.BLACK
-            uiBtnTextPaint.textSize = 12.5f * density
+            uiBtnTextPaint.color = if (btn.role == ButtonRole.NORMAL) 0xFF00F0FF.toInt() else if (btn.role == ButtonRole.SWITCH_PROFILE) Color.WHITE else Color.BLACK
+            uiBtnTextPaint.textSize = 12f * density
             canvas.drawText("Rôle: $roleLabel", btnRoleRect.centerX(), btnRoleRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (roleW + btnSpacing)
 
@@ -818,16 +830,18 @@ class HudEditorOverlayView(
             val modeLabel = when (btn.mode) {
                 ButtonMode.HOLD -> "HOLD"
                 ButtonMode.TAP -> "TAP"
+                ButtonMode.RAPID_FIRE -> "RAPID ⚡"
             }
             uiBtnBgPaint.color = when (btn.mode) {
                 ButtonMode.HOLD -> 0xFF00F0FF.toInt()
                 ButtonMode.TAP -> 0xFFFFAA00.toInt()
+                ButtonMode.RAPID_FIRE -> 0xFFFF0055.toInt()
             }
-            val modeW = 86f * density
+            val modeW = 92f * density
             btnModeRect.set(rightX - modeW, btnTop, rightX, btnBottom)
             canvas.drawRoundRect(btnModeRect, btnRadius, btnRadius, uiBtnBgPaint)
-            uiBtnTextPaint.color = Color.BLACK
-            uiBtnTextPaint.textSize = 13f * density
+            uiBtnTextPaint.color = if (btn.mode == ButtonMode.RAPID_FIRE) Color.WHITE else Color.BLACK
+            uiBtnTextPaint.textSize = 12.5f * density
             canvas.drawText("Mode: $modeLabel", btnModeRect.centerX(), btnModeRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (modeW + btnSpacing)
 
@@ -1120,7 +1134,10 @@ class HudEditorOverlayView(
                                 ButtonRole.NORMAL -> ButtonRole.FIRE
                                 ButtonRole.FIRE -> ButtonRole.RELOAD
                                 ButtonRole.RELOAD -> ButtonRole.ADS
-                                ButtonRole.ADS -> ButtonRole.NORMAL
+                                ButtonRole.ADS -> ButtonRole.TOGGLE_RECOIL
+                                ButtonRole.TOGGLE_RECOIL -> ButtonRole.TOGGLE_STRAFE
+                                ButtonRole.TOGGLE_STRAFE -> ButtonRole.SWITCH_PROFILE
+                                ButtonRole.SWITCH_PROFILE -> ButtonRole.NORMAL
                             }
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
@@ -1131,7 +1148,8 @@ class HudEditorOverlayView(
                         if (btnModeRect.contains(tx, ty)) {
                             btn.mode = when (btn.mode) {
                                 ButtonMode.HOLD -> ButtonMode.TAP
-                                ButtonMode.TAP -> ButtonMode.HOLD
+                                ButtonMode.TAP -> ButtonMode.RAPID_FIRE
+                                ButtonMode.RAPID_FIRE -> ButtonMode.HOLD
                             }
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
@@ -1420,6 +1438,10 @@ class HudEditorOverlayView(
         KeyEvent.KEYCODE_DPAD_DOWN -> "DPAD_DOWN"
         KeyEvent.KEYCODE_DPAD_LEFT -> "DPAD_LEFT"
         KeyEvent.KEYCODE_DPAD_RIGHT -> "DPAD_RIGHT"
+        KeyEvent.KEYCODE_BUTTON_1, KeyEvent.KEYCODE_BUTTON_5, KeyEvent.KEYCODE_BUTTON_C -> "BUTTON_PADDLE1"
+        KeyEvent.KEYCODE_BUTTON_2, KeyEvent.KEYCODE_BUTTON_6, KeyEvent.KEYCODE_BUTTON_Z -> "BUTTON_PADDLE2"
+        KeyEvent.KEYCODE_BUTTON_3, KeyEvent.KEYCODE_BUTTON_7 -> "BUTTON_PADDLE3"
+        KeyEvent.KEYCODE_BUTTON_4, KeyEvent.KEYCODE_BUTTON_8 -> "BUTTON_PADDLE4"
         else -> null
     }
 
