@@ -64,56 +64,120 @@ class IInputManagerHelper(private val binder: IBinder) {
         }
     }
 
+    companion object {
+        private val ZERO_INTEGER = java.lang.Integer.valueOf(0)
+    }
+
+    private val cachedArgs3 = arrayOfNulls<Any>(3).apply {
+        this[1] = ZERO_INTEGER
+        this[2] = ZERO_INTEGER
+    }
+    private val cachedArgs2 = arrayOfNulls<Any>(2).apply {
+        this[1] = ZERO_INTEGER
+    }
+
     /**
      * Injects an input event into the system.
      * mode: 0 = INJECT_INPUT_EVENT_MODE_ASYNC (< 0.5ms non-blocking)
-     *
-     * Propagates RemoteException and SecurityException so higher-level injectors
-     * can detect Binder death and trigger auto-reconnection.
      */
-    @Throws(RemoteException::class)
     fun injectInputEvent(event: InputEvent, mode: Int = 0): Boolean {
         return when (injectionMode) {
             InjectionMode.DIRECT_AIDL_2_PARAMS -> {
                 try {
                     iInputManager?.injectInputEvent(event, mode) ?: false
-                } catch (e: RemoteException) {
-                    throw e // Propager la mort du Binder Shizuku / service Input
-                } catch (e: SecurityException) {
-                    throw e
-                } catch (_: Exception) {
-                    false
+                } catch (e: Throwable) {
+                    injectionMode = InjectionMode.UNSET
+                    iInputManager = null
+                    injectInputEventFallback(event, mode)
                 }
             }
             InjectionMode.REFLECTION_3_PARAMS -> {
-                val target = targetObject ?: return false
-                val method = injectMethod ?: return false
-                try {
-                    method.invoke(target, event, mode, 0) as? Boolean ?: true
-                } catch (e: InvocationTargetException) {
-                    val cause = e.cause ?: e.targetException
-                    if (cause is RemoteException) throw cause
-                    if (cause is SecurityException) throw cause
-                    false
-                } catch (_: Exception) {
+                val target = targetObject
+                val method = injectMethod
+                if (target != null && method != null) {
+                    try {
+                        cachedArgs3[0] = event
+                        cachedArgs3[1] = if (mode == 0) ZERO_INTEGER else mode
+                        val res = method.invoke(target, cachedArgs3) as? Boolean ?: true
+                        cachedArgs3[0] = null
+                        res
+                    } catch (e: Throwable) {
+                        cachedArgs3[0] = null
+                        injectionMode = InjectionMode.UNSET
+                        injectInputEventFallback(event, mode)
+                    }
+                } else {
                     false
                 }
             }
             InjectionMode.REFLECTION_2_PARAMS -> {
-                val target = targetObject ?: return false
-                val method = injectMethod ?: return false
-                try {
-                    method.invoke(target, event, mode) as? Boolean ?: true
-                } catch (e: InvocationTargetException) {
-                    val cause = e.cause ?: e.targetException
-                    if (cause is RemoteException) throw cause
-                    if (cause is SecurityException) throw cause
-                    false
-                } catch (_: Exception) {
+                val target = targetObject
+                val method = injectMethod
+                if (target != null && method != null) {
+                    try {
+                        cachedArgs2[0] = event
+                        cachedArgs2[1] = if (mode == 0) ZERO_INTEGER else mode
+                        val res = method.invoke(target, cachedArgs2) as? Boolean ?: true
+                        cachedArgs2[0] = null
+                        res
+                    } catch (e: Throwable) {
+                        cachedArgs2[0] = null
+                        injectionMode = InjectionMode.UNSET
+                        injectInputEventFallback(event, mode)
+                    }
+                } else {
                     false
                 }
             }
-            InjectionMode.UNSET -> false
+            InjectionMode.UNSET -> {
+                injectInputEventFallback(event, mode)
+            }
         }
+    }
+
+    private fun injectInputEventFallback(event: InputEvent, mode: Int): Boolean {
+        // 1. Try Direct AIDL (2 params)
+        if (iInputManager != null) {
+            try {
+                val res = iInputManager!!.injectInputEvent(event, mode)
+                injectionMode = InjectionMode.DIRECT_AIDL_2_PARAMS
+                return res
+            } catch (_: Throwable) {
+                // Disable direct AIDL to avoid repeated exceptions across frames
+                iInputManager = null
+            }
+        }
+
+        // 2. Try Reflection method (supports Android 11 to 15: 2 params or 3 params with displayId=0)
+        val method = injectMethod
+        val target = targetObject
+        if (method != null && target != null) {
+            val paramCount = method.parameterTypes.size
+            if (paramCount == 3) {
+                try {
+                    cachedArgs3[0] = event
+                    cachedArgs3[1] = if (mode == 0) ZERO_INTEGER else mode
+                    val res = method.invoke(target, cachedArgs3) as? Boolean ?: true
+                    cachedArgs3[0] = null
+                    injectionMode = InjectionMode.REFLECTION_3_PARAMS
+                    return res
+                } catch (_: Throwable) {
+                    cachedArgs3[0] = null
+                }
+            } else if (paramCount == 2) {
+                try {
+                    cachedArgs2[0] = event
+                    cachedArgs2[1] = if (mode == 0) ZERO_INTEGER else mode
+                    val res = method.invoke(target, cachedArgs2) as? Boolean ?: true
+                    cachedArgs2[0] = null
+                    injectionMode = InjectionMode.REFLECTION_2_PARAMS
+                    return res
+                } catch (_: Throwable) {
+                    cachedArgs2[0] = null
+                }
+            }
+        }
+
+        return false
     }
 }

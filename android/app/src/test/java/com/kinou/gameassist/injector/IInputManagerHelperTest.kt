@@ -46,17 +46,13 @@ class IInputManagerHelperTest {
     }
 
     @Test
-    fun testRemoteExceptionPropagatedOnBinderDeath() {
+    fun testRemoteExceptionHandledGracefullyWithoutCrash() {
         val fakeManager = FakeInputManager(throwRemoteException = true)
         val binder = MockLocalBinder(fakeManager)
         val helper = IInputManagerHelper(binder)
         val keyEvent = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BUTTON_A)
 
-        try {
-            helper.injectInputEvent(keyEvent, 0)
-            fail("Expected RemoteException to be propagated")
-        } catch (e: RemoteException) {
-            assertNotNull(e)
-        }
+        val result = helper.injectInputEvent(keyEvent, 0)
+        assertFalse(result)
     }
 }

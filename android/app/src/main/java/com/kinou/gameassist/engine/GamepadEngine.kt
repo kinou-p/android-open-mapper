@@ -66,8 +66,11 @@ class GamepadEngine(
 
         override fun onInputDeviceRemoved(deviceId: Int) {
             if (isRunning) {
-                resetAllInputs()
-                checkConnectedGamepads()
+                val wasConnected = hasConnectedGamepad
+                val nowConnected = checkConnectedGamepads()
+                if (wasConnected && !nowConnected) {
+                    resetAllInputs()
+                }
                 hapticManager?.refreshGamepadVibrators()
                 linuxReader.restart()
             }
@@ -252,12 +255,6 @@ class GamepadEngine(
                         val camCfg = cameraProcessor.config
                         val isFiring = rtPressed || buttonProcessor.isFireActive()
                         val isAds = ltPressed || buttonProcessor.isAdsActive()
-
-                        // Failsafe : si aucune manette physique n'est présente, interdire tout tir ou déplacement fantôme
-                        if (!hasConnectedGamepad && (isFiring || isAds || lx != 0f || ly != 0f || rx != 0f || ry != 0f)) {
-                            resetAllInputs()
-                            continue
-                        }
                         val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
                         movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
                         cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)

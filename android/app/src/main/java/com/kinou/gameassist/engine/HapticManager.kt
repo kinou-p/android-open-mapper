@@ -90,8 +90,10 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
                         if (vIds != null && vIds.isNotEmpty()) {
                             for (vId in vIds) {
                                 val v = vm.getVibrator(vId)
-                                devVibrators.add(v)
-                                if (v.hasAmplitudeControl()) amplitudeSupport = true
+                                if (v.hasVibrator()) {
+                                    devVibrators.add(v)
+                                    if (v.hasAmplitudeControl()) amplitudeSupport = true
+                                }
                             }
                         }
                     }
@@ -187,9 +189,11 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
         val targets = cachedGamepadVibrators
         if (targets.isEmpty()) return
 
-        val durationMs = 45L
-        for (i in targets.indices) {
-            vibrateGamepad(targets[i], durationMs, intensity)
+        hapticScope.launch {
+            val durationMs = 45L
+            for (i in targets.indices) {
+                vibrateGamepad(targets[i], durationMs, intensity)
+            }
         }
     }
 

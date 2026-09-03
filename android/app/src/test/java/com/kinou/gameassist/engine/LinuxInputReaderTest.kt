@@ -150,6 +150,12 @@ class LinuxInputReaderTest {
         // Signed 16-bit extension
         assertEquals(-1.0f, BinaryInputParser.normalizeStick(-32768L), 0.00001f)
         assertEquals(-0.5f, BinaryInputParser.normalizeStick(-16384L), 0.001f)
+
+        // Explicit Signed 16-bit mode (xpad / USB OTG)
+        assertEquals(0.0f, BinaryInputParser.normalizeStick(0L, StickRangeMode.SIGNED_16BIT), 0.0001f)
+        assertEquals(1.0f, BinaryInputParser.normalizeStick(32767L, StickRangeMode.SIGNED_16BIT), 0.0001f)
+        assertEquals(-1.0f, BinaryInputParser.normalizeStick(-32768L, StickRangeMode.SIGNED_16BIT), 0.0001f)
+        assertEquals(0.5f, BinaryInputParser.normalizeStick(16384L, StickRangeMode.SIGNED_16BIT), 0.001f)
     }
 
     @Test

@@ -370,8 +370,8 @@ open class ShizukuTouchInjector {
                         0
                     )
                     h.injectInputEvent(ev, 0)
-                } catch (e: Throwable) {
-                    handleInjectionError(e)
+                } catch (_: Throwable) {
+                    // Ignorer les erreurs sur les cancels préventifs pour ne pas tuer le helper au démarrage
                 } finally {
                     try { ev?.recycle() } catch (_: Throwable) {}
                 }

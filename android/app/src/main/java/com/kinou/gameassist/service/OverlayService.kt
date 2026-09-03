@@ -52,11 +52,11 @@ class OverlayService : LifecycleService() {
         val isServiceRunningFlow: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
         val isServiceRunning: Boolean get() = _isServiceRunning.value
 
-        private val _liveProfileUpdateFlow = MutableStateFlow<GameProfile?>(null)
-        val liveProfileUpdateFlow: StateFlow<GameProfile?> = _liveProfileUpdateFlow.asStateFlow()
+        private val _liveProfileUpdateFlow = MutableSharedFlow<GameProfile>(replay = 0, extraBufferCapacity = 1)
+        val liveProfileUpdateFlow: SharedFlow<GameProfile> = _liveProfileUpdateFlow.asSharedFlow()
 
         fun updateLiveProfile(profile: GameProfile) {
-            _liveProfileUpdateFlow.value = profile
+            _liveProfileUpdateFlow.tryEmit(profile)
         }
     }
 
@@ -94,13 +94,11 @@ class OverlayService : LifecycleService() {
 
         lifecycleScope.launch {
             liveProfileUpdateFlow.collect { profile ->
-                if (profile != null) {
-                    val isDifferent = currentProfile?.id != profile.id
-                    currentProfile = profile
-                    engine.setProfile(profile)
-                    if (isDifferent) {
-                        updateNotification()
-                    }
+                val isDifferent = currentProfile?.id != profile.id
+                currentProfile = profile
+                engine.setProfile(profile)
+                if (isDifferent) {
+                    updateNotification()
                 }
             }
         }
@@ -154,10 +152,31 @@ class OverlayService : LifecycleService() {
     private val bluetoothDisconnectReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED,
+                android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                    val device = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE, android.bluetooth.BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(android.bluetooth.BluetoothDevice.EXTRA_DEVICE)
+                    }
+                    val devClass = device?.bluetoothClass
+                    val isGamepadOrPeripheral = devClass?.let {
+                        it.majorDeviceClass == android.bluetooth.BluetoothClass.Device.Major.PERIPHERAL ||
+                        it.deviceClass == 0x0504 || // Gamepad
+                        it.deviceClass == 0x0508    // Joystick
+                    } ?: false
+
+                    if (isGamepadOrPeripheral || !engine.checkConnectedGamepads()) {
+                        engine.resetAllInputs()
+                        hapticManager.stopAllVibrations()
+                    }
+                }
                 android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED -> {
-                    engine.resetAllInputs()
-                    hapticManager.stopAllVibrations()
+                    val state = intent.getIntExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, android.bluetooth.BluetoothAdapter.ERROR)
+                    if (state == android.bluetooth.BluetoothAdapter.STATE_OFF || state == android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF) {
+                        engine.resetAllInputs()
+                        hapticManager.stopAllVibrations()
+                    }
                 }
             }
         }

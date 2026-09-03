@@ -61,24 +61,26 @@ class ButtonProcessor(
         }
     }
 
-    private data class PendingTap(
-        val pointerId: Int,
-        val btnId: String,
-        val startX: Float,
-        val startY: Float,
-        val endX: Float,
-        val endY: Float,
-        val moveTimeNanos: Long,
-        val releaseTimeNanos: Long,
+    private class PendingTapSlot {
+        @Volatile var active: Boolean = false
+        var pointerId: Int = 0
+        var btnId: String = ""
+        var startX: Float = 0f
+        var startY: Float = 0f
+        var endX: Float = 0f
+        var endY: Float = 0f
+        var moveTimeNanos: Long = 0L
+        var releaseTimeNanos: Long = 0L
         var moved: Boolean = false
-    )
+    }
 
     @Volatile private var buttons: List<ButtonConfig> = emptyList()
     @Volatile private var buttonsByGamepadKey: Map<String, List<ButtonConfig>> = emptyMap()
     @Volatile private var settings: GameSettings = GameSettings()
     private val activePointers = ConcurrentHashMap<String, Int>()
     private val freePointers = (POINTER_BUTTON_START until MAX_POINTERS).toMutableSet()
-    private val pendingTaps = ConcurrentLinkedQueue<PendingTap>()
+    private val pendingTapSlots = Array(16) { PendingTapSlot() }
+    private val activeTapCount = AtomicInteger(0)
     private val lock = Any()
 
     // Pre-calculated sets for O(1) role lookup
@@ -114,7 +116,12 @@ class ButtonProcessor(
             }
 
             // Nettoie également les taps asynchrones et rapid fire en cours pour les boutons supprimés
-            pendingTaps.removeIf { it.btnId !in newIds }
+            for (slot in pendingTapSlots) {
+                if (slot.active && slot.btnId !in newIds) {
+                    slot.active = false
+                    activeTapCount.decrementAndGet()
+                }
+            }
             val removedRapidJobs = activeRapidFireJobs.keys.filter { it !in newIds }
             for (id in removedRapidJobs) {
                 activeRapidFireJobs.remove(id)?.cancel()
@@ -322,20 +329,27 @@ class ButtonProcessor(
                         // Immediate touch down
                         injector.touchDown(pid, tx, ty)
 
-                        // Remove existing pending tap for this button if any
-                        pendingTaps.removeIf { it.btnId == btn.id }
-                        pendingTaps.add(
-                            PendingTap(
-                                pointerId = pid,
-                                btnId = btn.id,
-                                startX = tx,
-                                startY = ty,
-                                endX = tx + driftX,
-                                endY = ty + driftY,
-                                moveTimeNanos = moveNanos,
-                                releaseTimeNanos = releaseNanos
-                            )
-                        )
+                        // Remove existing pending tap slot for this button if any
+                        for (slot in pendingTapSlots) {
+                            if (slot.active && slot.btnId == btn.id) {
+                                slot.active = false
+                                activeTapCount.decrementAndGet()
+                            }
+                        }
+                        val freeSlot = pendingTapSlots.firstOrNull { !it.active }
+                        if (freeSlot != null) {
+                            freeSlot.pointerId = pid
+                            freeSlot.btnId = btn.id
+                            freeSlot.startX = tx
+                            freeSlot.startY = ty
+                            freeSlot.endX = tx + driftX
+                            freeSlot.endY = ty + driftY
+                            freeSlot.moveTimeNanos = moveNanos
+                            freeSlot.releaseTimeNanos = releaseNanos
+                            freeSlot.moved = false
+                            freeSlot.active = true
+                            activeTapCount.incrementAndGet()
+                        }
                     }
                     ButtonMode.RAPID_FIRE -> {}
                 }
@@ -399,32 +413,40 @@ class ButtonProcessor(
      * Called in the high-frequency engine loop to process TAP events without coroutines or GC pressure.
      */
     fun processPendingTaps(nowNanos: Long) {
-        if (pendingTaps.isEmpty()) return
-        val it = pendingTaps.iterator()
-        while (it.hasNext()) {
-            val tap = it.next()
+        if (activeTapCount.get() <= 0) return
+
+        for (i in pendingTapSlots.indices) {
+            val tap = pendingTapSlots[i]
+            if (!tap.active) continue
+
             if (!tap.moved && nowNanos >= tap.moveTimeNanos) {
                 tap.moved = true
                 injector.touchMove(tap.pointerId, tap.endX, tap.endY)
             }
             if (nowNanos >= tap.releaseTimeNanos) {
                 injector.touchUp(tap.pointerId, tap.endX, tap.endY)
+                val btnId = tap.btnId
+                val pid = tap.pointerId
+                tap.active = false
+                activeTapCount.decrementAndGet()
                 synchronized(lock) {
-                    if (activePointers[tap.btnId] == tap.pointerId) {
-                        activePointers.remove(tap.btnId)
-                        freePointers.add(tap.pointerId)
-                        if (fireButtonIds.contains(tap.btnId)) activeFireCount.updateAndGet { c -> maxOf(0, c - 1) }
-                        if (adsButtonIds.contains(tap.btnId)) activeAdsCount.updateAndGet { c -> maxOf(0, c - 1) }
+                    if (activePointers[btnId] == pid) {
+                        activePointers.remove(btnId)
+                        freePointers.add(pid)
+                        if (fireButtonIds.contains(btnId)) activeFireCount.updateAndGet { c -> maxOf(0, c - 1) }
+                        if (adsButtonIds.contains(btnId)) activeAdsCount.updateAndGet { c -> maxOf(0, c - 1) }
                     }
                 }
-                it.remove()
             }
         }
     }
 
     fun releaseAll() {
         synchronized(lock) {
-            pendingTaps.clear()
+            for (slot in pendingTapSlots) {
+                slot.active = false
+            }
+            activeTapCount.set(0)
             for ((_, job) in activeRapidFireJobs) {
                 job.cancel()
             }

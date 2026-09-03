@@ -105,6 +105,7 @@ class LinuxInputReader(
                     for (nodeInfo in gamepadNodes) {
                         if (!isRunning) break
                         val child = launch(Dispatchers.IO) {
+                            val myJob = coroutineContext[Job]
                             val proc = spawnShizukuProcess(arrayOf("cat", nodeInfo.nodePath)) ?: return@launch
                             val inStream = proc.inputStream
                             synchronized(processLock) {
@@ -121,11 +122,9 @@ class LinuxInputReader(
                                 synchronized(processLock) {
                                     activeProcesses.remove(proc)
                                     activeStreams.remove(inStream)
+                                    childJobs.remove(myJob)
                                 }
                                 closeProcessQuietly(proc, inStream)
-                                if (isRunning && readerJob === currentJob) {
-                                    engine.resetAllInputs()
-                                }
                             }
                         }
                         synchronized(processLock) {
@@ -142,6 +141,9 @@ class LinuxInputReader(
                             isRunning = false
                             isStartingOrRunning.set(false)
                         }
+                    } else {
+                        val jobsToWait = synchronized(processLock) { childJobs.toList() }
+                        jobsToWait.joinAll()
                     }
                 } else {
                     // Fallback to system getevent in quiet hex mode
@@ -178,9 +180,6 @@ class LinuxInputReader(
                             activeStreams.remove(inStream)
                         }
                         closeProcessQuietly(proc, inStream)
-                        if (isRunning && readerJob === currentJob) {
-                            engine.resetAllInputs()
-                        }
                     }
                 }
             } catch (e: CancellationException) {
@@ -195,6 +194,7 @@ class LinuxInputReader(
                 if (readerJob === currentJob) {
                     isStartingOrRunning.set(false)
                     isRunning = false
+                    engine.resetAllInputs()
                 }
             }
         }
@@ -393,6 +393,14 @@ class LinuxInputReader(
     }
 
     private fun handleAbsoluteAxis(nodeInfo: GamepadNodeInfo, code: Int, rawValue: Long) {
+        if (nodeInfo.stickRange == StickRangeMode.AUTO) {
+            if (rawValue > 32767L) {
+                nodeInfo.stickRange = StickRangeMode.UNSIGNED_16BIT
+            } else if (rawValue < 0L) {
+                nodeInfo.stickRange = StickRangeMode.SIGNED_16BIT
+            }
+        }
+
         when (nodeInfo.layoutType) {
             ControllerLayoutType.PLAYSTATION -> {
                 when (code) {
@@ -597,6 +605,9 @@ class LinuxInputReader(
                                   block.contains("goodix", ignoreCase = true) ||
                                   block.contains("fts_ts", ignoreCase = true) ||
                                   block.contains("gpio-keys", ignoreCase = true) ||
+                                  block.contains("gpio-keypad", ignoreCase = true) ||
+                                  block.contains("keypad", ignoreCase = true) ||
+                                  block.contains("kpd", ignoreCase = true) ||
                                   block.contains("pmic", ignoreCase = true) ||
                                   block.contains("snd-card", ignoreCase = true) ||
                                   block.contains("jack", ignoreCase = true) ||
@@ -607,6 +618,7 @@ class LinuxInputReader(
         val isGamepad = block.contains("gamepad", ignoreCase = true) ||
                         block.contains("controller", ignoreCase = true) ||
                         block.contains("joystick", ignoreCase = true) ||
+                        block.contains("joypad", ignoreCase = true) ||
                         block.contains("dualsense", ignoreCase = true) ||
                         block.contains("dualshock", ignoreCase = true) ||
                         block.contains("xbox", ignoreCase = true) ||
@@ -617,7 +629,7 @@ class LinuxInputReader(
                         block.contains("gamesir", ignoreCase = true) ||
                         block.contains("ipega", ignoreCase = true) ||
                         block.contains("scrcpy", ignoreCase = true) ||
-                        block.contains("pad", ignoreCase = true) ||
+                        Regex("""\bpad\b""", RegexOption.IGNORE_CASE).containsMatchIn(block) ||
                         block.contains("0130") || block.contains("BTN_GAMEPAD") || block.contains("BTN_SOUTH") ||
                         block.contains("EV=1b") || block.contains("EV=13")
 
@@ -656,22 +668,40 @@ class LinuxInputReader(
                        devName.contains("joy-con", ignoreCase = true) ||
                        devName.contains("switch", ignoreCase = true)
 
-        val (layoutType: ControllerLayoutType, stickRange: StickRangeMode) = when {
-            isPlayStation -> {
-                ControllerLayoutType.PLAYSTATION to (if (isBluetooth) StickRangeMode.UNSIGNED_8BIT else StickRangeMode.UNSIGNED_16BIT)
-            }
+        val isXbox = vendorHex == "045e" ||
+                     devName.contains("xbox", ignoreCase = true) ||
+                     devName.contains("microsoft", ignoreCase = true) ||
+                     devName.contains("x-box", ignoreCase = true)
 
-            isSwitch -> {
-                ControllerLayoutType.NINTENDO_SWITCH to StickRangeMode.SIGNED_16BIT
+        // Inspecter les métadonnées min/max du pilote noyau (disponible via getevent -p)
+        val abs0Match = Regex("""(?:0000|ABS_X)\s*:\s*.*?\bmin\s*(-?\d+)\s*,\s*max\s*(-?\d+)""", RegexOption.IGNORE_CASE).find(block)
+        val hardwareStickRange: StickRangeMode? = if (abs0Match != null) {
+            val minVal = abs0Match.groupValues[1].toLongOrNull() ?: 0L
+            val maxVal = abs0Match.groupValues[2].toLongOrNull() ?: 65535L
+            when {
+                minVal < 0L -> StickRangeMode.SIGNED_16BIT
+                maxVal <= 255L -> StickRangeMode.UNSIGNED_8BIT
+                else -> StickRangeMode.UNSIGNED_16BIT
             }
+        } else null
 
-            isBluetooth || hasAbsGasOrBrake -> {
-                ControllerLayoutType.XBOX_BLUETOOTH to StickRangeMode.UNSIGNED_16BIT
-            }
+        val layoutType: ControllerLayoutType = when {
+            isPlayStation -> ControllerLayoutType.PLAYSTATION
+            isSwitch -> ControllerLayoutType.NINTENDO_SWITCH
+            isXbox && isBluetooth -> ControllerLayoutType.XBOX_BLUETOOTH
+            isXbox && !isBluetooth -> ControllerLayoutType.XBOX_WIRED_USB
+            isBluetooth -> ControllerLayoutType.GENERIC_BLUETOOTH
+            hasAbsGasOrBrake -> ControllerLayoutType.GENERIC_USB
+            else -> ControllerLayoutType.XBOX_WIRED_USB
+        }
 
-            else -> {
-                ControllerLayoutType.XBOX_WIRED_USB to StickRangeMode.UNSIGNED_16BIT
-            }
+        val stickRange: StickRangeMode = hardwareStickRange ?: when (layoutType) {
+            ControllerLayoutType.PLAYSTATION -> if (isBluetooth) StickRangeMode.UNSIGNED_8BIT else StickRangeMode.UNSIGNED_16BIT
+            ControllerLayoutType.NINTENDO_SWITCH -> StickRangeMode.SIGNED_16BIT
+            ControllerLayoutType.XBOX_BLUETOOTH -> StickRangeMode.UNSIGNED_16BIT
+            ControllerLayoutType.XBOX_WIRED_USB -> StickRangeMode.UNSIGNED_16BIT
+            ControllerLayoutType.GENERIC_BLUETOOTH -> StickRangeMode.UNSIGNED_16BIT
+            ControllerLayoutType.GENERIC_USB -> StickRangeMode.AUTO
         }
 
         return GamepadNodeInfo(
@@ -697,6 +727,6 @@ data class GamepadNodeInfo(
     val nodePath: String,
     val name: String,
     val layoutType: ControllerLayoutType,
-    val stickRange: StickRangeMode,
+    var stickRange: StickRangeMode,
     val isBluetooth: Boolean
 )

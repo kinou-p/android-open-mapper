@@ -229,8 +229,17 @@ object BinaryInputParser {
             StickRangeMode.SIGNED_16BIT -> {
                 (raw.toFloat() / 32768f).coerceIn(-1.0f, 1.0f)
             }
-            StickRangeMode.UNSIGNED_16BIT, StickRangeMode.AUTO -> {
+            StickRangeMode.UNSIGNED_16BIT -> {
                 if (raw < 0L) {
+                    (raw.toFloat() / 32768f).coerceIn(-1.0f, 1.0f)
+                } else {
+                    val delta = (raw - 32768L).toFloat()
+                    if (delta > 0f) (delta / 32767f).coerceIn(-1.0f, 1.0f)
+                    else (delta / 32768f).coerceIn(-1.0f, 1.0f)
+                }
+            }
+            StickRangeMode.AUTO -> {
+                if (raw < 0L || (raw in 1L..255L && raw != 128L)) {
                     (raw.toFloat() / 32768f).coerceIn(-1.0f, 1.0f)
                 } else {
                     val delta = (raw - 32768L).toFloat()

@@ -423,13 +423,19 @@ object AppUpdateManager {
 
             fun extractSignatures(info: android.content.pm.PackageInfo): List<ByteArray>? {
                 return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val signingInfo = info.signingInfo ?: return null
-                    val sigs = if (signingInfo.hasMultipleSigners()) {
-                        signingInfo.apkContentsSigners
+                    val signingInfo = info.signingInfo
+                    if (signingInfo != null) {
+                        val sigs = if (signingInfo.hasMultipleSigners()) {
+                            signingInfo.apkContentsSigners
+                        } else {
+                            signingInfo.signingCertificateHistory
+                        }
+                        sigs?.map { it.toByteArray() }
                     } else {
-                        signingInfo.signingCertificateHistory
+                        // Fallback pour les bogues AOSP documentés sur Android 9/10 où getPackageArchiveInfo laisse signingInfo nul
+                        @Suppress("DEPRECATION")
+                        info.signatures?.map { it.toByteArray() }
                     }
-                    sigs?.map { it.toByteArray() }
                 } else {
                     @Suppress("DEPRECATION")
                     info.signatures?.map { it.toByteArray() }
