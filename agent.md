@@ -68,7 +68,7 @@ timeline
     2026-09-01 : v1.1.4 : Renommage libre des profils, responsive UI, stabilisation
     2026-09-01 : v1.2.0 (Majeure) : Durcissement sécurité HMAC & Device Token, Jiggle Strafe & RAA Keep-Alive, 113 Tests Automatisés, CI/CD Cloudflare & Release automatique, Calibrage Gâchettes LT/RT
     2026-09-02 : v1.2.1 : Palettes arrière P1..P4 (Elite/Scuf), Mode Turbo Rapid-Fire, Anti-Recul vertical avec slider in-game, Raccourcis tactiques in-game
-    2026-09-03 : Stabilisation post-audit & Résilience Zéro-Alloc : Cycle de vie coroutines LinuxInputReader (joinAll), double fallback dynamique résilient IInputManagerHelper, filtrage Bluetooth OverlayService
+    2026-09-03 : v1.2.2 : Détection matérielle des plages de sticks (min/max getevent -p), Zéro-Allocation IPC & Taps (240 Hz), Fallback dynamique Shizuku/IInputManager Android 11-15+
 ```
 
 ### Détail des Phases de Développement :
@@ -115,11 +115,11 @@ timeline
    - **Anti-Recul Vertical Actif** : Descente continue compensatoire pendant le tir avec vitesse réglable in-game via un slider interactif dans le panneau overlay latéral (`EdgeHandleOverlayView`).
    - **Raccourcis Tactiques In-Game** : Rôles directs sur boutons physiques (`TOGGLE_RECOIL`, `TOGGLE_STRAFE`, `SWITCH_PROFILE`) avec alertes toast en superposition.
 
-9. **Stabilisation Post-Audit, Zéro-Allocation & Résilience Globale (`d02629e` et correctifs)** :
+9. **Stabilisation Post-Audit, Zéro-Allocation & Résilience Globale v1.2.2 (`d02629e` ➔ `82f3904`)** :
    - **Anonymisation IP backend** : Utilisation du sel serveur `IP_SALT` découplé de `APP_SECRET` pour le hachage conforme RGPD des adresses IP.
    - **Cycle de vie coroutines `LinuxInputReader`** : Maintien actif du `readerJob` via `jobsToWait.joinAll()` évitant l'arrêt prématuré de la capture manette en arrière-plan.
-   - **Support USB xpad & Sticks signés 16-bit** : Normalisation `SIGNED_16BIT` évitant le blocage à 100% dans le coin supérieur gauche (-1.0f, -1.0f) des joysticks filaires USB au repos (`raw = 0`).
-   - **Zéro-Allocation IPC & Taps** : Pré-allocation des arguments de réflexion dans `IInputManagerHelper` (`cachedArgs2`, `cachedArgs3`) et pool fixe `PendingTapSlot[16]` dans `ButtonProcessor`, supprimant tout GC churn à 240 Hz.
+   - **Inspection Matérielle getevent -p & Détection des Sticks** : Analyse directe des limites `min` et `max` déclarées par le pilote noyau pour chaque axe, éliminant tout blocage au repos des joysticks filaires ou Bluetooth (support transparent de 0..65535, -32768..32767 et 0..255). Auto-apprentissage dynamique en secours si métadonnées absentes.
+   - **Zéro-Allocation IPC & Taps (240 Hz)** : Pré-allocation des arguments de réflexion dans `IInputManagerHelper` (`cachedArgs2`, `cachedArgs3` avec `ZERO_INTEGER`) et pool fixe `PendingTapSlot[16]` dans `ButtonProcessor`, supprimant tout GC churn.
    - **Double Fallback Résilient `IInputManagerHelper`** : Détection dynamique AIDL / Réflexion 2 et 3 paramètres garantissant une compatibilité transparente d'Android 11 à Android 15+. Isolation des cancels préventifs de démarrage pour ne jamais tuer le helper au lancement.
    - **Filtrage matériel & Bluetooth générique** : Exclusion des touches physiques du téléphone (`keypad`/`kpd`), routage précis des manettes Bluetooth tierces (`GENERIC_BLUETOOTH`) et seuils de gâchettes 0..255 recalibrés.
    - **Vibrations asynchrones & Concurrence Overlay** : `playFireHaptic` déporté sur `hapticScope.launch` non bloquant et `liveProfileUpdateFlow` converti en `MutableSharedFlow(replay = 0, extraBufferCapacity = 1)`.

@@ -52,8 +52,8 @@ android {
         applicationId = "com.kinou.gameassist"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.2.1"
+        versionCode = 10
+        versionName = "1.2.2"
 
         buildConfigField("String", "API_SIGNING_SECRET", "\"$apiSigningSecret\"")
 
