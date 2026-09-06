@@ -475,13 +475,15 @@ describe('Telemetry & Device Metadata (deviceModel + osVersion)', () => {
   const mockEnv = {
     APP_SECRET: 'test-app-secret-1234567890',
     DB: {
-      prepare: () => ({
-        bind: () => ({
+      prepare: () => {
+        const statement = {
           first: async () => ({ count: 0, window_start: Date.now() }),
           all: async () => ({ results: [] }),
-          run: async () => ({ success: true })
-        })
-      }),
+          run: async () => ({ success: true }),
+          bind: () => statement
+        };
+        return statement;
+      },
       batch: async (statements: any[]) => {
         return statements.map(() => ({
           results: [{ count: 1, window_start: Date.now() }],
@@ -550,6 +552,25 @@ describe('Telemetry & Device Metadata (deviceModel + osVersion)', () => {
     expect(res.status).toBe(200);
     const json = await res.json() as any;
     expect(json.success).toBe(true);
+  });
+
+  it('renvoie les statistiques et l\'activité par appareil lors de GET /api/stats', async () => {
+    const req = new Request('http://localhost/api/stats', {
+      method: 'GET',
+      headers: {
+        'cf-connecting-ip': '1.2.3.4'
+      }
+    });
+
+    const res = await app.fetch(req, mockEnv as any, mockExecCtx as any);
+    expect(res.status).toBe(200);
+    const json = await res.json() as any;
+    expect(json.success).toBe(true);
+    expect(json.devices).toBeDefined();
+    expect(json.devices.activity).toBeDefined();
+    expect(Array.isArray(json.devices.activity)).toBe(true);
+    expect(json.device_activity).toBeDefined();
+    expect(Array.isArray(json.device_activity)).toBe(true);
   });
 });
 

@@ -1303,6 +1303,21 @@ app.get('/api/stats', async (c) => {
       FROM devices WHERE os_version IS NOT NULL GROUP BY os_version ORDER BY device_count DESC LIMIT 20
     `).all();
 
+    // Per-device activity breakdown (Top 100 devices by launch_count)
+    const { results: deviceActivityResults } = await c.env.DB.prepare(`
+      SELECT 
+        SUBSTR(device_hash, 1, 8) as id,
+        COALESCE(device_model, 'Inconnu') as model,
+        COALESCE(os_version, 'Inconnu') as os_version,
+        COALESCE(app_version, '1.0.0') as app_version,
+        launch_count,
+        first_seen,
+        last_seen
+      FROM devices
+      ORDER BY launch_count DESC, last_seen DESC
+      LIMIT 100
+    `).all();
+
     return c.json({
       success: true,
       devices: {
@@ -1310,8 +1325,10 @@ app.get('/api/stats', async (c) => {
         active_24h: devicesStats?.active_24h || 0,
         active_7d: devicesStats?.active_7d || 0,
         active_30d: devicesStats?.active_30d || 0,
-        total_app_launches: devicesStats?.total_launches || 0
+        total_app_launches: devicesStats?.total_launches || 0,
+        activity: deviceActivityResults || []
       },
+      device_activity: deviceActivityResults || [],
       community: {
         total_profiles: profileStats?.total_profiles || 0,
         total_profile_downloads: profileStats?.total_downloads || 0,
