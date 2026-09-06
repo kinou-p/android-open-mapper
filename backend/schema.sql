@@ -91,11 +91,13 @@ CREATE TABLE IF NOT EXISTS devices (
     app_version TEXT,
     device_model TEXT,
     os_version TEXT,
-    launch_count INTEGER DEFAULT 1
+    launch_count INTEGER DEFAULT 1,
+    country TEXT DEFAULT 'Inconnu'
 );
 
 CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON devices(last_seen DESC);
 CREATE INDEX IF NOT EXISTS idx_devices_first_seen ON devices(first_seen);
+CREATE INDEX IF NOT EXISTS idx_devices_country ON devices(country);
 
 CREATE TABLE IF NOT EXISTS daily_activity (
     date TEXT NOT NULL,
@@ -105,10 +107,16 @@ CREATE TABLE IF NOT EXISTS daily_activity (
     os_version TEXT,
     launch_count INTEGER DEFAULT 1,
     last_seen INTEGER NOT NULL,
+    country TEXT DEFAULT 'Inconnu',
     PRIMARY KEY (date, device_hash)
 );
 
 CREATE INDEX IF NOT EXISTS idx_daily_activity_date ON daily_activity(date);
+
+CREATE TABLE IF NOT EXISTS hourly_activity (
+    hour INTEGER PRIMARY KEY, -- 0 à 23 (heure UTC)
+    launch_count INTEGER DEFAULT 0
+);
 
 CREATE TABLE IF NOT EXISTS daily_downloads (
     date TEXT NOT NULL,

@@ -571,6 +571,13 @@ describe('Telemetry & Device Metadata (deviceModel + osVersion)', () => {
     expect(Array.isArray(json.devices.activity)).toBe(true);
     expect(json.device_activity).toBeDefined();
     expect(Array.isArray(json.device_activity)).toBe(true);
+    expect(json.countries).toBeDefined();
+    expect(Array.isArray(json.countries)).toBe(true);
+    expect(json.hourly).toBeDefined();
+    expect(Array.isArray(json.hourly)).toBe(true);
+    expect(json.hourly).toHaveLength(24);
+    expect(json.retention).toBeDefined();
+    expect(json.retention.repeat_rate).toBeDefined();
   });
 });
 

@@ -1165,29 +1165,42 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
     const os = rawOs && rawOs.length > 0 ? rawOs : null;
     const todayStr = new Date(now).toISOString().slice(0, 10);
 
+    // Extraction géolocalisation Cloudflare Edge & Heure UTC
+    const rawCountry = (c.req.raw as any)?.cf?.country || c.req.header('cf-ipcountry') || null;
+    const country = typeof rawCountry === 'string' && rawCountry.trim().length === 2 ? rawCountry.trim().toUpperCase() : 'Inconnu';
+    const currentHour = new Date(now).getUTCHours();
+
     // Batch best-effort (non transactionnel) : chaque upsert est atomique individuellement,
     // et une dérive éventuelle de la télémétrie est sans gravité.
     await c.env.DB.batch([
       c.env.DB.prepare(`
-        INSERT INTO devices (device_hash, first_seen, last_seen, app_version, device_model, os_version, launch_count)
-        VALUES (?, ?, ?, ?, ?, ?, 1)
+        INSERT INTO devices (device_hash, first_seen, last_seen, app_version, device_model, os_version, launch_count, country)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
         ON CONFLICT(device_hash) DO UPDATE SET
           last_seen = excluded.last_seen,
           app_version = excluded.app_version,
           device_model = COALESCE(excluded.device_model, devices.device_model),
           os_version = COALESCE(excluded.os_version, devices.os_version),
-          launch_count = launch_count + 1
-      `).bind(deviceIdentity, now, now, version, model, os),
+          launch_count = launch_count + 1,
+          country = CASE WHEN excluded.country != 'Inconnu' THEN excluded.country ELSE devices.country END
+      `).bind(deviceIdentity, now, now, version, model, os, country),
       c.env.DB.prepare(`
-        INSERT INTO daily_activity (date, device_hash, app_version, device_model, os_version, launch_count, last_seen)
-        VALUES (?, ?, ?, ?, ?, 1, ?)
+        INSERT INTO daily_activity (date, device_hash, app_version, device_model, os_version, launch_count, last_seen, country)
+        VALUES (?, ?, ?, ?, ?, 1, ?, ?)
         ON CONFLICT(date, device_hash) DO UPDATE SET
           launch_count = launch_count + 1,
           app_version = excluded.app_version,
           device_model = COALESCE(excluded.device_model, daily_activity.device_model),
           os_version = COALESCE(excluded.os_version, daily_activity.os_version),
-          last_seen = excluded.last_seen
-      `).bind(todayStr, deviceIdentity, version, model, os, now)
+          last_seen = excluded.last_seen,
+          country = CASE WHEN excluded.country != 'Inconnu' THEN excluded.country ELSE daily_activity.country END
+      `).bind(todayStr, deviceIdentity, version, model, os, now, country),
+      c.env.DB.prepare(`
+        INSERT INTO hourly_activity (hour, launch_count)
+        VALUES (?, 1)
+        ON CONFLICT(hour) DO UPDATE SET
+          launch_count = launch_count + 1
+      `).bind(currentHour)
     ]);
 
     return c.json({ success: true });
@@ -1303,6 +1316,57 @@ app.get('/api/stats', async (c) => {
       FROM devices WHERE os_version IS NOT NULL GROUP BY os_version ORDER BY device_count DESC LIMIT 20
     `).all();
 
+    // Countries breakdown (Top 30)
+    const { results: countryResults } = await c.env.DB.prepare(`
+      SELECT 
+        COALESCE(country, 'Inconnu') as country, 
+        COUNT(*) as device_count, 
+        SUM(launch_count) as total_launches
+      FROM devices 
+      WHERE country IS NOT NULL AND country != ''
+      GROUP BY country 
+      ORDER BY device_count DESC, total_launches DESC 
+      LIMIT 30
+    `).all();
+
+    // Hourly distribution (24h 00:00 to 23:00 UTC)
+    const { results: hourlyResults } = await c.env.DB.prepare(`
+      SELECT hour, launch_count
+      FROM hourly_activity
+      ORDER BY hour ASC
+    `).all();
+
+    const hourlyMap = new Map<number, number>();
+    for (let h = 0; h < 24; h++) hourlyMap.set(h, 0);
+    for (const row of (hourlyResults || []) as any[]) {
+      hourlyMap.set(row.hour, row.launch_count || 0);
+    }
+    const hourlyStats = Array.from(hourlyMap.entries()).map(([hour, launches]) => ({
+      hour,
+      hour_label: `${hour.toString().padStart(2, '0')}h`,
+      launches
+    }));
+
+    // Cohort and retention metrics
+    const retentionData: any = await c.env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_devices,
+        SUM(CASE WHEN launch_count >= 2 THEN 1 ELSE 0 END) as repeat_users,
+        SUM(CASE WHEN (last_seen - first_seen) >= 86400000 THEN 1 ELSE 0 END) as returned_d1,
+        SUM(CASE WHEN (last_seen - first_seen) >= 604800000 THEN 1 ELSE 0 END) as returned_d7,
+        AVG(CASE WHEN launch_count >= 2 THEN (last_seen - first_seen) / 3600000.0 ELSE NULL END) as avg_active_span_hours
+      FROM devices
+    `).first();
+
+    const totalDevs = retentionData?.total_devices || 1;
+    const repeatUsers = retentionData?.repeat_users || 0;
+    const returnedD1 = retentionData?.returned_d1 || 0;
+    const returnedD7 = retentionData?.returned_d7 || 0;
+    const repeatRate = totalDevs > 0 ? Math.round((repeatUsers / totalDevs) * 1000) / 10 : 0;
+    const retentionD1 = totalDevs > 0 ? Math.round((returnedD1 / totalDevs) * 1000) / 10 : 0;
+    const retentionD7 = totalDevs > 0 ? Math.round((returnedD7 / totalDevs) * 1000) / 10 : 0;
+    const avgLifespanHours = Math.round((retentionData?.avg_active_span_hours || 0) * 10) / 10;
+
     // Per-device activity breakdown (Top 100 devices by launch_count)
     const { results: deviceActivityResults } = await c.env.DB.prepare(`
       SELECT 
@@ -1310,6 +1374,7 @@ app.get('/api/stats', async (c) => {
         COALESCE(device_model, 'Inconnu') as model,
         COALESCE(os_version, 'Inconnu') as os_version,
         COALESCE(app_version, '1.0.0') as app_version,
+        COALESCE(country, 'Inconnu') as country,
         launch_count,
         first_seen,
         last_seen
@@ -1329,6 +1394,18 @@ app.get('/api/stats', async (c) => {
         activity: deviceActivityResults || []
       },
       device_activity: deviceActivityResults || [],
+      countries: countryResults || [],
+      hourly: hourlyStats,
+      retention: {
+        total_devices: totalDevs,
+        repeat_users: repeatUsers,
+        repeat_rate: repeatRate,
+        returned_d1: returnedD1,
+        retention_d1: retentionD1,
+        returned_d7: returnedD7,
+        retention_d7: retentionD7,
+        avg_active_span_hours: avgLifespanHours
+      },
       community: {
         total_profiles: profileStats?.total_profiles || 0,
         total_profile_downloads: profileStats?.total_downloads || 0,
