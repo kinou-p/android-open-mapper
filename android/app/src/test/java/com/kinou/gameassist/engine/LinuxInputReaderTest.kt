@@ -8,6 +8,37 @@ import java.nio.ByteOrder
 class LinuxInputReaderTest {
 
     @Test
+    fun testParseAbsCodes_HidGamepadWithRightStickOnZRz() {
+        // `getevent -p` of a Bluetooth HID pad ("D3"): no ABS_RX / ABS_RY, triggers on GAS / BRAKE
+        val block = """
+            add device 1: /dev/input/event17
+              name:     "D3"
+              events:
+                KEY (0001): 0130  0131  0132  0133  0134  0135  0136  0137
+                            0138  0139  013a  013b  013c  013d  013e  013f
+                ABS (0003): 0000  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0001  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0002  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0005  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0009  : value 0, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            000a  : value 0, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0010  : value 0, min -1, max 1, fuzz 0, flat 0, resolution 0
+                            0011  : value 0, min -1, max 1, fuzz 0, flat 0, resolution 0
+                MSC (0004): 0004
+              input props:
+                <none>
+        """.trimIndent()
+
+        assertEquals(setOf(0x00, 0x01, 0x02, 0x05, 0x09, 0x0a, 0x10, 0x11), LinuxInputReader.parseAbsCodes(block))
+    }
+
+    @Test
+    fun testParseAbsCodes_NoAbsSection() {
+        val block = "I: Bus=0005 Vendor=1949 Product=0402 Version=0111\nN: Name=\"D3\"\nB: ABS=30627"
+        assertTrue(LinuxInputReader.parseAbsCodes(block).isEmpty())
+    }
+
+    @Test
     fun testParseBinaryEvent64() {
         // Construct a 24-byte 64-bit struct input_event
         // tv_sec (8B) = 1000, tv_usec (8B) = 500

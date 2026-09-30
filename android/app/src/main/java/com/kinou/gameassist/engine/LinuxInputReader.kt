@@ -20,6 +20,30 @@ class LinuxInputReader(
     private val engine: GamepadEngine,
     private val scope: CoroutineScope
 ) {
+    companion object {
+        // linux/input-event-codes.h
+        private const val ABS_Z = 0x02
+        private const val ABS_RX = 0x03
+        private const val ABS_RY = 0x04
+        private const val ABS_RZ = 0x05
+        private const val ABS_GAS = 0x09
+        private const val ABS_BRAKE = 0x0a
+
+        private val ABS_CODE_REGEX = Regex("""\b([0-9a-fA-F]{4})\s*:\s*value""")
+
+        /**
+         * ABS axis codes listed by `getevent -p` for one device, e.g. `0005  : value 128, min 0, max 255`.
+         * Empty for `/proc/bus/input/devices` blocks, which only carry a bitmask.
+         */
+        internal fun parseAbsCodes(block: String): Set<Int> {
+            val absSection = block.substringAfter("ABS (0003):", missingDelimiterValue = "")
+            if (absSection.isEmpty()) return emptySet()
+            return ABS_CODE_REGEX.findAll(absSection)
+                .mapNotNull { it.groupValues[1].toIntOrNull(16) }
+                .toSet()
+        }
+    }
+
     private val activeProcesses = mutableListOf<Process>()
     private val activeStreams = mutableListOf<InputStream>()
     private val childJobs = mutableListOf<Job>()
@@ -644,9 +668,17 @@ class LinuxInputReader(
             ?: Regex("""N:\s*Name="([^"]+)"""", RegexOption.IGNORE_CASE).find(block)
         val devName = nameMatch?.groupValues?.get(1)?.trim() ?: "Gamepad"
 
-        val hasAbsGasOrBrake = block.contains("0009") || block.contains("000a") ||
+        val absCodes = parseAbsCodes(block)
+        val hasAbsGasOrBrake = ABS_GAS in absCodes || ABS_BRAKE in absCodes ||
                                block.contains("ABS_GAS", ignoreCase = true) ||
                                block.contains("ABS_BRAKE", ignoreCase = true)
+        // Standard HID gamepads (e.g. "D3") put the right stick on ABS_Z / ABS_RZ and the triggers on
+        // ABS_GAS / ABS_BRAKE, with no ABS_RX / ABS_RY at all. `getevent -p` does not print the bus, so
+        // such a pad cannot be told apart from a wired Xbox-style pad (triggers on ABS_Z / ABS_RZ) by
+        // its connection; the axes it actually has are what decides it.
+        val hasRightStickOnZRz = hasAbsGasOrBrake &&
+                                 ABS_Z in absCodes && ABS_RZ in absCodes &&
+                                 ABS_RX !in absCodes && ABS_RY !in absCodes
 
         val isBluetooth = block.contains("Bus=0005", ignoreCase = true) ||
                           devName.contains("wireless", ignoreCase = true) ||
@@ -691,6 +723,8 @@ class LinuxInputReader(
             isXbox && isBluetooth -> ControllerLayoutType.XBOX_BLUETOOTH
             isXbox && !isBluetooth -> ControllerLayoutType.XBOX_WIRED_USB
             isBluetooth -> ControllerLayoutType.GENERIC_BLUETOOTH
+            // GENERIC_BLUETOOTH already maps ABS_Z / ABS_RZ to the right stick and GAS / BRAKE to the triggers
+            hasRightStickOnZRz -> ControllerLayoutType.GENERIC_BLUETOOTH
             hasAbsGasOrBrake -> ControllerLayoutType.GENERIC_USB
             else -> ControllerLayoutType.XBOX_WIRED_USB
         }
