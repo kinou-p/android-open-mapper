@@ -33,6 +33,93 @@ class LinuxInputReaderTest {
     }
 
     @Test
+    fun testParseGamepadNodeInfo_DualShock4OnHidSonyDriver() {
+        // `getevent -p` of a DualShock 4 clone over Bluetooth (vendor 054c, product 05c4, hid-sony):
+        // right stick on ABS_RX / ABS_RY, triggers on ABS_Z / ABS_RZ
+        val block = """
+            add device 3: /dev/input/event16
+              name:     "Wireless Controller"
+              events:
+                KEY (0001): 0130  0131  0133  0134  0136  0137  0138  0139
+                            013a  013b  013c  013d  013e
+                ABS (0003): 0000  : value 128, min 0, max 255, fuzz 0, flat 0, resolution 0
+                            0001  : value 128, min 0, max 255, fuzz 0, flat 0, resolution 0
+                            0002  : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0
+                            0003  : value 128, min 0, max 255, fuzz 0, flat 0, resolution 0
+                            0004  : value 128, min 0, max 255, fuzz 0, flat 0, resolution 0
+                            0005  : value 0, min 0, max 255, fuzz 0, flat 0, resolution 0
+                            0010  : value 0, min -1, max 1, fuzz 0, flat 0, resolution 0
+                            0011  : value 0, min -1, max 1, fuzz 0, flat 0, resolution 0
+                FF  (0015): 0050  0051  0058  0059  005a  0060
+              input props:
+                <none>
+        """.trimIndent()
+
+        val info = LinuxInputReader.parseGamepadNodeInfo(block)
+        assertNotNull(info)
+        assertEquals("/dev/input/event16", info!!.nodePath)
+        assertEquals(ControllerLayoutType.PLAYSTATION_HID_DRIVER, info.layoutType)
+        assertEquals(StickRangeMode.UNSIGNED_8BIT, info.stickRange)
+    }
+
+    @Test
+    fun testParseGamepadNodeInfo_DualShock4TouchpadAndMotionSensorsAreNotGamepads() {
+        val touchpad = """
+            add device 1: /dev/input/event18
+              name:     "Wireless Controller Touchpad"
+              events:
+                KEY (0001): 0110  0145  014a  014d
+                ABS (0003): 0000  : value 0, min 0, max 1919, fuzz 0, flat 0, resolution 0
+                            0001  : value 0, min 0, max 941, fuzz 0, flat 0, resolution 0
+                            002f  : value 0, min 0, max 1, fuzz 0, flat 0, resolution 0
+                            0035  : value 0, min 0, max 1919, fuzz 0, flat 0, resolution 0
+                            0036  : value 0, min 0, max 941, fuzz 0, flat 0, resolution 0
+                            0039  : value 0, min 0, max 65535, fuzz 0, flat 0, resolution 0
+              input props:
+                INPUT_PROP_POINTER
+                INPUT_PROP_BUTTONPAD
+        """.trimIndent()
+        val motionSensors = """
+            add device 2: /dev/input/event17
+              name:     "Wireless Controller Motion Sensors"
+              events:
+                ABS (0003): 0000  : value 0, min -32768, max 32768, fuzz 16, flat 0, resolution 8192
+                            0001  : value 0, min -32768, max 32768, fuzz 16, flat 0, resolution 8192
+                            0002  : value 0, min -32768, max 32768, fuzz 16, flat 0, resolution 8192
+                            0003  : value 0, min -2097152, max 2097152, fuzz 16, flat 0, resolution 1024
+                            0004  : value 0, min -2097152, max 2097152, fuzz 16, flat 0, resolution 1024
+                            0005  : value -63, min -2097152, max 2097152, fuzz 16, flat 0, resolution 1024
+                MSC (0004): 0005
+              input props:
+                INPUT_PROP_ACCELEROMETER
+        """.trimIndent()
+
+        assertNull(LinuxInputReader.parseGamepadNodeInfo(touchpad))
+        assertNull(LinuxInputReader.parseGamepadNodeInfo(motionSensors))
+    }
+
+    @Test
+    fun testParseGamepadNodeInfo_HidGamepadWithRightStickOnZRz() {
+        // "D3": the right stick stays on ABS_Z / ABS_RZ (GENERIC_BLUETOOTH mapping)
+        val block = """
+            add device 1: /dev/input/event17
+              name:     "D3"
+              events:
+                KEY (0001): 0130  0131  0132  0133  0134  0135  0136  0137
+                ABS (0003): 0000  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0001  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0002  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0005  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0009  : value 0, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            000a  : value 0, min 0, max 255, fuzz 0, flat 15, resolution 0
+              input props:
+                <none>
+        """.trimIndent()
+
+        assertEquals(ControllerLayoutType.GENERIC_BLUETOOTH, LinuxInputReader.parseGamepadNodeInfo(block)?.layoutType)
+    }
+
+    @Test
     fun testParseAbsCodes_NoAbsSection() {
         val block = "I: Bus=0005 Vendor=1949 Product=0402 Version=0111\nN: Name=\"D3\"\nB: ABS=30627"
         assertTrue(LinuxInputReader.parseAbsCodes(block).isEmpty())
@@ -217,6 +304,25 @@ class LinuxInputReaderTest {
         assertEquals("BUTTON_R1", BinaryInputParser.evKeyToButtonName(0x0135, ps)) // R1
         assertEquals("BUTTON_L2", BinaryInputParser.evKeyToButtonName(0x0136, ps)) // L2
         assertEquals("BUTTON_R2", BinaryInputParser.evKeyToButtonName(0x0137, ps)) // R2
+    }
+
+    @Test
+    fun testPlayStationHidDriverKeyMapping() {
+        // Matches Android's Vendor_054c_Product_05c4_Version_8100.kl
+        val ps = ControllerLayoutType.PLAYSTATION_HID_DRIVER
+        assertEquals("BUTTON_A", BinaryInputParser.evKeyToButtonName(0x0130, ps)) // Cross
+        assertEquals("BUTTON_B", BinaryInputParser.evKeyToButtonName(0x0131, ps)) // Circle
+        assertEquals("BUTTON_Y", BinaryInputParser.evKeyToButtonName(0x0133, ps)) // Triangle
+        assertEquals("BUTTON_X", BinaryInputParser.evKeyToButtonName(0x0134, ps)) // Square
+        assertEquals("BUTTON_L1", BinaryInputParser.evKeyToButtonName(0x0136, ps))
+        assertEquals("BUTTON_R1", BinaryInputParser.evKeyToButtonName(0x0137, ps))
+        assertEquals("BUTTON_L2", BinaryInputParser.evKeyToButtonName(0x0138, ps))
+        assertEquals("BUTTON_R2", BinaryInputParser.evKeyToButtonName(0x0139, ps))
+        assertEquals("BUTTON_SELECT", BinaryInputParser.evKeyToButtonName(0x013a, ps))
+        assertEquals("BUTTON_START", BinaryInputParser.evKeyToButtonName(0x013b, ps))
+        assertEquals("BUTTON_MODE", BinaryInputParser.evKeyToButtonName(0x013c, ps))
+        assertEquals("BUTTON_THUMBL", BinaryInputParser.evKeyToButtonName(0x013d, ps))
+        assertEquals("BUTTON_THUMBR", BinaryInputParser.evKeyToButtonName(0x013e, ps))
     }
 
     @Test

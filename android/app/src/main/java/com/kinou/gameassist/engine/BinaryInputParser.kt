@@ -272,6 +272,25 @@ object BinaryInputParser {
                     0x013c -> return "BUTTON_THUMBR"  // R3
                 }
             }
+            ControllerLayoutType.PLAYSTATION_HID_DRIVER -> {
+                // Same as Android's own Vendor_054c_Product_05c4_Version_8100.kl, so a button assigned in
+                // the editor (Android KeyEvent) is the one pressed in game
+                when (code) {
+                    0x0130 -> return "BUTTON_A"       // Cross (BTN_SOUTH)
+                    0x0131 -> return "BUTTON_B"       // Circle (BTN_EAST)
+                    0x0133 -> return "BUTTON_Y"       // Triangle (BTN_NORTH)
+                    0x0134 -> return "BUTTON_X"       // Square (BTN_WEST)
+                    0x0136 -> return "BUTTON_L1"      // L1
+                    0x0137 -> return "BUTTON_R1"      // R1
+                    0x0138 -> return "BUTTON_L2"      // L2
+                    0x0139 -> return "BUTTON_R2"      // R2
+                    0x013a -> return "BUTTON_SELECT"  // Share / Create
+                    0x013b -> return "BUTTON_START"   // Options
+                    0x013c -> return "BUTTON_MODE"    // PS Button
+                    0x013d -> return "BUTTON_THUMBL"  // L3
+                    0x013e -> return "BUTTON_THUMBR"  // R3
+                }
+            }
             ControllerLayoutType.NINTENDO_SWITCH -> {
                 when (code) {
                     0x0130 -> return "BUTTON_B"       // B (Bottom)
@@ -342,6 +361,8 @@ enum class ControllerLayoutType {
     XBOX_WIRED_USB,
     XBOX_BLUETOOTH,
     PLAYSTATION,
+    /** DualShock 4 / DualSense (and clones) through the kernel's hid-sony (>= 4.10) or hid-playstation driver */
+    PLAYSTATION_HID_DRIVER,
     NINTENDO_SWITCH,
     GENERIC_BLUETOOTH,
     GENERIC_USB

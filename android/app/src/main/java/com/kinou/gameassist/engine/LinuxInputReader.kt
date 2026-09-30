@@ -42,6 +42,144 @@ class LinuxInputReader(
                 .mapNotNull { it.groupValues[1].toIntOrNull(16) }
                 .toSet()
         }
+
+        internal fun parseGamepadNodeInfo(block: String): GamepadNodeInfo? {
+            val isVirtualOrInternal = block.contains("uinput", ignoreCase = true) ||
+                                      block.contains("xiaomi", ignoreCase = true) ||
+                                      block.contains("touchscreen", ignoreCase = true) ||
+                                      block.contains("touch_dev", ignoreCase = true) ||
+                                      block.contains("sensor", ignoreCase = true) ||
+                                      block.contains("goodix", ignoreCase = true) ||
+                                      block.contains("fts_ts", ignoreCase = true) ||
+                                      block.contains("gpio-keys", ignoreCase = true) ||
+                                      block.contains("gpio-keypad", ignoreCase = true) ||
+                                      block.contains("keypad", ignoreCase = true) ||
+                                      block.contains("kpd", ignoreCase = true) ||
+                                      block.contains("pmic", ignoreCase = true) ||
+                                      block.contains("snd-card", ignoreCase = true) ||
+                                      block.contains("jack", ignoreCase = true) ||
+                                      block.contains("headset", ignoreCase = true) ||
+                                      // A DualShock 4's touchpad is its own node ("Wireless Controller Touchpad"),
+                                      // whose ABS_X / ABS_Y would otherwise be read as the left stick
+                                      block.contains("touchpad", ignoreCase = true) ||
+                                      block.contains("INPUT_PROP_BUTTONPAD")
+
+            if (isVirtualOrInternal) return null
+
+            val isGamepad = block.contains("gamepad", ignoreCase = true) ||
+                            block.contains("controller", ignoreCase = true) ||
+                            block.contains("joystick", ignoreCase = true) ||
+                            block.contains("joypad", ignoreCase = true) ||
+                            block.contains("dualsense", ignoreCase = true) ||
+                            block.contains("dualshock", ignoreCase = true) ||
+                            block.contains("xbox", ignoreCase = true) ||
+                            block.contains("x-box", ignoreCase = true) ||
+                            block.contains("pro controller", ignoreCase = true) ||
+                            block.contains("switch", ignoreCase = true) ||
+                            block.contains("8bitdo", ignoreCase = true) ||
+                            block.contains("gamesir", ignoreCase = true) ||
+                            block.contains("ipega", ignoreCase = true) ||
+                            block.contains("scrcpy", ignoreCase = true) ||
+                            Regex("""\bpad\b""", RegexOption.IGNORE_CASE).containsMatchIn(block) ||
+                            block.contains("0130") || block.contains("BTN_GAMEPAD") || block.contains("BTN_SOUTH") ||
+                            block.contains("EV=1b") || block.contains("EV=13")
+
+            if (!isGamepad) return null
+
+            val eventNode = Regex("""add device \d+:\s*(/dev/input/event\d+)""").find(block)?.groupValues?.get(1)
+                ?: Regex("""Handlers=.*?(event\d+)""").find(block)?.let { "/dev/input/${it.groupValues[1]}" }
+                ?: Regex("""(/dev/input/event\d+)""").find(block)?.groupValues?.get(1)
+                ?: return null
+
+            val nameMatch = Regex("""name:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(block)
+                ?: Regex("""N:\s*Name="([^"]+)"""", RegexOption.IGNORE_CASE).find(block)
+            val devName = nameMatch?.groupValues?.get(1)?.trim() ?: "Gamepad"
+
+            val absCodes = parseAbsCodes(block)
+            val hasAbsGasOrBrake = ABS_GAS in absCodes || ABS_BRAKE in absCodes ||
+                                   block.contains("ABS_GAS", ignoreCase = true) ||
+                                   block.contains("ABS_BRAKE", ignoreCase = true)
+            // Standard HID gamepads (e.g. "D3") put the right stick on ABS_Z / ABS_RZ and the triggers on
+            // ABS_GAS / ABS_BRAKE, with no ABS_RX / ABS_RY at all. `getevent -p` does not print the bus, so
+            // such a pad cannot be told apart from a wired Xbox-style pad (triggers on ABS_Z / ABS_RZ) by
+            // its connection; the axes it actually has are what decides it.
+            val hasRightStickOnZRz = hasAbsGasOrBrake &&
+                                     ABS_Z in absCodes && ABS_RZ in absCodes &&
+                                     ABS_RX !in absCodes && ABS_RY !in absCodes
+
+            val isBluetooth = block.contains("Bus=0005", ignoreCase = true) ||
+                              devName.contains("wireless", ignoreCase = true) ||
+                              devName.contains("bluetooth", ignoreCase = true) ||
+                              devName.contains("bt", ignoreCase = true)
+
+            val vendorMatch = Regex("""Vendor=([0-9a-fA-F]+)""").find(block)
+            val vendorHex = vendorMatch?.groupValues?.get(1)?.lowercase() ?: ""
+
+            val isPlayStation = vendorHex == "054c" ||
+                                devName.contains("sony", ignoreCase = true) ||
+                                devName.contains("dualsense", ignoreCase = true) ||
+                                devName.contains("dualshock", ignoreCase = true) ||
+                                devName.contains("playstation", ignoreCase = true) ||
+                                (devName.contains("wireless controller", ignoreCase = true) && !devName.contains("xbox", ignoreCase = true))
+
+            val isSwitch = vendorHex == "057e" ||
+                           devName.contains("nintendo", ignoreCase = true) ||
+                           devName.contains("joy-con", ignoreCase = true) ||
+                           devName.contains("switch", ignoreCase = true)
+
+            val isXbox = vendorHex == "045e" ||
+                         devName.contains("xbox", ignoreCase = true) ||
+                         devName.contains("microsoft", ignoreCase = true) ||
+                         devName.contains("x-box", ignoreCase = true)
+
+            // Inspecter les métadonnées min/max du pilote noyau (disponible via getevent -p)
+            val abs0Match = Regex("""(?:0000|ABS_X)\s*:\s*.*?\bmin\s*(-?\d+)\s*,\s*max\s*(-?\d+)""", RegexOption.IGNORE_CASE).find(block)
+            val hardwareStickRange: StickRangeMode? = if (abs0Match != null) {
+                val minVal = abs0Match.groupValues[1].toLongOrNull() ?: 0L
+                val maxVal = abs0Match.groupValues[2].toLongOrNull() ?: 65535L
+                when {
+                    minVal < 0L -> StickRangeMode.SIGNED_16BIT
+                    maxVal <= 255L -> StickRangeMode.UNSIGNED_8BIT
+                    else -> StickRangeMode.UNSIGNED_16BIT
+                }
+            } else null
+
+            // The kernel's hid-sony (>= 4.10) and hid-playstation drivers report the right stick on
+            // ABS_RX / ABS_RY and the triggers on ABS_Z / ABS_RZ, unlike a DualShock read as a plain HID
+            // device (right stick on ABS_Z / ABS_RZ). DualShock 4 clones take the same driver.
+            val hasRightStickOnRxRy = ABS_RX in absCodes && ABS_RY in absCodes
+
+            val layoutType: ControllerLayoutType = when {
+                isPlayStation && hasRightStickOnRxRy -> ControllerLayoutType.PLAYSTATION_HID_DRIVER
+                isPlayStation -> ControllerLayoutType.PLAYSTATION
+                isSwitch -> ControllerLayoutType.NINTENDO_SWITCH
+                isXbox && isBluetooth -> ControllerLayoutType.XBOX_BLUETOOTH
+                isXbox && !isBluetooth -> ControllerLayoutType.XBOX_WIRED_USB
+                isBluetooth -> ControllerLayoutType.GENERIC_BLUETOOTH
+                // GENERIC_BLUETOOTH already maps ABS_Z / ABS_RZ to the right stick and GAS / BRAKE to the triggers
+                hasRightStickOnZRz -> ControllerLayoutType.GENERIC_BLUETOOTH
+                hasAbsGasOrBrake -> ControllerLayoutType.GENERIC_USB
+                else -> ControllerLayoutType.XBOX_WIRED_USB
+            }
+
+            val stickRange: StickRangeMode = hardwareStickRange ?: when (layoutType) {
+                ControllerLayoutType.PLAYSTATION -> if (isBluetooth) StickRangeMode.UNSIGNED_8BIT else StickRangeMode.UNSIGNED_16BIT
+                ControllerLayoutType.PLAYSTATION_HID_DRIVER -> StickRangeMode.UNSIGNED_8BIT
+                ControllerLayoutType.NINTENDO_SWITCH -> StickRangeMode.SIGNED_16BIT
+                ControllerLayoutType.XBOX_BLUETOOTH -> StickRangeMode.UNSIGNED_16BIT
+                ControllerLayoutType.XBOX_WIRED_USB -> StickRangeMode.UNSIGNED_16BIT
+                ControllerLayoutType.GENERIC_BLUETOOTH -> StickRangeMode.UNSIGNED_16BIT
+                ControllerLayoutType.GENERIC_USB -> StickRangeMode.AUTO
+            }
+
+            return GamepadNodeInfo(
+                nodePath = eventNode,
+                name = devName,
+                layoutType = layoutType,
+                stickRange = stickRange,
+                isBluetooth = isBluetooth
+            )
+        }
     }
 
     private val activeProcesses = mutableListOf<Process>()
@@ -386,7 +524,7 @@ class LinuxInputReader(
                 // ABS_BRAKE / ABS_GAS: range 0..1023
                 rawValue > 200L
             }
-            ControllerLayoutType.PLAYSTATION -> {
+            ControllerLayoutType.PLAYSTATION, ControllerLayoutType.PLAYSTATION_HID_DRIVER -> {
                 // 0..255
                 rawValue > 60L
             }
@@ -434,6 +572,19 @@ class LinuxInputReader(
                     0x0005 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
                     0x0003, 0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
                     0x0004, 0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+                    0x0010 -> handleHatX(rawValue)
+                    0x0011 -> handleHatY(rawValue)
+                }
+            }
+
+            ControllerLayoutType.PLAYSTATION_HID_DRIVER -> {
+                when (code) {
+                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0003 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0004 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+                    0x0002 -> handleTriggerL2(rawValue, nodeInfo.layoutType)
+                    0x0005 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
                     0x0010 -> handleHatX(rawValue)
                     0x0011 -> handleHatY(rawValue)
                 }
@@ -618,133 +769,6 @@ class LinuxInputReader(
             // Silently fallback
         }
         return nodes
-    }
-
-    private fun parseGamepadNodeInfo(block: String): GamepadNodeInfo? {
-        val isVirtualOrInternal = block.contains("uinput", ignoreCase = true) ||
-                                  block.contains("xiaomi", ignoreCase = true) ||
-                                  block.contains("touchscreen", ignoreCase = true) ||
-                                  block.contains("touch_dev", ignoreCase = true) ||
-                                  block.contains("sensor", ignoreCase = true) ||
-                                  block.contains("goodix", ignoreCase = true) ||
-                                  block.contains("fts_ts", ignoreCase = true) ||
-                                  block.contains("gpio-keys", ignoreCase = true) ||
-                                  block.contains("gpio-keypad", ignoreCase = true) ||
-                                  block.contains("keypad", ignoreCase = true) ||
-                                  block.contains("kpd", ignoreCase = true) ||
-                                  block.contains("pmic", ignoreCase = true) ||
-                                  block.contains("snd-card", ignoreCase = true) ||
-                                  block.contains("jack", ignoreCase = true) ||
-                                  block.contains("headset", ignoreCase = true)
-
-        if (isVirtualOrInternal) return null
-
-        val isGamepad = block.contains("gamepad", ignoreCase = true) ||
-                        block.contains("controller", ignoreCase = true) ||
-                        block.contains("joystick", ignoreCase = true) ||
-                        block.contains("joypad", ignoreCase = true) ||
-                        block.contains("dualsense", ignoreCase = true) ||
-                        block.contains("dualshock", ignoreCase = true) ||
-                        block.contains("xbox", ignoreCase = true) ||
-                        block.contains("x-box", ignoreCase = true) ||
-                        block.contains("pro controller", ignoreCase = true) ||
-                        block.contains("switch", ignoreCase = true) ||
-                        block.contains("8bitdo", ignoreCase = true) ||
-                        block.contains("gamesir", ignoreCase = true) ||
-                        block.contains("ipega", ignoreCase = true) ||
-                        block.contains("scrcpy", ignoreCase = true) ||
-                        Regex("""\bpad\b""", RegexOption.IGNORE_CASE).containsMatchIn(block) ||
-                        block.contains("0130") || block.contains("BTN_GAMEPAD") || block.contains("BTN_SOUTH") ||
-                        block.contains("EV=1b") || block.contains("EV=13")
-
-        if (!isGamepad) return null
-
-        val eventNode = Regex("""add device \d+:\s*(/dev/input/event\d+)""").find(block)?.groupValues?.get(1)
-            ?: Regex("""Handlers=.*?(event\d+)""").find(block)?.let { "/dev/input/${it.groupValues[1]}" }
-            ?: Regex("""(/dev/input/event\d+)""").find(block)?.groupValues?.get(1)
-            ?: return null
-
-        val nameMatch = Regex("""name:\s*"([^"]+)"""", RegexOption.IGNORE_CASE).find(block)
-            ?: Regex("""N:\s*Name="([^"]+)"""", RegexOption.IGNORE_CASE).find(block)
-        val devName = nameMatch?.groupValues?.get(1)?.trim() ?: "Gamepad"
-
-        val absCodes = parseAbsCodes(block)
-        val hasAbsGasOrBrake = ABS_GAS in absCodes || ABS_BRAKE in absCodes ||
-                               block.contains("ABS_GAS", ignoreCase = true) ||
-                               block.contains("ABS_BRAKE", ignoreCase = true)
-        // Standard HID gamepads (e.g. "D3") put the right stick on ABS_Z / ABS_RZ and the triggers on
-        // ABS_GAS / ABS_BRAKE, with no ABS_RX / ABS_RY at all. `getevent -p` does not print the bus, so
-        // such a pad cannot be told apart from a wired Xbox-style pad (triggers on ABS_Z / ABS_RZ) by
-        // its connection; the axes it actually has are what decides it.
-        val hasRightStickOnZRz = hasAbsGasOrBrake &&
-                                 ABS_Z in absCodes && ABS_RZ in absCodes &&
-                                 ABS_RX !in absCodes && ABS_RY !in absCodes
-
-        val isBluetooth = block.contains("Bus=0005", ignoreCase = true) ||
-                          devName.contains("wireless", ignoreCase = true) ||
-                          devName.contains("bluetooth", ignoreCase = true) ||
-                          devName.contains("bt", ignoreCase = true)
-
-        val vendorMatch = Regex("""Vendor=([0-9a-fA-F]+)""").find(block)
-        val vendorHex = vendorMatch?.groupValues?.get(1)?.lowercase() ?: ""
-
-        val isPlayStation = vendorHex == "054c" ||
-                            devName.contains("sony", ignoreCase = true) ||
-                            devName.contains("dualsense", ignoreCase = true) ||
-                            devName.contains("dualshock", ignoreCase = true) ||
-                            devName.contains("playstation", ignoreCase = true) ||
-                            (devName.contains("wireless controller", ignoreCase = true) && !devName.contains("xbox", ignoreCase = true))
-
-        val isSwitch = vendorHex == "057e" ||
-                       devName.contains("nintendo", ignoreCase = true) ||
-                       devName.contains("joy-con", ignoreCase = true) ||
-                       devName.contains("switch", ignoreCase = true)
-
-        val isXbox = vendorHex == "045e" ||
-                     devName.contains("xbox", ignoreCase = true) ||
-                     devName.contains("microsoft", ignoreCase = true) ||
-                     devName.contains("x-box", ignoreCase = true)
-
-        // Inspecter les métadonnées min/max du pilote noyau (disponible via getevent -p)
-        val abs0Match = Regex("""(?:0000|ABS_X)\s*:\s*.*?\bmin\s*(-?\d+)\s*,\s*max\s*(-?\d+)""", RegexOption.IGNORE_CASE).find(block)
-        val hardwareStickRange: StickRangeMode? = if (abs0Match != null) {
-            val minVal = abs0Match.groupValues[1].toLongOrNull() ?: 0L
-            val maxVal = abs0Match.groupValues[2].toLongOrNull() ?: 65535L
-            when {
-                minVal < 0L -> StickRangeMode.SIGNED_16BIT
-                maxVal <= 255L -> StickRangeMode.UNSIGNED_8BIT
-                else -> StickRangeMode.UNSIGNED_16BIT
-            }
-        } else null
-
-        val layoutType: ControllerLayoutType = when {
-            isPlayStation -> ControllerLayoutType.PLAYSTATION
-            isSwitch -> ControllerLayoutType.NINTENDO_SWITCH
-            isXbox && isBluetooth -> ControllerLayoutType.XBOX_BLUETOOTH
-            isXbox && !isBluetooth -> ControllerLayoutType.XBOX_WIRED_USB
-            isBluetooth -> ControllerLayoutType.GENERIC_BLUETOOTH
-            // GENERIC_BLUETOOTH already maps ABS_Z / ABS_RZ to the right stick and GAS / BRAKE to the triggers
-            hasRightStickOnZRz -> ControllerLayoutType.GENERIC_BLUETOOTH
-            hasAbsGasOrBrake -> ControllerLayoutType.GENERIC_USB
-            else -> ControllerLayoutType.XBOX_WIRED_USB
-        }
-
-        val stickRange: StickRangeMode = hardwareStickRange ?: when (layoutType) {
-            ControllerLayoutType.PLAYSTATION -> if (isBluetooth) StickRangeMode.UNSIGNED_8BIT else StickRangeMode.UNSIGNED_16BIT
-            ControllerLayoutType.NINTENDO_SWITCH -> StickRangeMode.SIGNED_16BIT
-            ControllerLayoutType.XBOX_BLUETOOTH -> StickRangeMode.UNSIGNED_16BIT
-            ControllerLayoutType.XBOX_WIRED_USB -> StickRangeMode.UNSIGNED_16BIT
-            ControllerLayoutType.GENERIC_BLUETOOTH -> StickRangeMode.UNSIGNED_16BIT
-            ControllerLayoutType.GENERIC_USB -> StickRangeMode.AUTO
-        }
-
-        return GamepadNodeInfo(
-            nodePath = eventNode,
-            name = devName,
-            layoutType = layoutType,
-            stickRange = stickRange,
-            isBluetooth = isBluetooth
-        )
     }
 
     private fun isKernel64Bit(): Boolean {
