@@ -74,7 +74,6 @@ class OverlayService : LifecycleService() {
 
     private var editorView: HudEditorOverlayView? = null
     private var currentEditorBitmap: Bitmap? = null
-    private var inputInterceptorView: View? = null
     private var screenshotLoadJob: kotlinx.coroutines.Job? = null
 
     override fun onCreate() {
@@ -111,14 +110,6 @@ class OverlayService : LifecycleService() {
                     // Exécuté hors du thread UI (Dispatchers.IO) pour éviter tout jank/ANR lié aux IPC Binder synchrones.
                     withContext(Dispatchers.IO) {
                         engine.onShizukuReconnected()
-                    }
-                    // Détacher l'intercepteur si Shizuku vient d'être autorisé après le démarrage
-                    // (cas : service lancé avant autorisation, puis l'utilisateur accepte dans Shizuku).
-                    // Sans ce détachement, la vue 1×1 reste attachée indéfiniment.
-                    val interceptor = inputInterceptorView
-                    if (interceptor != null) {
-                        safeRemoveView(interceptor)
-                        inputInterceptorView = null
                     }
                 } else if (_isServiceRunning.value && status == ShizukuStatus.DEAD) {
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -212,9 +203,6 @@ class OverlayService : LifecycleService() {
         }
 
         showEdgeHandle()
-        if (!ShizukuManager.isAuthorized()) {
-            attachInputInterceptor()
-        }
 
         return START_STICKY
     }
@@ -365,54 +353,6 @@ class OverlayService : LifecycleService() {
         windowManager.addView(edgeHandleView, edgeHandleParams)
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    private fun attachInputInterceptor() {
-        if (inputInterceptorView != null) return
-
-        val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
-
-        // Invisible 1x1 fallback interceptor for non-Shizuku mode.
-        // IMPORTANT: FLAG_NOT_FOCUSABLE must NOT be set here, because the Android WindowManager
-        // only delivers Gamepad KeyEvents and GenericMotionEvents to the focused window.
-        // We include FLAG_ALT_FOCUSABLE_IM so this window does not steal IME focus or dismiss
-        // the soft keyboard in the underlying game.
-        val params = WindowManager.LayoutParams(
-            1, 1,
-            layoutFlag,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 0
-            y = 0
-        }
-
-        val frame = object : FrameLayout(this) {
-            override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-                if (engine.handleKeyEvent(event)) return true
-                return super.dispatchKeyEvent(event)
-            }
-
-            override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-                if (engine.handleMotionEvent(event)) return true
-                return super.dispatchGenericMotionEvent(event)
-            }
-        }
-        frame.isFocusable = true
-        frame.isFocusableInTouchMode = true
-
-        inputInterceptorView = frame
-        windowManager.addView(frame, params)
-        frame.requestFocus()
-    }
-
     private fun toggleHudEditor() {
         if (editorView != null) {
             closeHudEditor()
@@ -542,7 +482,6 @@ class OverlayService : LifecycleService() {
         }
         currentEditorBitmap = null
         edgeHandleView?.visibility = View.VISIBLE
-        inputInterceptorView?.requestFocus()
     }
 
     fun cycleProfile(forward: Boolean = true) {
@@ -614,8 +553,6 @@ class OverlayService : LifecycleService() {
         edgeHandleView = null
         safeRemoveView(editorView)
         editorView = null
-        safeRemoveView(inputInterceptorView)
-        inputInterceptorView = null
 
         super.onDestroy()
     }

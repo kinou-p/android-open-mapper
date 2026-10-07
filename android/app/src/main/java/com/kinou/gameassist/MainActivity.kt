@@ -307,6 +307,13 @@ class MainActivity : AppCompatActivity() {
                                         OverlayService.updateLiveProfile(copy)
                                     }
                                 },
+                                onCreateProfile = { name, pkg ->
+                                    lifecycleScope.launch {
+                                        val created = repository.createCustomProfileAsync(name, pkg)
+                                        selectedProfile = created
+                                        OverlayService.updateLiveProfile(created)
+                                    }
+                                },
                                 onImportProfile = { json, onResult ->
                                     lifecycleScope.launch {
                                         val imp = repository.importProfileFromJsonAsync(json)

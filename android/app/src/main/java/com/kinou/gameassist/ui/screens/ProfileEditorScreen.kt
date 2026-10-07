@@ -50,6 +50,7 @@ fun ProfileEditorScreen(
     onSaveProfile: (GameProfile) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onDuplicateProfile: (GameProfile) -> Unit,
+    onCreateProfile: ((name: String, targetPackage: String) -> Unit)? = null,
     onImportProfile: (String, (Boolean) -> Unit) -> Unit,
     onOpenVisualEditor: (GameProfile) -> Unit,
     liveRx: Float = 0f,
@@ -66,6 +67,7 @@ fun ProfileEditorScreen(
     var editingProfileId by remember(currentProfile?.id) { mutableStateOf(currentProfile?.id) }
     var profileToDelete by remember { mutableStateOf<GameProfile?>(null) }
     var showImportDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by remember { mutableStateOf(false) }
     var importJsonText by remember { mutableStateOf("") }
 
     Scaffold(
@@ -78,6 +80,13 @@ fun ProfileEditorScreen(
                     }
                 },
                 actions = {
+                    if (onCreateProfile != null) {
+                        TextButton(onClick = { showCreateDialog = true }) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = NeonGreen)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.btn_new_profile), color = NeonGreen, fontWeight = FontWeight.Bold)
+                        }
+                    }
                     TextButton(onClick = {
                         importJsonText = ""
                         showImportDialog = true
@@ -234,6 +243,18 @@ fun ProfileEditorScreen(
                 containerColor = DarkCard
             )
         }
+
+        // Create Profile Dialog
+        if (showCreateDialog) {
+            CreateProfileDialog(
+                onDismiss = { showCreateDialog = false },
+                onConfirm = { name, pkg ->
+                    showCreateDialog = false
+                    onCreateProfile?.invoke(name, pkg)
+                    Toast.makeText(context, context.getString(R.string.profile_created_toast), Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
     }
 }
 
@@ -293,6 +314,8 @@ fun ProfileCard(
     var profileName by remember(profile.id, profile.name) { mutableStateOf(profile.name) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var renameInputText by remember(profile.id, profile.name) { mutableStateOf(profile.name) }
+    var showPackageDialog by remember { mutableStateOf(false) }
+    var profilePackage by remember(profile.id, profile.packageName) { mutableStateOf(profile.packageName) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -345,7 +368,19 @@ fun ProfileCard(
                             )
                         }
                     }
-                    Text(profile.packageName, color = TextSecondary, fontSize = 12.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable { showPackageDialog = true }
+                    ) {
+                        Text(profilePackage, color = TextSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = stringResource(R.string.select_game_app_title),
+                            tint = TextSecondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                     Text(stringResource(R.string.buttons_count_configured, profile.buttons.size), color = NeonCyan, fontSize = 12.sp)
                 }
 
@@ -1350,6 +1385,23 @@ fun ProfileCard(
             containerColor = DarkCard
         )
     }
+
+    // ==========================================
+    // DIALOG: CHOISIR LE PACKAGE DU JEU
+    // ==========================================
+    if (showPackageDialog) {
+        SelectGamePackageDialog(
+            currentPackage = profilePackage,
+            onDismiss = { showPackageDialog = false },
+            onConfirm = { newPkg ->
+                profile.packageName = newPkg
+                profilePackage = newPkg
+                onSave()
+                Toast.makeText(context, context.getString(R.string.package_updated_toast), Toast.LENGTH_SHORT).show()
+                showPackageDialog = false
+            }
+        )
+    }
 }
 
 @Composable
@@ -1639,4 +1691,377 @@ fun SliderSetting(
             )
         )
     }
+}
+
+data class InstalledAppItem(
+    val label: String,
+    val packageName: String
+)
+
+fun getInstalledLauncherApps(context: Context): List<InstalledAppItem> {
+    val pm = context.packageManager
+    val intent = Intent(Intent.ACTION_MAIN, null).apply {
+        addCategory(Intent.CATEGORY_LAUNCHER)
+    }
+    return try {
+        val resolveInfos = pm.queryIntentActivities(intent, 0)
+        resolveInfos.mapNotNull { ri ->
+            val pkg = ri.activityInfo?.packageName ?: return@mapNotNull null
+            if (pkg == context.packageName) return@mapNotNull null // Don't list OpenMapper itself
+            val label = ri.loadLabel(pm)?.toString() ?: pkg
+            InstalledAppItem(label, pkg)
+        }.distinctBy { it.packageName }.sortedBy { it.label.lowercase() }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+@Composable
+fun SelectGamePackageDialog(
+    currentPackage: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val installedApps = remember(context) { getInstalledLauncherApps(context) }
+    var searchQuery by remember { mutableStateOf("") }
+    var customPackageText by remember { mutableStateOf(currentPackage) }
+
+    val filteredApps = remember(searchQuery, installedApps) {
+        if (searchQuery.isBlank()) installedApps
+        else installedApps.filter {
+            it.label.contains(searchQuery, ignoreCase = true) ||
+            it.packageName.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.SportsEsports, contentDescription = null, tint = NeonCyan)
+                Text(
+                    stringResource(R.string.select_game_app_title),
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    fontSize = 16.sp
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    stringResource(R.string.select_game_app_desc),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+
+                // Search field
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(stringResource(R.string.search_installed_apps_placeholder), fontSize = 12.sp, color = TextSecondary) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonCyan,
+                        unfocusedBorderColor = DarkCardBorder
+                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = TextPrimary)
+                )
+
+                // Installed apps scrollable list
+                Surface(
+                    color = DarkBackground,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                ) {
+                    if (filteredApps.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                stringResource(R.string.no_installed_apps_found),
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+                            items(filteredApps, key = { it.packageName }) { app ->
+                                val isSelected = app.packageName == customPackageText
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) NeonCyan.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable { customPackageText = app.packageName }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            app.label,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) NeonCyan else TextPrimary,
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            app.packageName,
+                                            color = TextSecondary,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = NeonCyan,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Custom or selected package field
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        stringResource(R.string.custom_package_label),
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
+                    OutlinedTextField(
+                        value = customPackageText,
+                        onValueChange = { customPackageText = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = DarkCardBorder
+                        ),
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val pkg = customPackageText.trim()
+                    if (pkg.isNotBlank()) {
+                        onConfirm(pkg)
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+            ) {
+                Text(stringResource(R.string.btn_save), color = DarkBackground, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.btn_cancel), color = TextSecondary)
+            }
+        },
+        containerColor = DarkCard
+    )
+}
+
+@Composable
+fun CreateProfileDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, targetPackage: String) -> Unit
+) {
+    val context = LocalContext.current
+    val installedApps = remember(context) { getInstalledLauncherApps(context) }
+    var profileNameText by remember { mutableStateOf("") }
+    var selectedPackageText by remember { mutableStateOf("com.game.app") }
+    var searchQuery by remember { mutableStateOf("") }
+
+    val filteredApps = remember(searchQuery, installedApps) {
+        if (searchQuery.isBlank()) installedApps
+        else installedApps.filter {
+            it.label.contains(searchQuery, ignoreCase = true) ||
+            it.packageName.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.AddCircle, contentDescription = null, tint = NeonGreen)
+                Text(
+                    stringResource(R.string.create_profile_title),
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    fontSize = 16.sp
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Profile Name
+                Text(
+                    stringResource(R.string.rename_profile_label),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+                OutlinedTextField(
+                    value = profileNameText,
+                    onValueChange = { profileNameText = it },
+                    placeholder = { Text("Mon Jeu", fontSize = 13.sp, color = TextSecondary) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonGreen,
+                        unfocusedBorderColor = DarkCardBorder
+                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = TextPrimary)
+                )
+
+                // Choose Target Game
+                Text(
+                    stringResource(R.string.select_game_app_title),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+
+                // Search field
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(stringResource(R.string.search_installed_apps_placeholder), fontSize = 11.sp, color = TextSecondary) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(16.dp)) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonGreen,
+                        unfocusedBorderColor = DarkCardBorder
+                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary)
+                )
+
+                // Installed apps list
+                Surface(
+                    color = DarkBackground,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                ) {
+                    if (filteredApps.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text(
+                                stringResource(R.string.no_installed_apps_found),
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+                            items(filteredApps, key = { it.packageName }) { app ->
+                                val isSelected = app.packageName == selectedPackageText
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) NeonGreen.copy(alpha = 0.15f) else Color.Transparent)
+                                        .clickable {
+                                            selectedPackageText = app.packageName
+                                            if (profileNameText.isBlank()) {
+                                                profileNameText = app.label
+                                            }
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            app.label,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) NeonGreen else TextPrimary,
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            app.packageName,
+                                            color = TextSecondary,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = NeonGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Custom package name input
+                OutlinedTextField(
+                    value = selectedPackageText,
+                    onValueChange = { selectedPackageText = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NeonGreen,
+                        unfocusedBorderColor = DarkCardBorder
+                    ),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalName = if (profileNameText.isNotBlank()) profileNameText.trim() else "Nouveau Profil"
+                    val finalPkg = if (selectedPackageText.isNotBlank()) selectedPackageText.trim() else "com.game.app"
+                    onConfirm(finalName, finalPkg)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
+            ) {
+                Text(stringResource(R.string.btn_add), color = DarkBackground, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.btn_cancel), color = TextSecondary)
+            }
+        },
+        containerColor = DarkCard
+    )
 }

@@ -71,6 +71,15 @@
     <string name="rename_profile_title">Renomear perfil</string>
     <string name="rename_profile_label">Nome do perfil</string>
     <string name="profile_renamed_toast">Perfil renomeado</string>
+    <string name="btn_new_profile">Novo perfil</string>
+    <string name="create_profile_title">Criar novo perfil</string>
+    <string name="select_game_app_title">Jogo / App alvo</string>
+    <string name="select_game_app_desc">Escolha o jogo instalado para vincular a este perfil:</string>
+    <string name="custom_package_label">Nome do pacote personalizado</string>
+    <string name="search_installed_apps_placeholder">Buscar jogos instalados...</string>
+    <string name="no_installed_apps_found">Nenhum aplicativo encontrado</string>
+    <string name="package_updated_toast">Pacote do jogo atualizado</string>
+    <string name="profile_created_toast">Perfil criado com sucesso!</string>
     <string name="btn_cancel">Cancelar</string>
     <string name="btn_save">Salvar</string>
     <string name="btn_add">Adicionar</string>

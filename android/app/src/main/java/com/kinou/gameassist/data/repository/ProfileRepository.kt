@@ -436,4 +436,23 @@ class ProfileRepository private constructor(context: Context) {
         )
         return p
     }
+
+    suspend fun createCustomProfileAsync(name: String, targetPackage: String): GameProfile = withContext(Dispatchers.IO) {
+        createCustomProfile(name, targetPackage)
+    }
+
+    fun createCustomProfile(name: String, targetPackage: String): GameProfile {
+        val base = createDefaultCodmProfile()
+        val newId = "profile_${UUID.randomUUID().toString().take(8)}"
+        val newProf = base.deepCopy().copy(
+            id = newId,
+            name = if (name.isNotBlank()) name.trim() else "Nouveau profil",
+            packageName = if (targetPackage.isNotBlank()) targetPackage.trim() else "com.game.app",
+            description = "Profil personnalisé",
+            customScreenshotPath = null,
+            buttons = base.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
+        )
+        saveProfile(newProf)
+        return newProf
+    }
 }
