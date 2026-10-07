@@ -38,6 +38,8 @@ import com.kinou.gameassist.data.model.ResponseCurve
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.engine.HapticManager
 import com.kinou.gameassist.ui.theme.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import kotlin.math.pow
 
@@ -1716,6 +1718,22 @@ fun getInstalledLauncherApps(context: Context): List<InstalledAppItem> {
     }
 }
 
+/**
+ * Charge la liste des applications lanceur hors du thread UI.
+ *
+ * `PackageManager.queryIntentActivities()` et `ResolveInfo.loadLabel()` sont des requêtes
+ * potentiellement lentes (dizaines à plusieurs centaines de ms sur un appareil chargé). Les
+ * exécuter synchroniquement dans `remember {}` bloque le thread principal et peut déclencher
+ * un ANR à l'ouverture du sélecteur de jeu.
+ */
+@Composable
+private fun rememberInstalledLauncherApps(context: Context): List<InstalledAppItem> {
+    val apps by produceState(initialValue = emptyList<InstalledAppItem>(), context) {
+        value = withContext(Dispatchers.IO) { getInstalledLauncherApps(context) }
+    }
+    return apps
+}
+
 @Composable
 fun SelectGamePackageDialog(
     currentPackage: String,
@@ -1723,7 +1741,7 @@ fun SelectGamePackageDialog(
     onConfirm: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val installedApps = remember(context) { getInstalledLauncherApps(context) }
+    val installedApps = rememberInstalledLauncherApps(context)
     var searchQuery by remember { mutableStateOf("") }
     var customPackageText by remember { mutableStateOf(currentPackage) }
 
@@ -1892,7 +1910,7 @@ fun CreateProfileDialog(
     onConfirm: (name: String, targetPackage: String) -> Unit
 ) {
     val context = LocalContext.current
-    val installedApps = remember(context) { getInstalledLauncherApps(context) }
+    val installedApps = rememberInstalledLauncherApps(context)
     var profileNameText by remember { mutableStateOf("") }
     var selectedPackageText by remember { mutableStateOf("com.game.app") }
     var searchQuery by remember { mutableStateOf("") }

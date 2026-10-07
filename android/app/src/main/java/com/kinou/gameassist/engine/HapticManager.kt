@@ -3,11 +3,10 @@ package com.kinou.gameassist.engine
 import android.content.Context
 import android.hardware.input.InputManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.InputDevice
+import com.kinou.gameassist.util.InputDeviceCallbacks
 import kotlinx.coroutines.*
 
 /**
@@ -47,9 +46,11 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
     fun registerListener() {
         try {
             inputManager?.unregisterInputDeviceListener(this)
-            inputManager?.registerInputDeviceListener(this, Handler(Looper.getMainLooper()))
+            inputManager?.registerInputDeviceListener(this, InputDeviceCallbacks.handler)
         } catch (_: Exception) {}
-        refreshGamepadVibrators()
+        // InputDevice/VibratorManager enumeration is Binder-backed and must never run on the
+        // UI thread (this method is called from GamepadEngine.start() on the main thread).
+        InputDeviceCallbacks.handler.post { refreshGamepadVibrators() }
     }
 
     /**

@@ -27,6 +27,7 @@ import com.kinou.gameassist.injector.ShizukuStatus
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import com.kinou.gameassist.ui.overlay.EdgeHandleOverlayView
 import com.kinou.gameassist.ui.overlay.HudEditorOverlayView
+import com.kinou.gameassist.util.InputDeviceCallbacks
 
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
@@ -157,16 +158,20 @@ class OverlayService : LifecycleService() {
                         it.deviceClass == 0x0508    // Joystick
                     } ?: false
 
-                    if (isGamepadOrPeripheral || !engine.checkConnectedGamepads()) {
-                        engine.resetAllInputs()
-                        hapticManager.stopAllVibrations()
+                    InputDeviceCallbacks.handler.post {
+                        if (isGamepadOrPeripheral || !engine.checkConnectedGamepads()) {
+                            engine.resetAllInputs()
+                            hapticManager.stopAllVibrations()
+                        }
                     }
                 }
                 android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED -> {
                     val state = intent.getIntExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, android.bluetooth.BluetoothAdapter.ERROR)
                     if (state == android.bluetooth.BluetoothAdapter.STATE_OFF || state == android.bluetooth.BluetoothAdapter.STATE_TURNING_OFF) {
-                        engine.resetAllInputs()
-                        hapticManager.stopAllVibrations()
+                        InputDeviceCallbacks.handler.post {
+                            engine.resetAllInputs()
+                            hapticManager.stopAllVibrations()
+                        }
                     }
                 }
             }

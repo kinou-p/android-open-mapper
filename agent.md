@@ -632,6 +632,10 @@ En cas de dysfonctionnement signalé lors de modifications, consulter cet arbre 
     - Ne jamais allouer d'itérateurs (`ConcurrentLinkedQueue$Itr`) ou de tableaux d'arguments varargs (`new Object[]`) dans la boucle 120-240 Hz. Réutiliser les tableaux `cachedArgs` préalloués et les structures `PendingTapSlot` fixes pour éviter les pauses GC et les micro-stutters.
 12. **Bascule asynchrone des vibrations haptiques de tir** :
     - Les appels `vibrate()` vers le service système Android ne doivent jamais être synchrones sur le thread prioritaire de l'émulation (`engineThread`). Toujours les déporter sur `hapticScope` pour ne pas bloquer les calculs de caméra et d'injection tactile en cas de charge du `system_server`.
+13. **Callbacks `InputDeviceListener` hors du thread UI (ANR)** :
+    - Les listeners `InputManager.registerInputDeviceListener` de `GamepadEngine`, `HapticManager` et `GamepadDetector` DOIVENT être enregistrés sur le handler d'arrière-plan partagé `InputDeviceCallbacks.handler`, jamais sur `Handler(Looper.getMainLooper())`.
+    - Un branchement/débranchement de manette déclenche `LinuxInputReader.restart()` (destruction puis recréation des processus `cat /dev/input/event*` Shizuku avec `Process.waitFor`, relance de `getevent -p`), `injector.resetAllPointers()` (10 IPC Binder via le service Shizuku) et `HapticManager.refreshGamepadVibrators()` (énumération `InputDevice`/`VibratorManager`, Binder). Exécutés sur le thread principal, ces appels dépassent le délai d'ANR d'input dispatch (5 s) et One UI affiche « OpenMapper ne répond pas » **alors que le moteur (thread dédié) continue de fonctionner** — symptôme trompeur « l'app répond mais l'ANR s'affiche ».
+    - De même, `PackageManager.queryIntentActivities()`/`loadLabel()` (sélecteur de jeu) ne doivent jamais tourner dans `remember {}` sur le thread UI : utiliser `produceState` + `Dispatchers.IO`.
 
 ---
 

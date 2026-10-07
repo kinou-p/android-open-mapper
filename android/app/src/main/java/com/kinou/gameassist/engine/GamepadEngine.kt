@@ -3,14 +3,13 @@ package com.kinou.gameassist.engine
 import android.content.Context
 import android.hardware.input.InputManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import com.kinou.gameassist.data.model.GamepadDetector
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.injector.ShizukuTouchInjector
+import com.kinou.gameassist.util.InputDeviceCallbacks
 import kotlinx.coroutines.*
 
 class GamepadEngine(
@@ -227,7 +226,7 @@ class GamepadEngine(
             checkConnectedGamepads()
 
             try {
-                inputManager?.registerInputDeviceListener(deviceHotplugListener, Handler(Looper.getMainLooper()))
+                inputManager?.registerInputDeviceListener(deviceHotplugListener, InputDeviceCallbacks.handler)
             } catch (_: Exception) {}
 
             hapticManager?.registerListener()

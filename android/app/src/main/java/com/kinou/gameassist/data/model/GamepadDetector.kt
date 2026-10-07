@@ -4,11 +4,10 @@ import android.content.Context
 import android.hardware.input.InputManager
 import android.hardware.usb.UsbManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import com.kinou.gameassist.util.InputDeviceCallbacks
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -43,7 +42,7 @@ object GamepadDetector {
             }
         }
 
-        inputManager?.registerInputDeviceListener(listener, Handler(Looper.getMainLooper()))
+        inputManager?.registerInputDeviceListener(listener, InputDeviceCallbacks.handler)
         // Émettre l'état initial immédiatement
         trySend(getConnectedGamepads(appContext))
 

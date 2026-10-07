@@ -183,6 +183,6 @@ jobs:
           files: dist/*.apk
           body_path: release_body.md
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           name: "OpenMapper Release ${{ github.ref_name }}"
