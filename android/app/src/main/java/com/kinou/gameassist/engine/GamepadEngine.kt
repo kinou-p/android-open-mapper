@@ -115,6 +115,8 @@ class GamepadEngine(
     private val pressedRawButtons = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     // Combos actifs : bouton déclencheur -> clé combo ("BUTTON_R1+BUTTON_X")
     private val activeCombos = java.util.concurrent.ConcurrentHashMap<String, String>()
+    // Rend atomiques l'appui et le relâchement d'un combo entre threads de lecture
+    private val comboLock = Any()
     @Volatile private var engineThread: Thread? = null
     private val lifecycleLock = Any()
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
@@ -157,6 +159,18 @@ class GamepadEngine(
             selectUsedInCombo = false
         }
 
+        // Combo (ex. R1 maintenu + X) : remplace l'action simple du bouton déclencheur.
+        // Le modificateur garde sa propre action, déclenchée normalement à son appui.
+        // Vérifié avant le raccourci SELECT+D-pad/L1/R1 : un combo assigné par l'utilisateur prime.
+        synchronized(comboLock) {
+            val combo = buttonProcessor.findCombo(normalizedName, pressedRawButtons)
+            if (combo != null) {
+                buttonProcessor.onButtonDown(combo)
+                activeCombos[normalizedName] = combo
+                return
+            }
+        }
+
         if (isSelectHeld && !isModifier) {
             when (normalizedName) {
                 "DPAD_UP", "DPAD_RIGHT", "BUTTON_R1" -> {
@@ -180,15 +194,6 @@ class GamepadEngine(
             }
         }
 
-        // Combo (ex. R1 maintenu + X) : remplace l'action simple du bouton déclencheur.
-        // Le modificateur garde sa propre action, déclenchée normalement à son appui.
-        val combo = buttonProcessor.findCombo(normalizedName, pressedRawButtons)
-        if (combo != null) {
-            activeCombos[normalizedName] = combo
-            buttonProcessor.onButtonDown(combo)
-            return
-        }
-
         buttonProcessor.onButtonDown(normalizedName)
     }
 
@@ -196,13 +201,15 @@ class GamepadEngine(
         val normalizedName = btnName.trim().uppercase()
         pressedRawButtons.remove(normalizedName)
 
-        // Relâchement du déclencheur d'un combo
-        activeCombos.remove(normalizedName)?.let {
-            buttonProcessor.onButtonUp(it)
-            return
+        synchronized(comboLock) {
+            // Relâchement du déclencheur d'un combo
+            activeCombos.remove(normalizedName)?.let {
+                buttonProcessor.onButtonUp(it)
+                return
+            }
+            // Relâchement du modificateur : termine les combos qu'il a ouverts
+            if (activeCombos.isNotEmpty()) releaseCombosOf(normalizedName)
         }
-        // Relâchement du modificateur : termine les combos qu'il a ouverts
-        if (activeCombos.isNotEmpty()) releaseCombosOf(normalizedName)
 
         val isModifier = (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START")
         if (isModifier) {
