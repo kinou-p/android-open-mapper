@@ -454,6 +454,7 @@ class OverlayService : LifecycleService() {
             windowManager.addView(newEditor, params)
             editorView = newEditor
             newEditor.requestFocus()
+            engine.setInjectionSuspended(true)
         } catch (e: Exception) {
             // En cas d'échec d'ajout de la fenêtre, restaurer la poignée pour ne pas laisser l'UI verrouillée
             edgeHandleView?.visibility = View.VISIBLE
@@ -473,6 +474,7 @@ class OverlayService : LifecycleService() {
     }
 
     private fun closeHudEditor() {
+        engine.setInjectionSuspended(false)
         screenshotLoadJob?.cancel()
         screenshotLoadJob = null
         editorView?.let {

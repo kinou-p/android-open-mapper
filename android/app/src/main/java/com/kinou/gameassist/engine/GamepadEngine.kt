@@ -117,6 +117,12 @@ class GamepadEngine(
     private val activeCombos = java.util.concurrent.ConcurrentHashMap<String, String>()
     // Rend atomiques l'appui et le relâchement d'un combo entre threads de lecture
     private val comboLock = Any()
+
+    // Éditeur HUD ouvert : aucune injection tactile, sinon les taps du moteur atterrissent sur
+    // l'éditeur (désélection, apprentissage de touche annulé) au lieu du jeu.
+    @Volatile var isInjectionSuspended = false
+        private set
+    private var suspendPrepared = false // thread moteur uniquement
     @Volatile private var engineThread: Thread? = null
     private val lifecycleLock = Any()
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
@@ -152,6 +158,7 @@ class GamepadEngine(
             // Already down - ignore duplicate dispatch
             return
         }
+        if (isInjectionSuspended) return
 
         val isModifier = (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START")
         if (isModifier) {
@@ -200,6 +207,7 @@ class GamepadEngine(
     fun onRawButtonUp(btnName: String) {
         val normalizedName = btnName.trim().uppercase()
         pressedRawButtons.remove(normalizedName)
+        if (isInjectionSuspended) return
 
         synchronized(comboLock) {
             // Relâchement du déclencheur d'un combo
@@ -220,6 +228,18 @@ class GamepadEngine(
             }
         }
         buttonProcessor.onButtonUp(normalizedName)
+    }
+
+    /** Suspend toute injection tactile (éditeur HUD ouvert) ; le joystick est relâché par le thread moteur. */
+    fun setInjectionSuspended(suspended: Boolean) {
+        synchronized(comboLock) {
+            if (isInjectionSuspended == suspended) return
+            if (suspended) {
+                activeCombos.clear()
+                buttonProcessor.releaseAll()
+            }
+            isInjectionSuspended = suspended
+        }
     }
 
     private fun releaseCombosOf(modifier: String) {
@@ -291,9 +311,18 @@ class GamepadEngine(
                         val camCfg = cameraProcessor.config
                         val isFiring = rtPressed || buttonProcessor.isFireActive()
                         val isAds = ltPressed || buttonProcessor.isAdsActive()
-                        val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
-                        movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
-                        cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
+                        if (isInjectionSuspended) {
+                            if (!suspendPrepared) {
+                                movementProcessor.release()
+                                cameraProcessor.release()
+                                suspendPrepared = true
+                            }
+                        } else {
+                            suspendPrepared = false
+                            val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
+                            movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
+                            cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
+                        }
 
                         val nowNanos = System.nanoTime()
                         buttonProcessor.processPendingTaps(nowNanos)
