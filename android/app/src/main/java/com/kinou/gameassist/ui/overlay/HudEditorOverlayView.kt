@@ -70,6 +70,8 @@ class HudEditorOverlayView(
 
     // Gamepad Live State
     private val activeGamepadKeys = mutableSetOf<String>()
+    // Touches appuyées pendant l'apprentissage (combo : "BUTTON_R1+BUTTON_X")
+    private val learnChord = mutableListOf<String>()
     private var liveLsX = 0f
     private var liveLsY = 0f
     private var liveRsX = 0f
@@ -458,7 +460,8 @@ class HudEditorOverlayView(
             val br = b.radius * h
 
             val isSelected = b == selectedButton
-            val isLivePressed = b.gamepadButton in activeGamepadKeys
+            val isLivePressed = if ('+' in b.gamepadButton) b.gamepadButton.split('+').all { it in activeGamepadKeys }
+                                else b.gamepadButton in activeGamepadKeys
 
             val paint = when {
                 isLivePressed -> btnLivePressedPaint
@@ -1445,15 +1448,23 @@ class HudEditorOverlayView(
         else -> null
     }
 
+    private fun finishLearning() {
+        val keys = learnChord.toList()
+        learnChord.clear()
+        if (keys.isEmpty()) return
+        selectedButton?.gamepadButton = if (keys.size >= 2) "${keys.first()}+${keys.last()}" else keys.first()
+        isLearning = false
+        performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        invalidate()
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         val keyName = keyCodeToGamepadKey(keyCode)
         if (keyName != null) {
             if (isLearning && selectedButton != null) {
-                selectedButton?.gamepadButton = keyName
-                isLearning = false
-                performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-                invalidate()
-                return true
+                // Assigné au relâchement : maintenir R1 puis appuyer X donne "BUTTON_R1+BUTTON_X"
+                learnChord.retainAll(activeGamepadKeys)
+                if (keyName !in learnChord) learnChord.add(keyName)
             }
             activeGamepadKeys.add(keyName)
             invalidate()
@@ -1466,6 +1477,11 @@ class HudEditorOverlayView(
         val keyName = keyCodeToGamepadKey(keyCode)
         if (keyName != null) {
             activeGamepadKeys.remove(keyName)
+            if (isLearning && selectedButton != null && learnChord.isNotEmpty()) {
+                finishLearning()
+            } else if (!isLearning) {
+                learnChord.clear()
+            }
             invalidate()
             return true
         }
@@ -1489,10 +1505,10 @@ class HudEditorOverlayView(
         }
 
         if (isLearning && selectedButton != null && boundKey != null) {
-            selectedButton?.gamepadButton = boundKey
-            isLearning = false
-            performHapticFeedback(HapticFeedbackConstants.CONFIRM)
-            invalidate()
+            // D-pad / gâchettes : assignés à l'appui, combinés avec un bouton déjà maintenu
+            learnChord.retainAll(activeGamepadKeys)
+            if (boundKey !in learnChord) learnChord.add(boundKey)
+            finishLearning()
             return true
         }
 
