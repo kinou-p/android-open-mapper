@@ -25,6 +25,7 @@ import com.kinou.gameassist.engine.GamepadEngine
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.injector.ShizukuStatus
 import com.kinou.gameassist.injector.ShizukuTouchInjector
+import com.kinou.gameassist.ui.overlay.CursorOverlayView
 import com.kinou.gameassist.ui.overlay.EdgeHandleOverlayView
 import com.kinou.gameassist.ui.overlay.HudEditorOverlayView
 import com.kinou.gameassist.util.InputDeviceCallbacks
@@ -74,6 +75,16 @@ class OverlayService : LifecycleService() {
     private var edgeHandleParams: WindowManager.LayoutParams? = null
 
     private var editorView: HudEditorOverlayView? = null
+
+    // Curseur virtuel (L3+R3)
+    private var cursorView: CursorOverlayView? = null
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val cursorRedrawPending = java.util.concurrent.atomic.AtomicBoolean(false)
+    // Runnable unique réutilisé : aucune allocation par frame depuis le thread moteur
+    private val cursorRedraw = Runnable {
+        cursorRedrawPending.set(false)
+        cursorView?.update(engine.cursorX, engine.cursorY, engine.isCursorTouching)
+    }
     private var currentEditorBitmap: Bitmap? = null
     private var screenshotLoadJob: kotlinx.coroutines.Job? = null
 
@@ -90,6 +101,24 @@ class OverlayService : LifecycleService() {
         }
         engine.onTacticalToggle = { message ->
             showHotSwitchToast(message)
+        }
+        engine.onCursorModeChanged = { on ->
+            mainHandler.post { if (on) showCursorOverlay() else hideCursorOverlay() }
+        }
+        engine.onCursorMoved = {
+            // Appelé jusqu'à 240 fois/s depuis le thread moteur : un seul redraw en attente à la fois
+            if (cursorRedrawPending.compareAndSet(false, true)) {
+                mainHandler.post(cursorRedraw)
+            }
+        }
+        engine.onCursorSpeedChanged = { speed ->
+            mainHandler.post {
+                cursorView?.showLabel(formatCursorSpeed(speed))
+                currentProfile?.let { profile ->
+                    profile.settings.cursorSpeed = speed
+                    lifecycleScope.launch { repository.saveProfileAsync(profile) }
+                }
+            }
         }
 
         lifecycleScope.launch {
@@ -472,6 +501,48 @@ class OverlayService : LifecycleService() {
         }
     }
 
+    private fun formatCursorSpeed(speed: Float) = getString(R.string.cursor_speed, "%.2f".format(speed))
+
+    private fun showCursorOverlay() {
+        if (cursorView != null) return
+        val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            layoutFlag,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            // Android 12+ bloque les touches qui traversent une surcouche non touchable
+            // d'opacité > 0.8 : à 0.8 les clics injectés atteignent bien le jeu.
+            alpha = 0.8f
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+            gravity = Gravity.TOP or Gravity.START
+        }
+        val view = CursorOverlayView(this)
+        try {
+            windowManager.addView(view, params)
+            cursorView = view
+            view.update(engine.cursorX, engine.cursorY, engine.isCursorTouching)
+            view.showLabel(getString(R.string.cursor_mode_on, "%.2f".format(engine.cursorSpeed)), 2500L)
+        } catch (_: Exception) {}
+    }
+
+    private fun hideCursorOverlay() {
+        safeRemoveView(cursorView)
+        cursorView = null
+    }
+
     private fun closeHudEditor() {
         screenshotLoadJob?.cancel()
         screenshotLoadJob = null
@@ -558,6 +629,7 @@ class OverlayService : LifecycleService() {
         edgeHandleView = null
         safeRemoveView(editorView)
         editorView = null
+        hideCursorOverlay()
 
         super.onDestroy()
     }
