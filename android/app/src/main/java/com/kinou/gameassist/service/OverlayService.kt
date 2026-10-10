@@ -535,7 +535,10 @@ class OverlayService : LifecycleService() {
             cursorView = view
             view.update(engine.cursorX, engine.cursorY, engine.isCursorTouching)
             view.showLabel(getString(R.string.cursor_mode_on, "%.2f".format(engine.cursorSpeed)), 2500L)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+            // Sans curseur visible (permission de surcouche retirée…), ne pas cliquer à l'aveugle
+            engine.exitCursorMode()
+        }
     }
 
     private fun hideCursorOverlay() {

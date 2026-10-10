@@ -245,6 +245,9 @@ class GamepadEngine(
         buttonProcessor.onButtonUp(normalizedName)
     }
 
+    /** Quitte le mode curseur (ex. surcouche impossible à afficher). */
+    fun exitCursorMode() = setCursorMode(false)
+
     private fun setCursorMode(on: Boolean) {
         synchronized(cursorLock) {
             if (on == isCursorMode) return
