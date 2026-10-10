@@ -113,6 +113,8 @@ class GamepadEngine(
     }
 
     private val pressedRawButtons = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    // Combos actifs : bouton déclencheur -> clé combo ("BUTTON_R1+BUTTON_X")
+    private val activeCombos = java.util.concurrent.ConcurrentHashMap<String, String>()
     @Volatile private var engineThread: Thread? = null
     private val lifecycleLock = Any()
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
@@ -178,12 +180,29 @@ class GamepadEngine(
             }
         }
 
+        // Combo (ex. R1 maintenu + X) : remplace l'action simple du bouton déclencheur.
+        // Le modificateur garde sa propre action, déclenchée normalement à son appui.
+        val combo = buttonProcessor.findCombo(normalizedName, pressedRawButtons)
+        if (combo != null) {
+            activeCombos[normalizedName] = combo
+            buttonProcessor.onButtonDown(combo)
+            return
+        }
+
         buttonProcessor.onButtonDown(normalizedName)
     }
 
     fun onRawButtonUp(btnName: String) {
         val normalizedName = btnName.trim().uppercase()
         pressedRawButtons.remove(normalizedName)
+
+        // Relâchement du déclencheur d'un combo
+        activeCombos.remove(normalizedName)?.let {
+            buttonProcessor.onButtonUp(it)
+            return
+        }
+        // Relâchement du modificateur : termine les combos qu'il a ouverts
+        if (activeCombos.isNotEmpty()) releaseCombosOf(normalizedName)
 
         val isModifier = (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START")
         if (isModifier) {
@@ -194,6 +213,17 @@ class GamepadEngine(
             }
         }
         buttonProcessor.onButtonUp(normalizedName)
+    }
+
+    private fun releaseCombosOf(modifier: String) {
+        val it = activeCombos.entries.iterator()
+        while (it.hasNext()) {
+            val combo = it.next().value
+            if (combo.length > modifier.length && combo[modifier.length] == '+' && combo.startsWith(modifier)) {
+                buttonProcessor.onButtonUp(combo)
+                it.remove()
+            }
+        }
     }
 
     fun setProfile(profile: GameProfile) {

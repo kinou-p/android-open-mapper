@@ -26,6 +26,50 @@ class ButtonProcessorTest {
     }
 
     @Test
+    fun testFindComboRequiresHeldModifier() {
+        processor.updateButtons(listOf(
+            ButtonConfig(id = "btn_x", label = "X", gamepadButton = "BUTTON_X", x = 0.5f, y = 0.5f),
+            ButtonConfig(id = "btn_r1_x", label = "R1+X", gamepadButton = "BUTTON_R1+BUTTON_X", x = 0.6f, y = 0.5f),
+            ButtonConfig(id = "btn_l1_x", label = "L1+X", gamepadButton = "BUTTON_L1+BUTTON_X", x = 0.7f, y = 0.5f)
+        ))
+
+        assertEquals("BUTTON_R1+BUTTON_X", processor.findCombo("BUTTON_X", setOf("BUTTON_R1", "BUTTON_X")))
+        assertEquals("BUTTON_L1+BUTTON_X", processor.findCombo("BUTTON_X", setOf("BUTTON_L1", "BUTTON_X")))
+        assertNull(processor.findCombo("BUTTON_X", setOf("BUTTON_X")))
+        assertNull(processor.findCombo("BUTTON_Y", setOf("BUTTON_R1", "BUTTON_Y")))
+        // The modifier alone is not a trigger
+        assertNull(processor.findCombo("BUTTON_R1", setOf("BUTTON_R1", "BUTTON_X")))
+    }
+
+    @Test
+    fun testComboButtonIsIndependentOfPlainButton() {
+        processor.updateButtons(listOf(
+            ButtonConfig(id = "btn_x", label = "Aim", gamepadButton = "BUTTON_X", x = 0.5f, y = 0.5f,
+                mode = ButtonMode.HOLD, role = ButtonRole.ADS),
+            ButtonConfig(id = "btn_r1_x", label = "Fire", gamepadButton = "BUTTON_R1+BUTTON_X", x = 0.6f, y = 0.5f,
+                mode = ButtonMode.HOLD, role = ButtonRole.FIRE)
+        ))
+
+        processor.onButtonDown("BUTTON_R1+BUTTON_X")
+        assertTrue(processor.isFireActive())
+        assertFalse(processor.isAdsActive())
+
+        processor.onButtonUp("BUTTON_R1+BUTTON_X")
+        assertFalse(processor.isFireActive())
+    }
+
+    @Test
+    fun testCombosRebuiltOnProfileUpdate() {
+        processor.updateButtons(listOf(
+            ButtonConfig(id = "btn_r1_b", label = "R1+B", gamepadButton = "BUTTON_R1+BUTTON_B", x = 0.5f, y = 0.5f)
+        ))
+        assertNotNull(processor.findCombo("BUTTON_B", setOf("BUTTON_R1", "BUTTON_B")))
+
+        processor.updateButtons(emptyList())
+        assertNull(processor.findCombo("BUTTON_B", setOf("BUTTON_R1", "BUTTON_B")))
+    }
+
+    @Test
     fun testButtonDownAndUpLifecycle() {
         val btnFire = ButtonConfig(
             id = "btn_fire_1",
