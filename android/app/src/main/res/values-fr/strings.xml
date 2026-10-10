@@ -285,4 +285,6 @@
     <string name="visual_editor_hint">Déplacez, redimensionnez et alignez vos touches directement sur les icônes de votre jeu.</string>
     <string name="visual_editor_no_screenshot_hint">📸 Touchez « Importer Capture » pour charger une capture d\'écran de votre jeu et disposer vos touches dessus !</string>
     <string name="visual_editor_bg_opacity">Fond : %1$d%%</string>
+    <string name="cursor_speed">🖱️ Vitesse %1$sx</string>
+    <string name="cursor_mode_on">🖱️ Curseur ACTIF · Vitesse %1$sx · D-pad : vitesse · B : quitter</string>
 </resources>

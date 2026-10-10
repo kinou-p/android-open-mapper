@@ -46,6 +46,7 @@ class GamepadEngine(
         isSelectHeld = false
         selectUsedInCombo = false
         pressedRawButtons.clear()
+        if (isCursorMode) setCursorMode(false)
 
         movementProcessor.release()
         cameraProcessor.release()
@@ -110,6 +111,14 @@ class GamepadEngine(
 
     companion object {
         const val TRIGGER_THRESHOLD = 0.30f
+
+        // Mode curseur : le pointeur du joystick est libéré en entrant, on le réutilise pour cliquer
+        private const val CURSOR_POINTER = MovementProcessor.POINTER_JOYSTICK
+        private const val CURSOR_BASE_PX_PER_SEC = 1400f
+        private const val CURSOR_DEADZONE = 0.15f
+        const val CURSOR_SPEED_MIN = 0.25f
+        const val CURSOR_SPEED_MAX = 5.0f
+        private const val CURSOR_SPEED_STEP = 0.25f
     }
 
     private val pressedRawButtons = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
@@ -118,6 +127,25 @@ class GamepadEngine(
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
     var onTacticalToggle: ((message: String) -> Unit)? = null
     @Volatile private var isSelectHeld = false
+
+    // Mode curseur (L3+R3) : le stick déplace un curseur, A tape à sa position, B quitte,
+    // D-pad haut/droite et bas/gauche règlent la vitesse.
+    @Volatile var isCursorMode = false
+        private set
+    @Volatile var cursorX = 0f
+        private set
+    @Volatile var cursorY = 0f
+        private set
+    @Volatile var isCursorTouching = false
+        private set
+    @Volatile var cursorSpeed = 1.0f
+        private set
+    private val cursorLock = Any()
+    private var cursorPrepared = false // thread moteur uniquement
+    private var lastCursorNanos = 0L   // thread moteur uniquement
+    var onCursorModeChanged: ((Boolean) -> Unit)? = null
+    var onCursorMoved: (() -> Unit)? = null
+    var onCursorSpeedChanged: ((Float) -> Unit)? = null
     @Volatile private var selectUsedInCombo = false
 
     init {
@@ -146,6 +174,22 @@ class GamepadEngine(
         val normalizedName = btnName.trim().uppercase()
         if (!pressedRawButtons.add(normalizedName)) {
             // Already down - ignore duplicate dispatch
+            return
+        }
+
+        val otherStick = when (normalizedName) {
+            "BUTTON_THUMBL" -> "BUTTON_THUMBR"
+            "BUTTON_THUMBR" -> "BUTTON_THUMBL"
+            else -> null
+        }
+        if (otherStick != null && otherStick in pressedRawButtons) {
+            // L3+R3 : relâche l'action déjà déclenchée par le premier stick cliqué
+            buttonProcessor.onButtonUp(otherStick)
+            setCursorMode(!isCursorMode)
+            return
+        }
+        if (isCursorMode) {
+            onCursorButtonDown(normalizedName)
             return
         }
 
@@ -185,6 +229,11 @@ class GamepadEngine(
         val normalizedName = btnName.trim().uppercase()
         pressedRawButtons.remove(normalizedName)
 
+        if (isCursorMode) {
+            if (normalizedName == "BUTTON_A") cursorTouchUp()
+            return
+        }
+
         val isModifier = (normalizedName == "BUTTON_SELECT" || normalizedName == "BUTTON_BACK" || normalizedName == "BUTTON_START")
         if (isModifier) {
             isSelectHeld = false
@@ -196,8 +245,96 @@ class GamepadEngine(
         buttonProcessor.onButtonUp(normalizedName)
     }
 
+    private fun setCursorMode(on: Boolean) {
+        synchronized(cursorLock) {
+            if (on == isCursorMode) return
+            if (on) {
+                buttonProcessor.releaseAll()
+                if (cursorX <= 0f && cursorY <= 0f) {
+                    cursorX = injector.screenWidth / 2f
+                    cursorY = injector.screenHeight / 2f
+                }
+                // Joystick et caméra sont relâchés par le thread moteur (processCursorFrame)
+                isCursorMode = true
+            } else {
+                isCursorMode = false
+                cursorTouchUp()
+            }
+        }
+        onCursorModeChanged?.invoke(on)
+    }
+
+    private fun onCursorButtonDown(name: String) {
+        var moved = false
+        when (name) {
+            "BUTTON_A" -> synchronized(cursorLock) {
+                if (!isCursorTouching) {
+                    isCursorTouching = true
+                    moved = true
+                    injector.touchDown(CURSOR_POINTER, cursorX, cursorY)
+                }
+            }
+            "BUTTON_B" -> setCursorMode(false)
+            "DPAD_UP", "DPAD_RIGHT" -> { changeCursorSpeed(CURSOR_SPEED_STEP); moved = true }
+            "DPAD_DOWN", "DPAD_LEFT" -> { changeCursorSpeed(-CURSOR_SPEED_STEP); moved = true }
+        }
+        if (moved) onCursorMoved?.invoke()
+    }
+
+    private fun cursorTouchUp() {
+        val changed = synchronized(cursorLock) {
+            if (isCursorTouching) {
+                isCursorTouching = false
+                injector.touchUp(CURSOR_POINTER, cursorX, cursorY)
+                true
+            } else false
+        }
+        if (changed) onCursorMoved?.invoke()
+    }
+
+    private fun changeCursorSpeed(delta: Float) {
+        val steps = kotlin.math.round((cursorSpeed + delta) / CURSOR_SPEED_STEP)
+        val newSpeed = (steps * CURSOR_SPEED_STEP).coerceIn(CURSOR_SPEED_MIN, CURSOR_SPEED_MAX)
+        cursorSpeed = newSpeed
+        onCursorSpeedChanged?.invoke(newSpeed)
+    }
+
+    /** Thread moteur : déplace le curseur selon le stick le plus incliné. */
+    private fun processCursorFrame() {
+        val now = System.nanoTime()
+        if (!cursorPrepared) {
+            movementProcessor.release()
+            cameraProcessor.release()
+            cursorPrepared = true
+            lastCursorNanos = now
+            return
+        }
+        val dt = ((now - lastCursorNanos) / 1_000_000_000f).coerceAtMost(0.05f)
+        lastCursorNanos = now
+
+        val leftMag = kotlin.math.hypot(lx, ly)
+        val rightMag = kotlin.math.hypot(rx, ry)
+        val useLeft = leftMag >= rightMag
+        val sx = if (useLeft) lx else rx
+        val sy = if (useLeft) ly else ry
+        val mag = if (useLeft) leftMag else rightMag
+        if (mag < CURSOR_DEADZONE) return
+
+        // Courbe quadratique : précis près du centre, rapide stick à fond
+        val norm = ((mag - CURSOR_DEADZONE) / (1f - CURSOR_DEADZONE)).coerceIn(0f, 1f)
+        val step = CURSOR_BASE_PX_PER_SEC * cursorSpeed * norm * norm * dt
+        synchronized(cursorLock) {
+            if (!isCursorMode) return
+            cursorX = (cursorX + sx / mag * step).coerceIn(0f, injector.screenWidth - 1f)
+            cursorY = (cursorY + sy / mag * step).coerceIn(0f, injector.screenHeight - 1f)
+            if (isCursorTouching) injector.touchMove(CURSOR_POINTER, cursorX, cursorY)
+        }
+        onCursorMoved?.invoke()
+    }
+
     fun setProfile(profile: GameProfile) {
         currentProfile = profile
+        cursorSpeed = profile.settings.cursorSpeed.coerceIn(CURSOR_SPEED_MIN, CURSOR_SPEED_MAX)
         // Snapshots immuables et isolés du modèle : la boucle engine lit ces copies
         // @Volatile, jamais mutées in-place, donc aucune data race avec l'UI/l'éditeur.
         movementProcessor.config = profile.joystick.copy()
@@ -252,11 +389,17 @@ class GamepadEngine(
                 while (isRunning) {
                     try {
                         val camCfg = cameraProcessor.config
-                        val isFiring = rtPressed || buttonProcessor.isFireActive()
+                        val cursorActive = isCursorMode
+                        val isFiring = !cursorActive && (rtPressed || buttonProcessor.isFireActive())
                         val isAds = ltPressed || buttonProcessor.isAdsActive()
-                        val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
-                        movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
-                        cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
+                        if (cursorActive) {
+                            processCursorFrame()
+                        } else {
+                            cursorPrepared = false
+                            val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
+                            movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
+                            cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
+                        }
 
                         val nowNanos = System.nanoTime()
                         buttonProcessor.processPendingTaps(nowNanos)
