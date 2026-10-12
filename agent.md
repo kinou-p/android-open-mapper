@@ -69,6 +69,9 @@ timeline
     2026-09-01 : v1.2.0 (Majeure) : Durcissement sécurité HMAC & Device Token, Jiggle Strafe & RAA Keep-Alive, 113 Tests Automatisés, CI/CD Cloudflare & Release automatique, Calibrage Gâchettes LT/RT
     2026-09-02 : v1.2.1 : Palettes arrière P1..P4 (Elite/Scuf), Mode Turbo Rapid-Fire, Anti-Recul vertical avec slider in-game, Raccourcis tactiques in-game
     2026-09-03 : v1.2.2 : Détection matérielle des plages de sticks (min/max getevent -p), Zéro-Allocation IPC & Taps (240 Hz), Fallback dynamique Shizuku/IInputManager Android 11-15+
+    2026-10-07 : v1.2.3 : Correctif ANR Samsung One UI 8.5, sélecteur de package de jeu par profil, analytics backend (pays, heatmap horaire, rétention par cohorte)
+    2026-10-07 : v1.2.4-beta : Hotplug des manettes déporté sur un HandlerThread dédié, lecture batterie hors thread principal
+    2026-10-12 : (non tagué) : Combos 2 boutons, Mode curseur virtuel (L3+R3), durcissement post-merge & CI Actions v5
 ```
 
 ### Détail des Phases de Développement :
@@ -122,6 +125,16 @@ timeline
    - **Zéro-Allocation IPC & Taps (240 Hz)** : Pré-allocation des arguments de réflexion dans `IInputManagerHelper` (`cachedArgs2`, `cachedArgs3` avec `ZERO_INTEGER`) et pool fixe `PendingTapSlot[16]` dans `ButtonProcessor`, supprimant tout GC churn.
    - **Double Fallback Résilient `IInputManagerHelper`** : Détection dynamique AIDL / Réflexion 2 et 3 paramètres garantissant une compatibilité transparente d'Android 11 à Android 15+. Isolation des cancels préventifs de démarrage pour ne jamais tuer le helper au lancement.
    - **Filtrage matériel & Bluetooth générique** : Exclusion des touches physiques du téléphone (`keypad`/`kpd`), routage précis des manettes Bluetooth tierces (`GENERIC_BLUETOOTH`) et seuils de gâchettes 0..255 recalibrés.
+
+10. **Combos, Curseur Virtuel & Durcissement Post-Merge v1.2.3 ➔ `main` (non tagué)** :
+   - **Correctif ANR Samsung One UI 8.5 (v1.2.3)** : cf. commit `59d38d0`.
+   - **Sélecteur de package de jeu par profil (v1.2.3)** : dialogue de sélection d'application (icône + label) mémorisé dans `profile.packageName` et affiché dans l'éditeur.
+   - **Analytics backend** : géolocalisation par pays, heatmap horaire d'activité et rétention par cohorte exposées par `/api/stats`.
+   - **Hotplug hors thread principal (v1.2.4-beta)** : callbacks `InputDeviceListener` déportés sur `InputDeviceCallbacks.handler` (gotcha n°13), puis lecture batterie sortie du thread principal (cache `BatteryState` alimenté par un exécuteur dédié).
+   - **Combos 2 boutons** : un bouton HUD peut être assigné à `R1+X` depuis l'éditeur (modificateur maintenu + déclencheur). Index `combosByTrigger` précalculé, `findCombo()` sans allocation, clés normalisées/validées et `ComboRouter` remis à zéro à chaque reset d'état.
+   - **Mode curseur virtuel (L3+R3)** : `CursorOverlayView` non touchable, déplacement au stick (courbe quadratique), `A` tape/glisse, `B` quitte, vitesse au D-pad (0.25x–5x) persistée en `cursor_speed` ; le clic est différé tant que le pointeur joystick n'est pas libéré.
+   - **Durcissement moteur & données** : touches fantômes des combos périmés, clic perdu du curseur, file de requêtes batterie (`BatteryRefreshQueue`) et écriture du profil différée sur copie immuable.
+   - **CI** : `actions/checkout` et `actions/setup-node` en `@v5` (runners Node 24).
    - **Vibrations asynchrones & Concurrence Overlay** : `playFireHaptic` déporté sur `hapticScope.launch` non bloquant et `liveProfileUpdateFlow` converti en `MutableSharedFlow(replay = 0, extraBufferCapacity = 1)`.
 
 ---
@@ -168,6 +181,7 @@ flowchart TB
         OS["OverlayService (Foreground Service)"]
         EHO["EdgeHandleOverlayView (Volet Latéral 16dp)"]
         HEO["HudEditorOverlayView (Canvas 2D / Snap-to-Grid)"]
+        COV["CursorOverlayView (Curseur Virtuel L3+R3)"]
         MA["MainActivity (Jetpack Compose / Navigation)"]
         REPO["ProfileRepository (StateFlow / AtomicFile)"]
         DTS["DeviceTokenStore (EncryptedSharedPreferences)"]
@@ -196,7 +210,7 @@ flowchart TB
     TOUCH_DEV --> SCREEN
 
     OS --> GE
-    OS --> EHO & HEO
+    OS --> EHO & HEO & COV
     MA <--> REPO
     OS <--> REPO
     MA -.-> UPDATER
@@ -207,7 +221,7 @@ flowchart TB
 
 ### 3.2 Modèle de Concurrence & Flux Multi-Threads
 
-Pour maintenir un framerate irréprochable de 120 à 240 Hz sans micro-saccades, OpenMapper orchestre son exécution à travers 4 couches de threading distinctes et strictement découplées :
+Pour maintenir un framerate irréprochable de 120 à 240 Hz sans micro-saccades, OpenMapper orchestre son exécution à travers 5 couches de threading distinctes et strictement découplées :
 
 ```mermaid
 flowchart TD
@@ -255,6 +269,7 @@ flowchart TD
 2. **Coroutines IO (`Dispatchers.IO`)** : Chaque nœud manette `/dev/input/event*` est drainé par un job IO dédié. Ces jobs mettent à jour des primitives `@Volatile` et atomiques sans contention.
 3. **Thread Moteur Dédié (`GamepadEngineLoop`)** : Créé avec priorité `THREAD_PRIORITY_URGENT_DISPLAY`, cadencé à intervalle fixe (ex: 4.16 ms à 240 Hz). Il ne subit aucun temps d'attente d'E/S et ne procède à aucune allocation heap.
 4. **Coroutine Scope Haptique (`hapticScope`)** : Isole complètement les appels IPC `Vibrator.vibrate()` (qui peuvent être soumis à de la latence dans `system_server`) pour ne jamais ralentir le thread moteur.
+5. **Exécuteur Batterie Dédié (`GamepadBatteryQuery`)** : Unique thread daemon qui absorbe les lectures bloquantes `InputDevice.getBatteryState()` et draine la file de demandes coalescées (`BatteryRefreshQueue`). Il republie les pourcentages changés vers les flows abonnés, sans jamais bloquer le thread UI (cause historique d'ANR).
 
 ---
 
@@ -323,6 +338,12 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
 - **Palettes Arrière (Elite / Scuf / Paddles M1..M4)** : Prise en charge native de `BUTTON_PADDLE1` à `BUTTON_PADDLE4` pour réassigner instantanément les actions compétitives.
 - **Requêtes Lock-Free** : Compteurs atomiques `activeFireCount` et `activeAdsCount` permettant à `CameraProcessor` et `MovementProcessor` d'adapter leur comportement à 240 Hz sans contention de verrou.
 - **Retours Haptiques Asynchrones** : Vibrations de tir déportées sur `hapticScope.launch` pour ne jamais bloquer la boucle 240 Hz par des appels IPC synchrones `Vibrator.vibrate()`. Filtrage physique strict `v.hasVibrator()`.
+- **Combos 2 boutons** : un bouton du profil peut être assigné à `MODIFICATEUR+DÉCLENCHEUR` (ex. `BUTTON_R1+BUTTON_X`). Les clés sont normalisées (`canonicalGamepadKey` : trim, casse, parties vides) et validées (`parseCombo` : deux parties distinctes non vides) avant d'alimenter l'index `combosByTrigger` ; `findCombo(trigger, held)` est sans allocation et tranche par ordre des boutons du profil. Le suivi des combos réellement actifs vit dans `ComboRouter` (voir gotcha n°14).
+
+#### 7. `ComboRouter.kt`
+- **Suivi des combos actifs** : table `déclencheur ➔ clé combo` (`ConcurrentHashMap`) alimentée à l'appui par `GamepadEngine` et consommée au relâchement.
+- **Remise à zéro obligatoire** : `clear()` est appelé par `resetAllInputs()` (déconnexion manette, reset Shizuku), `setInjectionSuspended()` (éditeur HUD) et `setCursorMode()` (curseur). Sans cela, une entrée périmée détourne le relâchement suivant du même déclencheur vers un combo inactif et le bouton du profil **reste enfoncé** (touche fantôme).
+- **Testable en JVM** : aucune dépendance Android, contrairement à `GamepadEngine` (`ComboRouterTest`).
 
 ---
 
@@ -365,6 +386,12 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
   - Molette / curseur de redimensionnement de zone.
   - Copie défensive du profil pour permettre l'annulation sans altérer le profil de jeu actif.
   - Recyclage garanti des `Bitmap` pour prévenir les fuites de mémoire graphique native.
+  - **Apprentissage des combos** : la touche est assignée au *relâchement* (maintenir `R1`, appuyer `X`, relâcher) ; avec trois touches maintenues, seules les deux plus récentes forment le combo. Un combo visant un déclencheur déjà utilisé par un autre bouton est refusé (haptique `REJECT`), pour ne pas laisser `findCombo()` trancher silencieusement.
+
+#### 4. `CursorOverlayView.kt`
+- **Surcouche non touchable** : fenêtre `TYPE_APPLICATION_OVERLAY`, `FLAG_NOT_TOUCHABLE`, plein écran, redessinée par un `Runnable` unique réutilisé (au plus un redraw en attente, quel que soit le débit du thread moteur).
+- **Opacité 0.8** : mesure de contournement du blocage des touches non fiables d'Android 12+ (une surcouche d'opacité > 0.8 peut empêcher les taps injectés d'atteindre le jeu). À revérifier sur appareil : l'injection passant par Shizuku (UID 2000), le contournement est peut-être inutile — voir gotcha n°14 et le lot 2b.
+- **Coordonnées** : le curseur vit en pixels écran (comme l'injecteur) ; la vue retranche sa position à l'écran (`getLocationOnScreen`) pour les encoches et barres système.
 
 ---
 
@@ -387,6 +414,12 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
 - **Téléchargement sécurisé** : Suit les redirections HTTPS contrôlées vers les buckets S3 GitHub en rejetant tout protocole non sécurisé ou domaine inconnu.
 - **Vérification d'intégrité SHA-256** : Vérifie l'empreinte cryptographique du fichier APK téléchargé.
 - **Vérification des signatures d'application** : Compare les certificats X.509 de l'APK téléchargé (`getPackageArchiveInfo`) avec ceux de l'application en cours d'exécution avant d'ouvrir `FileProvider` pour l'installation, avec fallback de résilience sur `info.signatures` si `signingInfo` est nul sur Android 9/10 (bogue AOSP).
+
+#### 5. `GamepadDetector.kt` & Cache Batterie
+- **Détection événementielle** : `InputDeviceListener` (enregistré sur `InputDeviceCallbacks.handler`) publie la liste des manettes ; aucune lecture ne bloque le thread principal.
+- **`BatteryState`** : cache `deviceId ➔ pourcentage`. `InputDevice.getBatteryState()` peut bloquer plusieurs secondes : il n'est appelé que par l'exécuteur `GamepadBatteryQuery`, jamais depuis `getConnectedGamepads()`.
+- **Garde-fous** : une génération par appareil invalide le résultat d'une requête qui se termine après le retrait de la manette (Android réattribue les ids) ; une requête sans capacité conserve la dernière valeur connue ; seul un vrai retrait efface l'entrée.
+- **`BatteryRefreshQueue`** : les demandes arrivées pendant une requête sont mises en file et coalescées par id au lieu d'être jetées, et le worker draine la file en boucle (voir gotcha n°14).
 
 ---
 

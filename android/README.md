@@ -46,6 +46,7 @@ Grâce à l'intégration de **Shizuku**, l'application injecte des événements 
   - Renommage libre de chaque profil en 1 clic (crayon ✏️ ou dialogue dédié).
   - Exportation / Partage et Duplication instantanée de profils en JSON.
   - Assignation des rôles clés (Tir, Rechargement, Visée ADS) et modes (Hold / Tap).
+  - Sélecteur de package de jeu par profil (icône + label de l'application) pour retrouver le bon mapping.
 
 ### 📐 4. Diagnostic & Calibration Manette
 - **Visualiseur en temps réel** : Position des sticks et matrice d'état de tous les boutons.
@@ -55,6 +56,8 @@ Grâce à l'intégration de **Shizuku**, l'application injecte des événements 
 ### 📱 5. Overlay Flottant en Jeu (HUD Editor)
 - Volet latéral discret sur le bord de l'écran avec intégration propre `WindowInsetsController` (Android 11+).
 - Éditeur plein écran par-dessus le jeu avec glisser-déposer des boutons et calibration visuelle en temps réel.
+- **Combos 2 boutons** (`R1+X`) assignables depuis l'éditeur : maintenir le modificateur, appuyer le déclencheur, relâcher.
+- **Curseur virtuel (`L3+R3`)** : pointeur à l'écran déplacé au stick, `A` tape/glisse, `B` quitte, vitesse réglable au D-pad (0.25x–5x) et enregistrée par profil.
 
 ---
 
@@ -166,7 +169,7 @@ android/
     │   │   ├── java/com/kinou/gameassist/
     │   │   │   ├── MainActivity.kt             # Interface principale Jetpack Compose
     │   │   │   ├── data/
-    │   │   │   │   ├── model/                  # Modèles de données (GameProfile, ButtonConfig...)
+    │   │   │   │   ├── model/                  # Modèles (GameProfile, ButtonConfig, GamepadDetector, cache batterie)
     │   │   │   │   └── repository/             # Stockage & Export/Import JSON des profils
     │   │   │   ├── injector/
     │   │   │   │   ├── ShizukuManager.kt       # Gestionnaire du service Shizuku
@@ -179,16 +182,18 @@ android/
     │   │   │   │   ├── GamepadEngine.kt        # Moteur principal de synchronisation
     │   │   │   │   ├── MovementProcessor.kt    # Déplacement stick gauche, sprint & Jiggle Strafe
     │   │   │   │   ├── CameraProcessor.kt      # Visée fluide 360° (Dual-Pointer Handoff)
-    │   │   │   │   └── ButtonProcessor.kt      # Actions multi-touch, retour haptique & macros
+    │   │   │   │   ├── ButtonProcessor.kt      # Actions multi-touch, retour haptique & macros
+    │   │   │   │   └── ComboRouter.kt          # Suivi des combos actifs (touches fantômes)
     │   │   │   ├── service/
     │   │   │   │   └── OverlayService.kt       # Foreground Service avec WindowManager
     │   │   │   └── ui/
     │   │   │       ├── screens/                # Écrans Compose (Home, Diagnostic Test, Profils)
-    │   │   │       ├── overlay/                # Vues overlay (Volet latéral & Éditeur HUD)
+    │   │   │       ├── overlay/                # Vues overlay (Volet latéral, Éditeur HUD, Curseur virtuel)
     │   │   │       └── theme/                  # Thème Cyberpunk / Neon & typographie
     │   │   └── res/                            # Ressources XML, icônes et styles
-    │   └── test/java/com/kinou/gameassist/engine/
-    │       └── LinuxInputReaderTest.kt         # Tests unitaires du moteur binaire
+    │   └── test/java/com/kinou/gameassist/
+    │       ├── engine/                         # ButtonProcessor & combos, ComboRouter, processeurs, lecteur binaire
+    │       └── data/                           # Repository, cache batterie & file de refresh, screenshot, updates
 ```
 
 ---

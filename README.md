@@ -100,6 +100,7 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
   - **Virtual Cursor Mode (`L3+R3`)**: Drive an on-screen pointer with either stick and tap with `A` to use menus, shops and dialogs without placing a HUD button on every item. Speed is adjustable in-game with the D-pad (0.25x – 5x) and saved per profile.
   - **Special Button Roles**: One-tap assignment for *Primary Fire*, *Reload Magazine*, and *ADS Scope* with dedicated sensitivities.
   - **Multi-Profile Management**: Create, duplicate, rename, backup, and export custom mappings for any game.
+  - **Per-Profile Game Package**: Tag a profile with a game's package from a built-in app picker, so it is obvious which mapping belongs to which game.
 
 ### 🌐 Cloud Community & Hardware Diagnostic
   - **1-Click Community Hub**: Search, download, and vote on community-made game presets backed by Cloudflare D1 edge database.
