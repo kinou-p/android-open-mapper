@@ -46,6 +46,9 @@ class GamepadEngine(
         isSelectHeld = false
         selectUsedInCombo = false
         pressedRawButtons.clear()
+        // Un combo maintenu pendant une déconnexion/RESET laisserait sinon une entrée périmée qui
+        // détournerait le prochain relâchement de ce déclencheur (touche fantôme).
+        comboRouter.clear()
         if (isCursorMode) setCursorMode(false)
 
         movementProcessor.release()
@@ -122,8 +125,8 @@ class GamepadEngine(
     }
 
     private val pressedRawButtons = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    // Combos actifs : bouton déclencheur -> clé combo ("BUTTON_R1+BUTTON_X")
-    private val activeCombos = java.util.concurrent.ConcurrentHashMap<String, String>()
+    // Combos actifs : déclencheur -> clé combo ("BUTTON_R1+BUTTON_X"), oubliés à chaque reset
+    private val comboRouter = ComboRouter()
     // Rend atomiques l'appui et le relâchement d'un combo entre threads de lecture
     private val comboLock = Any()
 
@@ -153,6 +156,10 @@ class GamepadEngine(
     private val cursorLock = Any()
     private var cursorPrepared = false // thread moteur uniquement
     private var lastCursorNanos = 0L   // thread moteur uniquement
+    // Le pointeur joystick (réutilisé par le curseur) est-il libre ? Publié par le thread moteur.
+    @Volatile private var cursorPointerFree = false
+    // Cycle down/up du curseur ; un touchDown peut être différé d'une frame (voir processCursorFrame).
+    private var cursorDownSent = false // protégé par cursorLock
     var onCursorModeChanged: ((Boolean) -> Unit)? = null
     var onCursorMoved: (() -> Unit)? = null
     var onCursorSpeedChanged: ((Float) -> Unit)? = null
@@ -216,8 +223,8 @@ class GamepadEngine(
         synchronized(comboLock) {
             val combo = buttonProcessor.findCombo(normalizedName, pressedRawButtons)
             if (combo != null) {
+                comboRouter.onComboFired(normalizedName, combo)
                 buttonProcessor.onButtonDown(combo)
-                activeCombos[normalizedName] = combo
                 return
             }
         }
@@ -254,13 +261,16 @@ class GamepadEngine(
         if (isInjectionSuspended) return
 
         synchronized(comboLock) {
-            // Relâchement du déclencheur d'un combo
-            activeCombos.remove(normalizedName)?.let {
+            // Relâchement du déclencheur d'un combo. Null = appui simple : il suit son cours,
+            // sinon le bouton du profil resterait enfoncé (voir ComboRouter).
+            comboRouter.onTriggerReleased(normalizedName)?.let {
                 buttonProcessor.onButtonUp(it)
                 return
             }
             // Relâchement du modificateur : termine les combos qu'il a ouverts
-            if (activeCombos.isNotEmpty()) releaseCombosOf(normalizedName)
+            if (comboRouter.hasActiveCombos()) {
+                comboRouter.releaseCombosOf(normalizedName) { buttonProcessor.onButtonUp(it) }
+            }
         }
 
         if (isCursorMode) {
@@ -284,21 +294,10 @@ class GamepadEngine(
         synchronized(comboLock) {
             if (isInjectionSuspended == suspended) return
             if (suspended) {
-                activeCombos.clear()
+                comboRouter.clear()
                 buttonProcessor.releaseAll()
             }
             isInjectionSuspended = suspended
-        }
-    }
-
-    private fun releaseCombosOf(modifier: String) {
-        val it = activeCombos.entries.iterator()
-        while (it.hasNext()) {
-            val combo = it.next().value
-            if (combo.length > modifier.length && combo[modifier.length] == '+' && combo.startsWith(modifier)) {
-                buttonProcessor.onButtonUp(combo)
-                it.remove()
-            }
         }
     }
 
@@ -309,11 +308,17 @@ class GamepadEngine(
         synchronized(cursorLock) {
             if (on == isCursorMode) return
             if (on) {
+                // Comme pour la suspension de l'éditeur : les combos en cours sont oubliés, en
+                // mode curseur les relâchements ne repassent pas par le chemin combo.
+                comboRouter.clear()
                 buttonProcessor.releaseAll()
                 if (cursorX <= 0f && cursorY <= 0f) {
                     cursorX = injector.screenWidth / 2f
                     cursorY = injector.screenHeight / 2f
                 }
+                // Le pointeur joystick appartient encore à MovementProcessor : le curseur ne peut
+                // pas s'en servir tant que le thread moteur ne l'a pas relâché.
+                cursorPointerFree = false
                 // Joystick et caméra sont relâchés par le thread moteur (processCursorFrame)
                 isCursorMode = true
             } else {
@@ -331,7 +336,13 @@ class GamepadEngine(
                 if (!isCursorTouching) {
                     isCursorTouching = true
                     moved = true
-                    injector.touchDown(CURSOR_POINTER, cursorX, cursorY)
+                    if (cursorPointerFree) {
+                        injector.touchDown(CURSOR_POINTER, cursorX, cursorY)
+                        cursorDownSent = true
+                    }
+                    // Sinon le pointeur joystick n'est pas encore relâché par le thread moteur :
+                    // processCursorFrame() enverra le touchDown dès qu'il l'est, plutôt que de
+                    // faire un down aussitôt suivi d'un up (clic perdu).
                 }
             }
             "BUTTON_B" -> setCursorMode(false)
@@ -345,7 +356,10 @@ class GamepadEngine(
         val changed = synchronized(cursorLock) {
             if (isCursorTouching) {
                 isCursorTouching = false
-                injector.touchUp(CURSOR_POINTER, cursorX, cursorY)
+                if (cursorDownSent) {
+                    cursorDownSent = false
+                    injector.touchUp(CURSOR_POINTER, cursorX, cursorY)
+                }
                 true
             } else false
         }
@@ -366,7 +380,16 @@ class GamepadEngine(
             movementProcessor.release()
             cameraProcessor.release()
             cursorPrepared = true
+            cursorPointerFree = true
             lastCursorNanos = now
+            // Un A pressé entre l'entrée en mode curseur et cette frame n'a pas pu être injecté
+            // (pointeur joystick encore occupé) : il vient d'être libéré, on rattrape le clic ici.
+            synchronized(cursorLock) {
+                if (isCursorMode && isCursorTouching && !cursorDownSent) {
+                    injector.touchDown(CURSOR_POINTER, cursorX, cursorY)
+                    cursorDownSent = true
+                }
+            }
             return
         }
         val dt = ((now - lastCursorNanos) / 1_000_000_000f).coerceAtMost(0.05f)
@@ -387,7 +410,7 @@ class GamepadEngine(
             if (!isCursorMode) return
             cursorX = (cursorX + sx / mag * step).coerceIn(0f, injector.screenWidth - 1f)
             cursorY = (cursorY + sy / mag * step).coerceIn(0f, injector.screenHeight - 1f)
-            if (isCursorTouching) injector.touchMove(CURSOR_POINTER, cursorX, cursorY)
+            if (cursorDownSent) injector.touchMove(CURSOR_POINTER, cursorX, cursorY)
         }
         onCursorMoved?.invoke()
     }
