@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.ResponseCurve
+import com.kinou.gameassist.engine.CursorSpeed
 import com.kinou.gameassist.engine.HapticManager
 import com.kinou.gameassist.ui.theme.*
 
@@ -78,6 +79,8 @@ fun ProfileEditScreen(
     var jiggleHumanize by remember(profile.id) { mutableStateOf(profile.joystick.jiggleHumanize) }
     var jiggleRandomness by remember(profile.id) { mutableFloatStateOf(profile.joystick.jiggleRandomness) }
     var jiggleSpeed by remember(profile.id) { mutableFloatStateOf(profile.joystick.jiggleSpeed) }
+    // Vitesse du curseur virtuel (L3+R3) : même valeur que le D-pad en jeu, bornée par CursorSpeed.
+    var cursorSpeed by remember(profile.id) { mutableFloatStateOf(CursorSpeed.coerce(profile.settings.cursorSpeed)) }
     var responseCurve by remember(profile.id) { mutableStateOf(profile.camera.responseCurve) }
 
     // Haptic Feedback States
@@ -841,6 +844,20 @@ fun ProfileEditScreen(
                                 )
                             }
                         }
+
+                        // Curseur virtuel (L3+R3) : même réglage que le D-pad en jeu.
+                        SliderSetting(
+                            label = stringResource(R.string.cursor_speed_setting_title),
+                            value = cursorSpeed,
+                            range = CursorSpeed.MIN..CursorSpeed.MAX,
+                            displayText = stringResource(R.string.cursor_speed, CursorSpeed.format(cursorSpeed)),
+                            onValueChange = {
+                                val bounded = CursorSpeed.coerce(it)
+                                cursorSpeed = bounded
+                                profile.settings.cursorSpeed = bounded
+                            },
+                            onValueChangeFinished = { onSave() }
+                        )
                     }
                 }
 

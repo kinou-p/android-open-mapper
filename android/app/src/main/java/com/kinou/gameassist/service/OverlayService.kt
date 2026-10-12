@@ -21,6 +21,7 @@ import com.kinou.gameassist.R
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.deepCopy
 import com.kinou.gameassist.data.repository.ProfileRepository
+import com.kinou.gameassist.engine.CursorSpeed
 import com.kinou.gameassist.engine.GamepadEngine
 import com.kinou.gameassist.engine.TacticalKind
 import com.kinou.gameassist.injector.ShizukuManager
@@ -529,7 +530,7 @@ class OverlayService : LifecycleService() {
         }
     }
 
-    private fun formatCursorSpeed(speed: Float) = getString(R.string.cursor_speed, "%.2f".format(speed))
+    private fun formatCursorSpeed(speed: Float) = getString(R.string.cursor_speed, CursorSpeed.format(speed))
 
     private fun showCursorOverlay() {
         if (cursorView != null) return
@@ -562,7 +563,7 @@ class OverlayService : LifecycleService() {
             windowManager.addView(view, params)
             cursorView = view
             view.update(engine.cursorX, engine.cursorY, engine.isCursorTouching)
-            view.showLabel(getString(R.string.cursor_mode_on, "%.2f".format(engine.cursorSpeed)), 2500L)
+            view.showLabel(getString(R.string.cursor_mode_on, CursorSpeed.format(engine.cursorSpeed)), 2500L)
         } catch (_: Exception) {
             // Sans curseur visible (permission de surcouche retirée…), ne pas cliquer à l'aveugle
             engine.exitCursorMode()

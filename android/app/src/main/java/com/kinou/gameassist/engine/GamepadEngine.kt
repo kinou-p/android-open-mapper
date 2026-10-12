@@ -123,9 +123,6 @@ class GamepadEngine(
         private const val CURSOR_POINTER = MovementProcessor.POINTER_JOYSTICK
         private const val CURSOR_BASE_PX_PER_SEC = 1400f
         private const val CURSOR_DEADZONE = 0.15f
-        const val CURSOR_SPEED_MIN = 0.25f
-        const val CURSOR_SPEED_MAX = 5.0f
-        private const val CURSOR_SPEED_STEP = 0.25f
     }
 
     private val pressedRawButtons = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
@@ -350,8 +347,8 @@ class GamepadEngine(
                 }
             }
             "BUTTON_B" -> setCursorMode(false)
-            "DPAD_UP", "DPAD_RIGHT" -> { changeCursorSpeed(CURSOR_SPEED_STEP); moved = true }
-            "DPAD_DOWN", "DPAD_LEFT" -> { changeCursorSpeed(-CURSOR_SPEED_STEP); moved = true }
+            "DPAD_UP", "DPAD_RIGHT" -> { changeCursorSpeed(CursorSpeed.STEP); moved = true }
+            "DPAD_DOWN", "DPAD_LEFT" -> { changeCursorSpeed(-CursorSpeed.STEP); moved = true }
         }
         if (moved) onCursorMoved?.invoke()
     }
@@ -371,8 +368,8 @@ class GamepadEngine(
     }
 
     private fun changeCursorSpeed(delta: Float) {
-        val steps = kotlin.math.round((cursorSpeed + delta) / CURSOR_SPEED_STEP)
-        val newSpeed = (steps * CURSOR_SPEED_STEP).coerceIn(CURSOR_SPEED_MIN, CURSOR_SPEED_MAX)
+        val steps = kotlin.math.round((cursorSpeed + delta) / CursorSpeed.STEP)
+        val newSpeed = CursorSpeed.coerce(steps * CursorSpeed.STEP)
         cursorSpeed = newSpeed
         onCursorSpeedChanged?.invoke(newSpeed)
     }
@@ -421,7 +418,7 @@ class GamepadEngine(
 
     fun setProfile(profile: GameProfile) {
         currentProfile = profile
-        cursorSpeed = profile.settings.cursorSpeed.coerceIn(CURSOR_SPEED_MIN, CURSOR_SPEED_MAX)
+        cursorSpeed = CursorSpeed.coerce(profile.settings.cursorSpeed)
         // Snapshots immuables et isolés du modèle : la boucle engine lit ces copies
         // @Volatile, jamais mutées in-place, donc aucune data race avec l'UI/l'éditeur.
         movementProcessor.config = profile.joystick.copy()

@@ -430,7 +430,7 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
 - **Thème Cyberpunk / Neon** : Palette sombre (`DarkBackground` `#0A0E17`, `DarkSurface` `#121824`) avec accents fluorescents (`NeonCyan` `#00F0FF`, `NeonPink` `#FF0055`, `NeonGreen` `#00FF66`).
 - **`HomeScreen`** : Vue d'ensemble de l'état de Shizuku, sélection rapide du profil, raccourci de lancement d'overlay et indicateur de statut du service (en-tête allégé : le widget manette et les cartes de statut portent l'information utile).
 - **`ProfileEditorScreen`** : écran **liste** des profils — création, duplication, renommage, import/export JSON, sélection du profil actif. Depuis la refonte, éditer (crayon) et activer sont deux gestes distincts.
-- **`ProfileEditScreen`** : édition d'un profil (zones mortes, sensibilités X/Y, courbes de caméra, assignation des boutons, combos, package de jeu). Une sauvegarde ne bascule le moteur live que si le profil édité est le profil **actif** (`LiveProfileSync.shouldPushLiveProfileUpdate`).
+- **`ProfileEditScreen`** : édition d'un profil (zones mortes, sensibilités X/Y, courbes de caméra, assignation des boutons, combos, package de jeu, vitesse du curseur en `CursorSpeed.MIN..MAX`). Une sauvegarde ne bascule le moteur live que si le profil édité est le profil **actif** (`LiveProfileSync.shouldPushLiveProfileUpdate`).
 - **`GamepadTestScreen`** : Banc d'essai pour manette physique avec calcul temps réel de la fréquence d'échantillonnage (Hz), de la latence, de la gigue, visualiseur de stick dynamique et calibration automatique du drift en 3 secondes.
 - **`CommunityScreen`** : Hub communautaire avec recherche textuelle, filtrage par jeu/manette, tri par popularité/récence/téléchargements et système de vote (👍/👎).
 - **`BugReportScreen`** : Rapport de bug prêt à copier (version, appareil, ROM, Shizuku, manettes connectées, profil actif, journal borné). Construit sur une **liste blanche** de champs : ni device token ni secret n'y entrent.
@@ -604,14 +604,14 @@ Lors de toute intervention future sur ce codebase, **chaque agent ou développeu
 - 📁 **Validation Anti-Path Traversal** : Tout accès fichier basé sur un identifiant externe (profil, image) doit valider l'ID avec `SAFE_ID_REGEX` (`^[a-zA-Z0-9_-]{1,64}$`) et vérifier canoniquement que le chemin résolu se situe dans le répertoire autorisé (`target.canonicalPath.startsWith(allowedDir)`).
 - 🔑 **Secrets & Signature** : Ne jamais hardcoder de secret dans le code source. Toute communication d'écriture avec l'API backend doit être signée par `CommunityApiClient` avec l'en-tête `X-Timestamp` et `X-Signature` calculé via HMAC-SHA256.
 
-### 🧪 3. Validation & Commandes de Test (177 Tests Automatisés)
+### 🧪 3. Validation & Commandes de Test (182 Tests Automatisés)
 Avant de soumettre des modifications, exécuter obligatoirement les suites de tests automatisés :
 
 ```bash
 # 1. Tests Unitaires Backend (Vitest - 38 tests)
 npm --prefix backend test
 
-# 2. Tests Unitaires Android (JUnit avec JDK 17 - 139 tests)
+# 2. Tests Unitaires Android (JUnit avec JDK 17 - 144 tests)
 cd android
 JAVA_HOME=/usr/lib/jvm/java-1.17.0-openjdk-amd64 ./gradlew testDebugUnitTest
 
@@ -708,7 +708,7 @@ Les prochaines évolutions architecturales planifiées pour OpenMapper s'articul
    - `L3+R3` bascule le mode ; le stick le plus incliné (gauche ou droit) déplace un curseur à courbe quadratique, `A` tape (maintenu = glisser), `B` quitte, D-pad haut/droite et bas/gauche règlent la vitesse de 0.25x à 5x avec libellé à l'écran, vitesse persistée dans `cursor_speed`.
    - Pendant le mode curseur, mappings, joystick de déplacement et caméra sont coupés (`buttonProcessor.releaseAll()`), et le pointeur tactile du joystick est réutilisé pour le clic (gotcha n°14).
    - *Composants* : [`CursorOverlayView.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/ui/overlay/CursorOverlayView.kt), [`GamepadEngine.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/GamepadEngine.kt), [`OverlayService.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/service/OverlayService.kt).
-   - *Reste à faire* : auto-repeat du D-pad pour régler la vitesse, slider de vitesse dans l'éditeur de profil, vérification de l'opacité de la surcouche (voir gotcha n°14).
+   - *Reste à faire* : auto-repeat du D-pad pour régler la vitesse, vérification de l'opacité de la surcouche (voir gotcha n°14).
 2. **🔌 Pilote Direct USB Host Rumble (Impulse Triggers & Bypass OEM)** :
    - Communication directe de bas niveau (`android.hardware.usb.UsbManager` / `UsbDeviceConnection`) pour manettes connectées en USB-C OTG (Xbox Elite Series 1 & 2, DualSense).
    - Contourne le pilote noyau Android `xpad` souvent dépourvu de support Force Feedback (`EV_FF`) sur certaines ROMs OEM (Xiaomi HyperOS).

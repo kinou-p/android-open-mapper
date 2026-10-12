@@ -435,4 +435,5 @@
     <string name="visual_stick_position">🕹️ Posição do stick RS: %1$d%%</string>
     <string name="visual_stick_output">Saída: %1$d%%</string>
     <string name="err_apk_package_mismatch">O pacote de destino do APK (%1$s) não corresponde à aplicação atual (%2$s).</string>
+    <string name="cursor_speed_setting_title">🖱️ Velocidade do cursor virtual (L3+R3)</string>
 </resources>

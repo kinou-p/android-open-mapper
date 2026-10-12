@@ -57,7 +57,7 @@ Grâce à l'intégration de **Shizuku**, l'application injecte des événements 
 - Volet latéral discret sur le bord de l'écran avec intégration propre `WindowInsetsController` (Android 11+).
 - Éditeur plein écran par-dessus le jeu avec glisser-déposer des boutons et calibration visuelle en temps réel.
 - **Combos 2 boutons** (`R1+X`) assignables depuis l'éditeur : maintenir le modificateur, appuyer le déclencheur, relâcher.
-- **Curseur virtuel (`L3+R3`)** : pointeur à l'écran déplacé au stick, `A` tape/glisse, `B` quitte, vitesse réglable au D-pad (0.25x–5x) et enregistrée par profil.
+- **Curseur virtuel (`L3+R3`)** : pointeur à l'écran déplacé au stick, `A` tape/glisse, `B` quitte, vitesse réglable au D-pad (0.25x–5x) ou depuis l'éditeur de profil, et enregistrée par profil.
 
 ---
 
@@ -186,7 +186,8 @@ android/
     │   │   │   │   ├── MovementProcessor.kt    # Déplacement stick gauche, sprint & Jiggle Strafe
     │   │   │   │   ├── CameraProcessor.kt      # Visée fluide 360° (Dual-Pointer Handoff)
     │   │   │   │   ├── ButtonProcessor.kt      # Actions multi-touch, retour haptique & macros
-    │   │   │   │   └── ComboRouter.kt          # Suivi des combos actifs (touches fantômes)
+    │   │   │   │   ├── ComboRouter.kt          # Suivi des combos actifs (touches fantômes)
+    │   │   │   │   └── CursorSpeed.kt          # Bornes, pas et format de la vitesse du curseur
     │   │   │   ├── service/
     │   │   │   │   └── OverlayService.kt       # Foreground Service avec WindowManager
     │   │   │   └── ui/
