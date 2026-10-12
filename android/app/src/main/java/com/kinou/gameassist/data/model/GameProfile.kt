@@ -28,7 +28,15 @@ data class GameSettings(
 
     // Vitesse du curseur virtuel (L3+R3), réglable en jeu avec le D-pad
     @SerialName("cursor_speed")
-    var cursorSpeed: Float = 1.0f
+    var cursorSpeed: Float = 1.0f,
+
+    // MOBA buttons (aim_joystick role): drag range (fraction of the screen height)
+    // and right-stick deadzone
+    @SerialName("aim_radius")
+    var aimRadius: Float = 0.12f,
+
+    @SerialName("aim_deadzone")
+    var aimDeadzone: Float = 0.15f
 )
 
 @Serializable

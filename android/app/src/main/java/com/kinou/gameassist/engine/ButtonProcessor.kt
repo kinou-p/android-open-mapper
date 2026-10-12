@@ -120,6 +120,16 @@ class ButtonProcessor(
     @Volatile private var fireButtonIds: Set<String> = emptySet()
     @Volatile private var adsButtonIds: Set<String> = emptySet()
     @Volatile private var reloadButtonIds: Set<String> = emptySet()
+    @Volatile private var aimButtonIds: Set<String> = emptySet()
+
+    // Held MOBA buttons in press order: the last one follows the right stick.
+    // Mutated under lock only; aimActive is read lock-free by the engine loop.
+    private class AimEntry(val btnId: String, val pointerId: Int, val cx: Float, val cy: Float) {
+        var x = cx
+        var y = cy
+    }
+    private val aimStack = ArrayList<AimEntry>()
+    @Volatile private var aimActive = false
 
     // Lock-free atomic counters for ultra-fast 240Hz engine queries
     private val activeFireCount = AtomicInteger(0)
@@ -147,6 +157,8 @@ class ButtonProcessor(
                     injector.touchUp(pid, tx, ty)
                 }
             }
+            aimStack.removeAll { it.btnId !in newIds }
+            aimActive = aimStack.isNotEmpty()
 
             // Nettoie également les taps asynchrones et rapid fire en cours pour les boutons supprimés
             for (slot in pendingTapSlots) {
@@ -175,6 +187,7 @@ class ButtonProcessor(
             fireButtonIds = snapshot.filter { isFireButtonStatic(it) }.map { it.id }.toSet()
             adsButtonIds = snapshot.filter { isAdsButtonStatic(it) }.map { it.id }.toSet()
             reloadButtonIds = snapshot.filter { isReloadButtonStatic(it) }.map { it.id }.toSet()
+            aimButtonIds = snapshot.filter { it.role == ButtonRole.AIM_JOYSTICK }.map { it.id }.toSet()
 
             // Recompute active counts in case buttons changed
             var fireCount = 0
@@ -247,6 +260,11 @@ class ButtonProcessor(
                     continue
                 }
                 else -> {}
+            }
+
+            if (btn.role == ButtonRole.AIM_JOYSTICK) {
+                aimDown(btn)
+                continue
             }
 
             // Trigger haptic feedback for Fire and Reload actions
@@ -422,6 +440,10 @@ class ButtonProcessor(
         if (matchedButtons.isEmpty()) return
 
         for (btn in matchedButtons) {
+            if (btn.role == ButtonRole.AIM_JOYSTICK) {
+                aimUp(btn)
+                continue
+            }
             val mode = (btn.mode as ButtonMode?) ?: ButtonMode.HOLD
             if (mode == ButtonMode.RAPID_FIRE) {
                 activeRapidFireJobs.remove(btn.id)?.cancel()
@@ -523,7 +545,40 @@ class ButtonProcessor(
             freePointers.addAll(POINTER_BUTTON_START until MAX_POINTERS)
             activeFireCount.set(0)
             activeAdsCount.set(0)
+            aimStack.clear()
+            aimActive = false
         }
+    }
+
+    private fun aimDown(btn: ButtonConfig) {
+        val cx = btn.x * injector.screenWidth
+        val cy = btn.y * injector.screenHeight
+        var pid = -1
+        synchronized(lock) {
+            if (activePointers.containsKey(btn.id)) return
+            val allocated = freePointers.minOrNull() ?: return
+            freePointers.remove(allocated)
+            activePointers[btn.id] = allocated
+            aimStack.add(AimEntry(btn.id, allocated, cx, cy))
+            aimActive = true
+            pid = allocated
+        }
+        injector.touchDown(pid, cx, cy)
+    }
+
+    /** Releasing the button lifts the finger at the last aimed position: that is what fires the shot. */
+    private fun aimUp(btn: ButtonConfig) {
+        var entry: AimEntry? = null
+        synchronized(lock) {
+            val i = aimStack.indexOfFirst { it.btnId == btn.id }
+            if (i < 0) return
+            val removed = aimStack.removeAt(i)
+            entry = removed
+            aimActive = aimStack.isNotEmpty()
+            activePointers.remove(btn.id)
+            freePointers.add(removed.pointerId)
+        }
+        entry?.let { injector.touchUp(it.pointerId, it.x, it.y) }
     }
 
     fun isButtonActive(predicate: (ButtonConfig) -> Boolean): Boolean {
@@ -539,4 +594,36 @@ class ButtonProcessor(
     // Ultra fast O(1) Zero-Allocation and Lock-Free queries on the 120-240Hz hot path
     fun isFireActive(): Boolean = activeFireCount.get() > 0
     fun isAdsActive(): Boolean = activeAdsCount.get() > 0
+    fun isAimActive(): Boolean = aimActive
+
+    /** True if the profile has at least one MOBA button: the right-stick camera is then disabled. */
+    fun hasAimButtons(): Boolean = aimButtonIds.isNotEmpty()
+
+    /**
+     * Engine thread: moves the finger of the most recently pressed MOBA button with the right stick.
+     * Stick inside the deadzone = back to the center. Allocation-free.
+     */
+    fun processAimJoystick(rx: Float, ry: Float) {
+        if (!aimActive) return
+        val cfg = settings
+        val deadzone = AimSettings.coerceDeadzone(cfg.aimDeadzone)
+        val radius = AimSettings.coerceRadius(cfg.aimRadius)
+        synchronized(lock) {
+            val entry = aimStack.lastOrNull() ?: return
+            var tx = entry.cx
+            var ty = entry.cy
+            val mag = kotlin.math.hypot(rx, ry)
+            if (mag >= deadzone) {
+                val norm = ((mag - deadzone) / (1f - deadzone)).coerceIn(0f, 1f)
+                val dist = norm * radius * injector.screenHeight
+                tx += rx / mag * dist
+                ty += ry / mag * dist
+            }
+            if (tx != entry.x || ty != entry.y) {
+                entry.x = tx
+                entry.y = ty
+                injector.touchMove(entry.pointerId, tx, ty)
+            }
+        }
+    }
 }

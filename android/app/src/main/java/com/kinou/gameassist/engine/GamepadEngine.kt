@@ -486,10 +486,18 @@ class GamepadEngine(
                             suspendPrepared = false
                             cursorPrepared = false
                             val isAds = ltPressed || buttonProcessor.isAdsActive()
-                            val camCfg = cameraProcessor.config
-                            val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
-                            movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
-                            cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
+                            if (buttonProcessor.hasAimButtons()) {
+                                // MOBA profile: the right stick only drives the aim joystick of the game
+                                // (the camera would press the fire zone). The left stick still walks.
+                                cameraProcessor.release()
+                                movementProcessor.process(lx, ly, false, isFiring = isFiring)
+                                buttonProcessor.processAimJoystick(rx, ry)
+                            } else {
+                                val camCfg = cameraProcessor.config
+                                val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
+                                movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
+                                cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
+                            }
                         }
 
                         val nowNanos = System.nanoTime()

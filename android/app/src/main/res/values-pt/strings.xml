@@ -364,6 +364,7 @@
     <string name="overlay_role_recoil_badge">🎯 RECUO</string>
     <string name="overlay_role_strafe_badge">⚡ STRAFE</string>
     <string name="overlay_role_profile_badge">🎮 PERFIL</string>
+    <string name="overlay_role_aim_badge">🕹️ MIRAR</string>
     <string name="overlay_mode_rapid_badge">RAPID ⚡</string>
     <string name="overlay_strafe_on">⚡ Strafe: ON</string>
     <string name="overlay_strafe_off">⚡ Strafe: OFF</string>
@@ -374,6 +375,7 @@
     <string name="overlay_role_recoil_label">🎯 Recuo</string>
     <string name="overlay_role_strafe_label">⚡ Strafe</string>
     <string name="overlay_role_profile_label">🎮 Perfil</string>
+    <string name="overlay_role_aim_label">🕹️ Mirar</string>
     <string name="overlay_assign">🎮 Atribuir</string>
     <string name="overlay_assign_learning">⏳ Prime uma tecla...</string>
     <string name="overlay_joystick_ls">🕹️ Joystick LS</string>
@@ -436,4 +438,8 @@
     <string name="visual_stick_output">Saída: %1$d%%</string>
     <string name="err_apk_package_mismatch">O pacote de destino do APK (%1$s) não corresponde à aplicação atual (%2$s).</string>
     <string name="cursor_speed_setting_title">🖱️ Velocidade do cursor virtual (L3+R3)</string>
+    <string name="moba_section_title">Botões de mira MOBA</string>
+    <string name="moba_section_desc">Botões com a função Mirar (definida no editor HUD): segure para pressionar o joystick de mira do jogo, mova o analógico direito para mirar e solte para atirar.</string>
+    <string name="moba_aim_radius_label">Alcance da mira (distância de arrasto)</string>
+    <string name="moba_aim_deadzone_label">Zona morta do analógico direito</string>
 </resources>

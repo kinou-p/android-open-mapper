@@ -28,7 +28,11 @@ enum class ButtonRole {
     @SerialName("toggle_strafe")
     TOGGLE_STRAFE,
     @SerialName("switch_profile")
-    SWITCH_PROFILE
+    SWITCH_PROFILE,
+    // MOBA: press = finger down on the aim joystick of the game, the right stick drags it,
+    // release = fire (e.g. Brawl Stars)
+    @SerialName("aim_joystick")
+    AIM_JOYSTICK
 }
 
 @Serializable

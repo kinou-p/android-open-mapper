@@ -555,6 +555,7 @@ class HudEditorOverlayView(
                     ButtonRole.TOGGLE_RECOIL -> context.getString(R.string.overlay_role_recoil_badge) to 0xEE00F0FF.toInt()
                     ButtonRole.TOGGLE_STRAFE -> context.getString(R.string.overlay_role_strafe_badge) to 0xEE00FF66.toInt()
                     ButtonRole.SWITCH_PROFILE -> context.getString(R.string.overlay_role_profile_badge) to 0xEE9C27B0.toInt()
+                    ButtonRole.AIM_JOYSTICK -> context.getString(R.string.overlay_role_aim_badge) to 0xEEFFD600.toInt()
                     ButtonRole.NORMAL -> "" to 0
                 }
                 roleBadgeBgPaint.color = roleBgColor
@@ -825,6 +826,7 @@ class HudEditorOverlayView(
                 ButtonRole.TOGGLE_RECOIL -> context.getString(R.string.overlay_role_recoil_label)
                 ButtonRole.TOGGLE_STRAFE -> context.getString(R.string.overlay_role_strafe_label)
                 ButtonRole.SWITCH_PROFILE -> context.getString(R.string.overlay_role_profile_label)
+                ButtonRole.AIM_JOYSTICK -> context.getString(R.string.overlay_role_aim_label)
                 ButtonRole.NORMAL -> "Normal"
             }
             buttons += spec(
@@ -837,6 +839,7 @@ class HudEditorOverlayView(
                     ButtonRole.TOGGLE_RECOIL -> 0xFF00F0FF.toInt()
                     ButtonRole.TOGGLE_STRAFE -> 0xFF00FF66.toInt()
                     ButtonRole.SWITCH_PROFILE -> 0xFF9C27B0.toInt()
+                    ButtonRole.AIM_JOYSTICK -> 0xFFFFD600.toInt()
                     ButtonRole.NORMAL -> 0xFF243040.toInt()
                 },
                 if (btn.role == ButtonRole.NORMAL) 0xFF00F0FF.toInt()
@@ -1158,7 +1161,8 @@ class HudEditorOverlayView(
                                 ButtonRole.ADS -> ButtonRole.TOGGLE_RECOIL
                                 ButtonRole.TOGGLE_RECOIL -> ButtonRole.TOGGLE_STRAFE
                                 ButtonRole.TOGGLE_STRAFE -> ButtonRole.SWITCH_PROFILE
-                                ButtonRole.SWITCH_PROFILE -> ButtonRole.NORMAL
+                                ButtonRole.SWITCH_PROFILE -> ButtonRole.AIM_JOYSTICK
+                                ButtonRole.AIM_JOYSTICK -> ButtonRole.NORMAL
                             }
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()

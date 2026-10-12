@@ -364,6 +364,7 @@
     <string name="overlay_role_recoil_badge">🎯 RECOIL</string>
     <string name="overlay_role_strafe_badge">⚡ STRAFE</string>
     <string name="overlay_role_profile_badge">🎮 PROFILE</string>
+    <string name="overlay_role_aim_badge">🕹️ AIM</string>
     <string name="overlay_mode_rapid_badge">RAPID ⚡</string>
     <string name="overlay_strafe_on">⚡ Strafe: ON</string>
     <string name="overlay_strafe_off">⚡ Strafe: OFF</string>
@@ -374,6 +375,7 @@
     <string name="overlay_role_recoil_label">🎯 Recoil</string>
     <string name="overlay_role_strafe_label">⚡ Strafe</string>
     <string name="overlay_role_profile_label">🎮 Profile</string>
+    <string name="overlay_role_aim_label">🕹️ Aim</string>
     <string name="overlay_assign">🎮 Assign</string>
     <string name="overlay_assign_learning">⏳ Press a key...</string>
     <string name="overlay_joystick_ls">🕹️ Joystick LS</string>
@@ -436,4 +438,8 @@
     <string name="visual_stick_output">Output: %1$d%%</string>
     <string name="err_apk_package_mismatch">The APK target package (%1$s) does not match the current app (%2$s).</string>
     <string name="cursor_speed_setting_title">🖱️ Virtual Cursor Speed (L3+R3)</string>
+    <string name="moba_section_title">MOBA aim buttons</string>
+    <string name="moba_section_desc">Buttons with the Aim role (set in the HUD editor): hold to press the game aim joystick, move the right stick to aim, release to fire.</string>
+    <string name="moba_aim_radius_label">Aim range (drag distance)</string>
+    <string name="moba_aim_deadzone_label">Right stick deadzone</string>
 </resources>

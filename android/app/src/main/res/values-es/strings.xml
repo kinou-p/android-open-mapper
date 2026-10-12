@@ -364,6 +364,7 @@
     <string name="overlay_role_recoil_badge">🎯 RETROCESO</string>
     <string name="overlay_role_strafe_badge">⚡ STRAFE</string>
     <string name="overlay_role_profile_badge">🎮 PERFIL</string>
+    <string name="overlay_role_aim_badge">🕹️ APUNTAR</string>
     <string name="overlay_mode_rapid_badge">RAPID ⚡</string>
     <string name="overlay_strafe_on">⚡ Strafe: ON</string>
     <string name="overlay_strafe_off">⚡ Strafe: OFF</string>
@@ -374,6 +375,7 @@
     <string name="overlay_role_recoil_label">🎯 Retroceso</string>
     <string name="overlay_role_strafe_label">⚡ Strafe</string>
     <string name="overlay_role_profile_label">🎮 Perfil</string>
+    <string name="overlay_role_aim_label">🕹️ Apuntar</string>
     <string name="overlay_assign">🎮 Asignar</string>
     <string name="overlay_assign_learning">⏳ Pulsa una tecla...</string>
     <string name="overlay_joystick_ls">🕹️ Joystick LS</string>
@@ -436,4 +438,8 @@
     <string name="visual_stick_output">Salida: %1$d%%</string>
     <string name="err_apk_package_mismatch">El paquete de destino del APK (%1$s) no coincide con la aplicación actual (%2$s).</string>
     <string name="cursor_speed_setting_title">🖱️ Velocidad del cursor virtual (L3+R3)</string>
+    <string name="moba_section_title">Botones de apuntado MOBA</string>
+    <string name="moba_section_desc">Botones con el rol Apuntar (se define en el editor HUD): mantén para pulsar el joystick de apuntado del juego, mueve el stick derecho para apuntar y suelta para disparar.</string>
+    <string name="moba_aim_radius_label">Alcance de apuntado (distancia de arrastre)</string>
+    <string name="moba_aim_deadzone_label">Zona muerta del stick derecho</string>
 </resources>

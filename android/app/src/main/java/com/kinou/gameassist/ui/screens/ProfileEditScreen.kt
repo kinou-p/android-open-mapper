@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.ResponseCurve
+import com.kinou.gameassist.engine.AimSettings
 import com.kinou.gameassist.engine.CursorSpeed
 import com.kinou.gameassist.engine.HapticManager
 import com.kinou.gameassist.ui.theme.*
@@ -81,6 +82,8 @@ fun ProfileEditScreen(
     var jiggleSpeed by remember(profile.id) { mutableFloatStateOf(profile.joystick.jiggleSpeed) }
     // Vitesse du curseur virtuel (L3+R3) : même valeur que le D-pad en jeu, bornée par CursorSpeed.
     var cursorSpeed by remember(profile.id) { mutableFloatStateOf(CursorSpeed.coerce(profile.settings.cursorSpeed)) }
+    var aimRadius by remember(profile.id) { mutableFloatStateOf(AimSettings.coerceRadius(profile.settings.aimRadius)) }
+    var aimDeadzone by remember(profile.id) { mutableFloatStateOf(AimSettings.coerceDeadzone(profile.settings.aimDeadzone)) }
     var responseCurve by remember(profile.id) { mutableStateOf(profile.camera.responseCurve) }
 
     // Haptic Feedback States
@@ -855,6 +858,33 @@ fun ProfileEditScreen(
                                 val bounded = CursorSpeed.coerce(it)
                                 cursorSpeed = bounded
                                 profile.settings.cursorSpeed = bounded
+                            },
+                            onValueChangeFinished = { onSave() }
+                        )
+
+                        // MOBA aim buttons (role "Aim" in the HUD editor): drag range and stick deadzone.
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+                        Text(stringResource(R.string.moba_section_title), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                        Text(stringResource(R.string.moba_section_desc), color = TextSecondary, fontSize = 11.sp)
+                        SliderSetting(
+                            label = stringResource(R.string.moba_aim_radius_label),
+                            value = aimRadius,
+                            range = AimSettings.RADIUS_MIN..AimSettings.RADIUS_MAX,
+                            displayText = AimSettings.percent(aimRadius),
+                            onValueChange = {
+                                aimRadius = AimSettings.coerceRadius(it)
+                                profile.settings.aimRadius = aimRadius
+                            },
+                            onValueChangeFinished = { onSave() }
+                        )
+                        SliderSetting(
+                            label = stringResource(R.string.moba_aim_deadzone_label),
+                            value = aimDeadzone,
+                            range = AimSettings.DEADZONE_MIN..AimSettings.DEADZONE_MAX,
+                            displayText = AimSettings.percent(aimDeadzone),
+                            onValueChange = {
+                                aimDeadzone = AimSettings.coerceDeadzone(it)
+                                profile.settings.aimDeadzone = aimDeadzone
                             },
                             onValueChangeFinished = { onSave() }
                         )
