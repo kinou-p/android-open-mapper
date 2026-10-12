@@ -315,4 +315,11 @@
     <string name="bug_report_share">Share report</string>
     <string name="bug_report_copied">Report copied to clipboard</string>
     <string name="bug_report_share_failed">Could not share the report</string>
+    <!-- Profile edit screen -->
+    <string name="profile_edit_title">Edit profile</string>
+    <string name="btn_edit_profile">Edit</string>
+    <string name="profile_actions">More actions</string>
+    <!-- Home secondary actions -->
+    <string name="home_check_update">Updates</string>
+    <string name="home_report_bug">Report a bug</string>
 </resources>

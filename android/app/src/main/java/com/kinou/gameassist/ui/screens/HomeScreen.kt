@@ -38,11 +38,9 @@ import com.kinou.gameassist.data.updater.AppReleaseInfo
 import com.kinou.gameassist.data.updater.AppUpdateManager
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.injector.ShizukuStatus
-import com.kinou.gameassist.service.OverlayService
 import com.kinou.gameassist.ui.theme.*
 import java.io.File
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -212,68 +210,6 @@ fun HomeScreen(
                             )
                         }
                     }
-                }
-
-                // Check Update Button
-                IconButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            isCheckingUpdate = true
-                            val release = AppUpdateManager.checkForUpdate(currentVersion)
-                            isCheckingUpdate = false
-                            if (release != null) {
-                                updateInfo = release
-                                if (release.isNewer) {
-                                    AppUpdateManager.cleanupOldApks(context, release.apkFileName)
-                                    downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
-                                    showUpdateDialog = true
-                                } else {
-                                    Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
-                                }
-                            } else {
-                                Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DarkCard)
-                        .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
-                ) {
-                    if (isCheckingUpdate) {
-                        CircularProgressIndicator(
-                            color = NeonCyan,
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    } else {
-                        Icon(Icons.Default.CloudSync, contentDescription = stringResource(R.string.check_update), tint = NeonCyan, modifier = Modifier.size(20.dp))
-                    }
-                }
-
-                // Gamepad Tester Button
-                IconButton(
-                    onClick = onNavigateToTest,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DarkCard)
-                        .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(Icons.Default.SportsEsports, contentDescription = stringResource(R.string.test_gamepad), tint = NeonCyan, modifier = Modifier.size(20.dp))
-                }
-
-                // Bug Report Button
-                IconButton(
-                    onClick = onNavigateToBugReport,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DarkCard)
-                        .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
-                ) {
-                    Icon(Icons.Default.BugReport, contentDescription = stringResource(R.string.bug_report_title), tint = NeonCyan, modifier = Modifier.size(20.dp))
                 }
             }
         }
@@ -478,6 +414,60 @@ fun HomeScreen(
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
+            }
+        }
+
+        // Actions secondaires : mises à jour + signaler un bug
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = {
+                    coroutineScope.launch {
+                        isCheckingUpdate = true
+                        val release = AppUpdateManager.checkForUpdate(currentVersion)
+                        isCheckingUpdate = false
+                        if (release != null) {
+                            updateInfo = release
+                            if (release.isNewer) {
+                                AppUpdateManager.cleanupOldApks(context, release.apkFileName)
+                                downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
+                                showUpdateDialog = true
+                            } else {
+                                Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                if (isCheckingUpdate) {
+                    CircularProgressIndicator(color = NeonCyan, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                } else {
+                    Icon(Icons.Default.CloudSync, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.home_check_update), color = NeonCyan, fontSize = 12.sp, maxLines = 1)
+            }
+
+            OutlinedButton(
+                onClick = onNavigateToBugReport,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                Icon(Icons.Default.BugReport, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.home_report_bug), color = NeonCyan, fontSize = 12.sp, maxLines = 1)
             }
         }
     }

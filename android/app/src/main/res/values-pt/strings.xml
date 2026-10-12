@@ -307,4 +307,11 @@
     <string name="bug_report_share">Partilhar relatório</string>
     <string name="bug_report_copied">Relatório copiado para a área de transferência</string>
     <string name="bug_report_share_failed">Não foi possível partilhar o relatório</string>
+    <!-- Profile edit screen -->
+    <string name="profile_edit_title">Editar perfil</string>
+    <string name="btn_edit_profile">Editar</string>
+    <string name="profile_actions">Mais ações</string>
+    <!-- Home secondary actions -->
+    <string name="home_check_update">Atualizações</string>
+    <string name="home_report_bug">Reportar um erro</string>
 </resources>

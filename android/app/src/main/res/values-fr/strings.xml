@@ -298,4 +298,11 @@
     <string name="bug_report_share">Partager le rapport</string>
     <string name="bug_report_copied">Rapport copié dans le presse-papier</string>
     <string name="bug_report_share_failed">Impossible de partager le rapport</string>
+    <!-- Profile edit screen -->
+    <string name="profile_edit_title">Éditer le profil</string>
+    <string name="btn_edit_profile">Éditer</string>
+    <string name="profile_actions">Plus d\'actions</string>
+    <!-- Home secondary actions -->
+    <string name="home_check_update">Mises à jour</string>
+    <string name="home_report_bug">Signaler un bug</string>
 </resources>

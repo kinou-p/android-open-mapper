@@ -35,6 +35,7 @@ import com.kinou.gameassist.ui.screens.BugReportScreen
 import com.kinou.gameassist.ui.screens.CommunityScreen
 import com.kinou.gameassist.ui.screens.GamepadTestScreen
 import com.kinou.gameassist.ui.screens.HomeScreen
+import com.kinou.gameassist.ui.screens.ProfileEditScreen
 import com.kinou.gameassist.ui.screens.ProfileEditorScreen
 import com.kinou.gameassist.ui.screens.VisualHudEditorScreen
 import com.kinou.gameassist.ui.theme.*
@@ -45,7 +46,8 @@ enum class Screen {
     COMMUNITY,
     GAMEPAD_TEST,
     VISUAL_HUD_EDITOR,
-    BUG_REPORT
+    BUG_REPORT,
+    PROFILE_EDIT
 }
 
 class MainActivity : AppCompatActivity() {
@@ -149,6 +151,8 @@ class MainActivity : AppCompatActivity() {
                 var currentScreen by remember { mutableStateOf(Screen.HOME) }
                 val profiles by repository.profilesFlow.collectAsState()
                 var selectedProfile by remember { mutableStateOf<GameProfile?>(null) }
+                var editTargetProfile by remember { mutableStateOf<GameProfile?>(null) }
+                var visualEditorOrigin by remember { mutableStateOf(Screen.PROFILES) }
                 val isServiceRunning by OverlayService.isServiceRunningFlow.collectAsState()
 
                 LaunchedEffect(profiles) {
@@ -161,12 +165,16 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 BackHandler(enabled = currentScreen != Screen.HOME) {
-                    currentScreen = if (currentScreen == Screen.VISUAL_HUD_EDITOR) Screen.PROFILES else Screen.HOME
+                    currentScreen = when (currentScreen) {
+                        Screen.VISUAL_HUD_EDITOR -> visualEditorOrigin
+                        Screen.PROFILE_EDIT -> Screen.PROFILES
+                        else -> Screen.HOME
+                    }
                 }
 
                 Scaffold(
                     bottomBar = {
-                        if (currentScreen != Screen.VISUAL_HUD_EDITOR) {
+                        if (currentScreen != Screen.VISUAL_HUD_EDITOR && currentScreen != Screen.PROFILE_EDIT) {
                             NavigationBar(
                                 containerColor = DarkSurface,
                                 contentColor = TextPrimary,
@@ -232,7 +240,7 @@ class MainActivity : AppCompatActivity() {
                     },
                     containerColor = DarkBackground
                 ) { paddingValues ->
-                    Box(modifier = Modifier.padding(if (currentScreen == Screen.VISUAL_HUD_EDITOR) PaddingValues(0.dp) else paddingValues)) {
+                    Box(modifier = Modifier.padding(if (currentScreen == Screen.VISUAL_HUD_EDITOR || currentScreen == Screen.PROFILE_EDIT) PaddingValues(0.dp) else paddingValues)) {
                         when (currentScreen) {
                             Screen.HOME -> HomeScreen(
                                 profiles = profiles,
@@ -290,9 +298,13 @@ class MainActivity : AppCompatActivity() {
                             Screen.PROFILES -> ProfileEditorScreen(
                                 profiles = profiles,
                                 currentProfile = selectedProfile,
-                                onSelectProfile = {
+                                onActivate = {
                                     selectedProfile = it
                                     OverlayService.updateLiveProfile(it)
+                                },
+                                onEdit = { prof ->
+                                    editTargetProfile = prof
+                                    currentScreen = Screen.PROFILE_EDIT
                                 },
                                 onSaveProfile = { prof ->
                                     lifecycleScope.launch { repository.saveProfileAsync(prof) }
@@ -329,17 +341,11 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     }
                                 },
-                                onOpenVisualEditor = { prof ->
-                                    selectedProfile = prof
-                                    currentScreen = Screen.VISUAL_HUD_EDITOR
-                                },
-                                liveRx = liveRx.floatValue,
-                                liveRy = liveRy.floatValue,
                                 onBack = { currentScreen = Screen.HOME }
                             )
 
                             Screen.VISUAL_HUD_EDITOR -> {
-                                selectedProfile?.let { prof ->
+                                (editTargetProfile ?: selectedProfile)?.let { prof ->
                                     VisualHudEditorScreen(
                                         profile = prof,
                                         onSaveProfile = { updated ->
@@ -347,6 +353,28 @@ class MainActivity : AppCompatActivity() {
                                                 repository.saveProfileAsync(updated)
                                             }
                                             OverlayService.updateLiveProfile(updated)
+                                        },
+                                        onBack = { currentScreen = visualEditorOrigin }
+                                    )
+                                } ?: run {
+                                    currentScreen = Screen.PROFILES
+                                }
+                            }
+
+                            Screen.PROFILE_EDIT -> {
+                                editTargetProfile?.let { prof ->
+                                    ProfileEditScreen(
+                                        profile = prof,
+                                        liveRx = liveRx.floatValue,
+                                        liveRy = liveRy.floatValue,
+                                        onSaveProfile = { updated ->
+                                            lifecycleScope.launch { repository.saveProfileAsync(updated) }
+                                            OverlayService.updateLiveProfile(updated)
+                                        },
+                                        onOpenVisualEditor = { target ->
+                                            editTargetProfile = target
+                                            visualEditorOrigin = Screen.PROFILE_EDIT
+                                            currentScreen = Screen.VISUAL_HUD_EDITOR
                                         },
                                         onBack = { currentScreen = Screen.PROFILES }
                                     )
