@@ -164,6 +164,7 @@ describe('Rétention : jours calendaires distincts', () => {
       bind: () => statement(query),
       first: async () => {
         if (/HAVING COUNT\(DISTINCT date\)/.test(query)) return { returning_users: 7 };
+        if (/AS eligible_devices/.test(query)) return { eligible_devices: 20, d1_users: 5 };
         if (/AVG\(CASE WHEN launch_count >= 2/.test(query)) {
           return { total_devices: 10, repeat_users: 2, returned_d1: 4, returned_d7: 1, avg_active_span_hours: 30 };
         }
@@ -186,8 +187,12 @@ describe('Rétention : jours calendaires distincts', () => {
     // Nouvelle métrique, calculée par le Worker (7 appareils revenus un autre jour sur 10)
     expect(json.retention.returning_users).toBe(7);
     expect(json.retention.returning_rate).toBe(70);
-    // Les métriques historiques restent exposées telles quelles
+    // Métriques historiques conservées
     expect(json.retention.total_devices).toBe(10);
     expect(json.retention.repeat_rate).toBe(20);
+    // Rétention en cohorte J+1 : 5 appareils revenus sur 20 éligibles
+    expect(json.retention.d1_cohort_users).toBe(5);
+    expect(json.retention.d1_cohort_eligible).toBe(20);
+    expect(json.retention.d1_cohort_rate).toBe(25);
   });
 });

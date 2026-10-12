@@ -1371,6 +1371,29 @@ app.get('/api/stats', async (c) => {
     const returningUsers = returningData?.returning_users || 0;
     const returningRate = totalDevs > 0 ? Math.round((returningUsers / totalDevs) * 1000) / 10 : 0;
 
+    // Rétention en cohorte J+1 : parmi les appareils dont le premier jour est antérieur à
+    // aujourd'hui (les seuls qui aient pu revenir le lendemain), combien ont une activité le jour
+    // suivant leur premier jour. C'est la définition usuelle de la rétention J1 — là où
+    // `retention_d1` (basée sur `last_seen - first_seen`) ne mesure qu'un écart temporel, et où la
+    // métrique « jours distincts » répond à « est-il revenu un jour, n'importe quand ».
+    const cohortData: any = await c.env.DB.prepare(`
+      WITH cohort AS (
+        SELECT device_hash, date(first_seen / 1000, 'unixepoch') AS d0
+        FROM devices
+        WHERE date(first_seen / 1000, 'unixepoch') < date('now')
+      )
+      SELECT
+        COUNT(*) AS eligible_devices,
+        COUNT(returned.device_hash) AS d1_users
+      FROM cohort c
+      LEFT JOIN daily_activity returned
+        ON returned.device_hash = c.device_hash
+       AND returned.date = date(c.d0, '+1 day')
+    `).first();
+    const d1Eligible = cohortData?.eligible_devices || 0;
+    const d1Users = cohortData?.d1_users || 0;
+    const d1CohortRate = d1Eligible > 0 ? Math.round((d1Users / d1Eligible) * 1000) / 10 : 0;
+
     // Per-device activity breakdown (Top 100 devices by launch_count)
     const { results: deviceActivityResults } = await c.env.DB.prepare(`
       SELECT 
@@ -1411,7 +1434,11 @@ app.get('/api/stats', async (c) => {
         avg_active_span_hours: avgLifespanHours,
         // Rétention pondérée par jours calendaires distincts (voir le commentaire plus haut).
         returning_users: returningUsers,
-        returning_rate: returningRate
+        returning_rate: returningRate,
+        // Rétention en cohorte J+1 (voir le commentaire plus haut).
+        d1_cohort_users: d1Users,
+        d1_cohort_eligible: d1Eligible,
+        d1_cohort_rate: d1CohortRate
       },
       community: {
         total_profiles: profileStats?.total_profiles || 0,
