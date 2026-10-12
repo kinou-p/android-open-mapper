@@ -368,4 +368,61 @@ class LinuxInputReaderTest {
         assertEquals(0x0005, outEvent.code)
         assertEquals(30000L, outEvent.value)
     }
+
+    @Test
+    fun testParseAbsAxisLines_NamesCodesAndKeepsRanges() {
+        val block = """
+            add device 1: /dev/input/event17
+              name:     "PG-9128 Consumer Control"
+              events:
+                KEY (0001): 0130  0131  0132  0133
+                ABS (0003): 0000  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0001  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0002  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0005  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0009  : value 0, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            000a  : value 0, min 0, max 255, fuzz 0, flat 15, resolution 0
+              input props:
+                <none>
+        """.trimIndent()
+
+        assertEquals(
+            listOf(
+                "ABS_X (0000): value 128, min 0, max 255, fuzz 0, flat 15, resolution 0",
+                "ABS_Y (0001): value 128, min 0, max 255, fuzz 0, flat 15, resolution 0",
+                "ABS_Z (0002): value 128, min 0, max 255, fuzz 0, flat 15, resolution 0",
+                "ABS_RZ (0005): value 128, min 0, max 255, fuzz 0, flat 15, resolution 0",
+                "ABS_GAS (0009): value 0, min 0, max 255, fuzz 0, flat 15, resolution 0",
+                "ABS_BRAKE (000a): value 0, min 0, max 255, fuzz 0, flat 15, resolution 0"
+            ),
+            LinuxInputReader.parseAbsAxisLines(block)
+        )
+    }
+
+    @Test
+    fun testParseAbsAxisLines_NoAbsSectionIsEmpty() {
+        assertTrue(LinuxInputReader.parseAbsAxisLines("I: Bus=0005\nN: Name=\"D3\"\n").isEmpty())
+    }
+
+    @Test
+    fun testParseGamepadNodeInfo_CarriesRawAxisLines() {
+        val block = """
+            add device 1: /dev/input/event17
+              name:     "PG-9128 Consumer Control"
+              events:
+                KEY (0001): 0130  0131  0132  0133
+                ABS (0003): 0002  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+                            0005  : value 128, min 0, max 255, fuzz 0, flat 15, resolution 0
+        """.trimIndent()
+
+        val info = LinuxInputReader.parseGamepadNodeInfo(block)
+        assertNotNull(info)
+        assertEquals(
+            listOf(
+                "ABS_Z (0002): value 128, min 0, max 255, fuzz 0, flat 15, resolution 0",
+                "ABS_RZ (0005): value 128, min 0, max 255, fuzz 0, flat 15, resolution 0"
+            ),
+            info!!.absAxes
+        )
+    }
 }

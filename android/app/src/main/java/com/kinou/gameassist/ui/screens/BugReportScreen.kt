@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,6 +63,8 @@ import com.kinou.gameassist.ui.theme.NeonCyan
 import com.kinou.gameassist.ui.theme.TextPrimary
 import com.kinou.gameassist.ui.theme.TextSecondary
 import com.kinou.gameassist.util.AppLog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,12 +76,16 @@ fun BugReportScreen(
 
     var userNote by remember { mutableStateOf("") }
     // Environment and logs are frozen when the screen opens: that is the state at bug time, and it
-    // keeps the preview from re-querying the system on every keystroke.
-    val baseReport = remember(activeProfile) {
-        DiagnosticsReporter.collect(context, activeProfile, userNote = "")
+    // keeps the preview from re-querying the system on every keystroke. Collection reads /dev/input
+    // through Shizuku, so it runs off the main thread.
+    var baseReport by remember(activeProfile) { mutableStateOf<DiagnosticsReport?>(null) }
+    LaunchedEffect(activeProfile) {
+        baseReport = withContext(Dispatchers.IO) {
+            DiagnosticsReporter.collect(context, activeProfile, userNote = "")
+        }
     }
     val reportText = remember(baseReport, userNote) {
-        baseReport.copy(userNote = userNote).format()
+        baseReport?.copy(userNote = userNote)?.format().orEmpty()
     }
 
     Scaffold(
@@ -157,7 +164,7 @@ fun BugReportScreen(
             ) {
                 SelectionContainer {
                     Text(
-                        text = reportText,
+                        text = reportText.ifEmpty { "…" },
                         color = TextSecondary,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
@@ -174,6 +181,7 @@ fun BugReportScreen(
             ) {
                 OutlinedButton(
                     onClick = { copyReport(context, reportText) },
+                    enabled = baseReport != null,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
                 ) {
@@ -182,7 +190,8 @@ fun BugReportScreen(
                     Text(stringResource(R.string.bug_report_copy), fontSize = 12.sp)
                 }
                 Button(
-                    onClick = { shareReport(context, baseReport.copy(userNote = userNote)) },
+                    onClick = { baseReport?.let { shareReport(context, it.copy(userNote = userNote)) } },
+                    enabled = baseReport != null,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(containerColor = NeonCyan, contentColor = DarkBackground)
                 ) {

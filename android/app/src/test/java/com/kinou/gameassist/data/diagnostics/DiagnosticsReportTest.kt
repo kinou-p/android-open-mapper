@@ -15,7 +15,9 @@ class DiagnosticsReportTest {
         profilePackage: String? = "com.activision.callofduty.shooter",
         profileMappings: String? = "{\"buttons\":[]}",
         logLines: List<String> = listOf("[14:01:02.000] I/Engine: started"),
-        logWindow: String? = "412 entries over 1 h 32 min"
+        logWindow: String? = "412 entries over 1 h 32 min",
+        inputNodes: List<InputNodeInfo> = emptyList(),
+        inputNodesUnavailableReason: String? = null
     ) = DiagnosticsReport(
         generatedAt = "2026-10-12 14:03:22",
         userNote = userNote,
@@ -35,7 +37,9 @@ class DiagnosticsReportTest {
         profilePackage = profilePackage,
         profileMappings = profileMappings,
         logLines = logLines,
-        logWindow = logWindow
+        logWindow = logWindow,
+        inputNodes = inputNodes,
+        inputNodesUnavailableReason = inputNodesUnavailableReason
     )
 
     @Test
@@ -47,6 +51,7 @@ class DiagnosticsReportTest {
             "## Environment",
             "## Shizuku",
             "## Controllers",
+            "## Input nodes (/dev/input)",
             "## Active profile",
             "## Logs"
         ).forEach { header ->
@@ -173,5 +178,63 @@ class DiagnosticsReportTest {
         assertNull(combineLogWindow(crashCount = 0, sessionWindow = null))
         assertEquals("1 crash entry", combineLogWindow(crashCount = 1, sessionWindow = null))
         assertEquals("3 crash entries", combineLogWindow(crashCount = 3, sessionWindow = null))
+    }
+
+    @Test
+    fun controllerAxesAreRendered() {
+        val gamepad = GamepadInfo(
+            "PG-9128",
+            "Bluetooth",
+            null,
+            listOf(GamepadAxis("AXIS_Z", -1f, 1f), GamepadAxis("AXIS_RZ", -1f, 1f))
+        )
+        val out = sample(gamepads = listOf(gamepad)).format()
+
+        assertTrue(out.contains("axes: AXIS_Z[-1..1] AXIS_RZ[-1..1]"))
+    }
+
+    @Test
+    fun controllerWithoutAxesIsReportedExplicitly() {
+        val out = sample(gamepads = listOf(GamepadInfo("PG-9128 Consumer Control", "Bluetooth", null))).format()
+
+        assertTrue(out.contains("axes: (none)"))
+    }
+
+    @Test
+    fun fractionalAxisBoundsKeepTheirDecimals() {
+        val gamepad = GamepadInfo("Pad", "USB-C OTG", null, listOf(GamepadAxis("AXIS_X", -0.5f, 0.25f)))
+        val out = sample(gamepads = listOf(gamepad)).format()
+
+        assertTrue(out.contains("AXIS_X[-0.5..0.25]"))
+    }
+
+    @Test
+    fun inputNodesAreRendered() {
+        val node = InputNodeInfo(
+            path = "/dev/input/event5",
+            name = "PG-9128 Consumer Control",
+            layout = "GENERIC_BLUETOOTH",
+            stickRange = "UNSIGNED_16BIT",
+            axes = listOf("ABS_Z (0002): value 128, min 0, max 255, flat 15, fuzz 0")
+        )
+        val out = sample(inputNodes = listOf(node)).format()
+
+        assertTrue(out.contains("/dev/input/event5"))
+        assertTrue(out.contains("\"PG-9128 Consumer Control\" [GENERIC_BLUETOOTH, UNSIGNED_16BIT]"))
+        assertTrue(out.contains("ABS_Z (0002): value 128, min 0, max 255, flat 15, fuzz 0"))
+    }
+
+    @Test
+    fun noInputNodeIsReportedExplicitly() {
+        val out = sample(inputNodes = emptyList()).format()
+
+        assertTrue(out.contains("- (none detected)"))
+    }
+
+    @Test
+    fun unavailableInputNodesShowTheReason() {
+        val out = sample(inputNodesUnavailableReason = "Shizuku RUNNING_UNAUTHORIZED").format()
+
+        assertTrue(out.contains("- (unavailable: Shizuku RUNNING_UNAUTHORIZED)"))
     }
 }

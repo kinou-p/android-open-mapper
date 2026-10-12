@@ -1,10 +1,33 @@
 package com.kinou.gameassist.data.diagnostics
 
+/** One analog/digital axis a controller exposes, from Android's `InputDevice` point of view. */
+data class GamepadAxis(
+    val name: String,
+    val min: Float,
+    val max: Float
+)
+
 /** A connected controller, as shown in the bug report. */
 data class GamepadInfo(
     val name: String,
     val connection: String,
-    val batteryPercent: Int?
+    val batteryPercent: Int?,
+    /** Axes reported by Android (`InputDevice.getMotionRanges`). Empty means Android exposes none. */
+    val axes: List<GamepadAxis> = emptyList()
+)
+
+/**
+ * One raw input node read from `/dev/input`, exactly as the engine's Linux reader sees it. This is
+ * the ground truth for stick/trigger mapping: the Android axes above cannot reveal the kernel
+ * `ABS_*` layout the engine actually maps.
+ */
+data class InputNodeInfo(
+    val path: String,
+    val name: String,
+    val layout: String,
+    val stickRange: String,
+    /** Raw `ABS (0003)` lines, e.g. `ABS_Z (0002): value 128, min 0, max 255, flat 15, fuzz 0`. */
+    val axes: List<String>
 )
 
 /**
@@ -33,7 +56,11 @@ data class DiagnosticsReport(
     val profilePackage: String?,
     val profileMappings: String?,
     val logLines: List<String>,
-    val logWindow: String?
+    val logWindow: String?,
+    /** Controller event nodes from `/dev/input`. Empty when none could be read. */
+    val inputNodes: List<InputNodeInfo> = emptyList(),
+    /** Why [inputNodes] is empty (e.g. Shizuku not authorized), or null when it was read fine. */
+    val inputNodesUnavailableReason: String? = null
 ) {
 
     fun format(): String = buildString {
@@ -67,6 +94,22 @@ data class DiagnosticsReport(
             gamepads.forEach { gamepad ->
                 val battery = gamepad.batteryPercent?.let { "battery $it%" } ?: "battery unknown"
                 appendLine("- ${gamepad.name} - ${gamepad.connection} - $battery")
+                appendLine("  axes: " + renderAxes(gamepad.axes))
+            }
+        }
+        appendLine()
+
+        appendLine("## Input nodes (/dev/input)")
+        when {
+            inputNodesUnavailableReason != null -> appendLine("- (unavailable: $inputNodesUnavailableReason)")
+            inputNodes.isEmpty() -> appendLine("- (none detected)")
+            else -> inputNodes.forEach { node ->
+                appendLine("- ${node.path} \"${node.name}\" [${node.layout}, ${node.stickRange}]")
+                if (node.axes.isEmpty()) {
+                    appendLine("  - (no ABS axes reported)")
+                } else {
+                    node.axes.forEach { appendLine("  - $it") }
+                }
             }
         }
         appendLine()
@@ -89,6 +132,17 @@ data class DiagnosticsReport(
             logLines.forEach { appendLine(it) }
         }
     }
+}
+
+/** Renders the controller axes compactly, e.g. `AXIS_X[-1..1] AXIS_Z[-1..1]`, or `(none)`. */
+private fun renderAxes(axes: List<GamepadAxis>): String =
+    if (axes.isEmpty()) "(none)"
+    else axes.joinToString(" ") { "${it.name}[${formatAxisValue(it.min)}..${formatAxisValue(it.max)}]" }
+
+/** Formats an axis bound without a locale-dependent decimal separator and without trailing zeros. */
+private fun formatAxisValue(value: Float): String {
+    val rounded = kotlin.math.round(value * 100f) / 100f
+    return if (rounded == rounded.toLong().toFloat()) rounded.toLong().toString() else rounded.toString()
 }
 
 /**

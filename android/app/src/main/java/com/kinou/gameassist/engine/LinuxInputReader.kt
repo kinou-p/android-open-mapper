@@ -43,6 +43,141 @@ class LinuxInputReader(
                 .toSet()
         }
 
+        private val absNames = mapOf(
+            0x00 to "ABS_X", 0x01 to "ABS_Y", 0x02 to "ABS_Z",
+            0x03 to "ABS_RX", 0x04 to "ABS_RY", 0x05 to "ABS_RZ",
+            0x06 to "ABS_THROTTLE", 0x07 to "ABS_RUDDER", 0x08 to "ABS_WHEEL",
+            0x09 to "ABS_GAS", 0x0a to "ABS_BRAKE", 0x10 to "ABS_HAT0X", 0x11 to "ABS_HAT0Y"
+        )
+
+        private val ABS_AXIS_LINE = Regex("""^([0-9a-fA-F]{4})\s*:\s*(value\b.*)$""")
+
+        /**
+         * The raw `ABS (0003)` axis lines of one `getevent -p` block, e.g.
+         * `ABS_Z (0002): value 128, min 0, max 255, flat 15, fuzz 0`. One entry per axis, used by the
+         * bug report so a remote reader can see exactly which axes a pad exposes and their ranges.
+         * Empty for `/proc/bus/input/devices` blocks, which only carry a bitmask.
+         */
+        internal fun parseAbsAxisLines(block: String): List<String> {
+            val absSection = block.substringAfter("ABS (0003):", missingDelimiterValue = "")
+            if (absSection.isEmpty()) return emptyList()
+            return absSection.lineSequence()
+                .map { it.trim() }
+                .mapNotNull { line ->
+                    val m = ABS_AXIS_LINE.find(line) ?: return@mapNotNull null
+                    val code = m.groupValues[1].toIntOrNull(16) ?: return@mapNotNull null
+                    val name = absNames[code] ?: "ABS_${m.groupValues[1].lowercase()}"
+                    "$name (${m.groupValues[1]}): ${m.groupValues[2]}"
+                }
+                .toList()
+        }
+
+        private val shizukuNewProcessMethod by lazy {
+            try {
+                val m = Shizuku::class.java.getDeclaredMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                )
+                m.isAccessible = true
+                m
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        private fun spawnShizukuProcess(cmd: Array<String>): Process? {
+            return try {
+                shizukuNewProcessMethod?.invoke(null, cmd, null, null) as? Process
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
+        }
+
+        private fun closeProcessQuietly(proc: Process?, inStream: InputStream? = null) {
+            try { inStream?.close() } catch (_: Exception) {}
+            try { proc?.inputStream?.close() } catch (_: Exception) {}
+            try { proc?.outputStream?.close() } catch (_: Exception) {}
+            try { proc?.errorStream?.close() } catch (_: Exception) {}
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    proc?.destroyForcibly()
+                    proc?.waitFor(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+                } else {
+                    proc?.destroy()
+                }
+            } catch (_: Exception) {}
+        }
+
+        /**
+         * Enumerates the controller event nodes exactly as [LinuxInputReader] reads them at start:
+         * `getevent -p` (primary), `/proc/bus/input/devices` (fallback) or a direct read. Used by the
+         * bug report, which calls it off the main thread.
+         */
+        internal fun inspectNodes(): List<GamepadNodeInfo> = findGamepadEventNodes()
+
+        private fun findGamepadEventNodes(): List<GamepadNodeInfo> {
+            val nodes = mutableListOf<GamepadNodeInfo>()
+            val seenPaths = mutableSetOf<String>()
+            try {
+                var content: String? = null
+
+                // 1. Primary: Use `getevent -p` (UID 2000 ADB via Shizuku) which works reliably on all Android versions
+                try {
+                    val proc = spawnShizukuProcess(arrayOf("getevent", "-p"))
+                    if (proc != null) {
+                        try {
+                            content = proc.inputStream.bufferedReader().use { it.readText() }
+                        } finally {
+                            closeProcessQuietly(proc)
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                // 2. Secondary fallback: `/proc/bus/input/devices` via Shizuku
+                if (content.isNullOrBlank()) {
+                    try {
+                        val proc = spawnShizukuProcess(arrayOf("cat", "/proc/bus/input/devices"))
+                        if (proc != null) {
+                            try {
+                                content = proc.inputStream.bufferedReader().use { it.readText() }
+                            } finally {
+                                closeProcessQuietly(proc)
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // 3. Tertiary fallback: Direct file reading (for root environments)
+                if (content.isNullOrBlank()) {
+                    val f = File("/proc/bus/input/devices")
+                    if (f.exists() && f.canRead()) {
+                        content = f.readText()
+                    }
+                }
+
+                if (!content.isNullOrBlank()) {
+                    val blocks = if (content.contains("add device ")) {
+                        content.split(Regex("""(?=add device \d+:)"""))
+                    } else {
+                        content.split("\n\n")
+                    }
+
+                    for (block in blocks) {
+                        val info = parseGamepadNodeInfo(block)
+                        if (info != null && seenPaths.add(info.nodePath)) {
+                            nodes.add(info)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                // Silently fallback
+            }
+            return nodes
+        }
+
         internal fun parseGamepadNodeInfo(block: String): GamepadNodeInfo? {
             val isVirtualOrInternal = block.contains("uinput", ignoreCase = true) ||
                                       block.contains("xiaomi", ignoreCase = true) ||
@@ -177,7 +312,8 @@ class LinuxInputReader(
                 name = devName,
                 layoutType = layoutType,
                 stickRange = stickRange,
-                isBluetooth = isBluetooth
+                isBluetooth = isBluetooth,
+                absAxes = parseAbsAxisLines(block)
             )
         }
     }
@@ -200,30 +336,6 @@ class LinuxInputReader(
     private val hatDown = AtomicBoolean(false)
     private val hatLeft = AtomicBoolean(false)
     private val hatRight = AtomicBoolean(false)
-
-    private val shizukuNewProcessMethod by lazy {
-        try {
-            val m = Shizuku::class.java.getDeclaredMethod(
-                "newProcess",
-                Array<String>::class.java,
-                Array<String>::class.java,
-                String::class.java
-            )
-            m.isAccessible = true
-            m
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun spawnShizukuProcess(cmd: Array<String>): Process? {
-        return try {
-            shizukuNewProcessMethod?.invoke(null, cmd, null, null) as? Process
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
 
     /**
      * NOTE — suppression du nettoyage par `pkill -f 'cat /dev/input/event'` / `getevent -q`.
@@ -401,21 +513,6 @@ class LinuxInputReader(
     fun restart() {
         stop()
         start()
-    }
-
-    private fun closeProcessQuietly(proc: Process?, inStream: InputStream? = null) {
-        try { inStream?.close() } catch (_: Exception) {}
-        try { proc?.inputStream?.close() } catch (_: Exception) {}
-        try { proc?.outputStream?.close() } catch (_: Exception) {}
-        try { proc?.errorStream?.close() } catch (_: Exception) {}
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                proc?.destroyForcibly()
-                proc?.waitFor(200, java.util.concurrent.TimeUnit.MILLISECONDS)
-            } else {
-                proc?.destroy()
-            }
-        } catch (_: Exception) {}
     }
 
     /**
@@ -707,70 +804,6 @@ class LinuxInputReader(
         }
     }
 
-    /**
-     * Inspects input devices (via Shizuku `getevent -p` or `/proc/bus/input/devices`)
-     * to locate the event nodes and accurately identify their controller layout profile.
-     */
-    private fun findGamepadEventNodes(): List<GamepadNodeInfo> {
-        val nodes = mutableListOf<GamepadNodeInfo>()
-        val seenPaths = mutableSetOf<String>()
-        try {
-            var content: String? = null
-
-            // 1. Primary: Use `getevent -p` (UID 2000 ADB via Shizuku) which works reliably on all Android versions
-            try {
-                val proc = spawnShizukuProcess(arrayOf("getevent", "-p"))
-                if (proc != null) {
-                    try {
-                        content = proc.inputStream.bufferedReader().use { it.readText() }
-                    } finally {
-                        closeProcessQuietly(proc)
-                    }
-                }
-            } catch (_: Exception) {}
-
-            // 2. Secondary fallback: `/proc/bus/input/devices` via Shizuku
-            if (content.isNullOrBlank()) {
-                try {
-                    val proc = spawnShizukuProcess(arrayOf("cat", "/proc/bus/input/devices"))
-                    if (proc != null) {
-                        try {
-                            content = proc.inputStream.bufferedReader().use { it.readText() }
-                        } finally {
-                            closeProcessQuietly(proc)
-                        }
-                    }
-                } catch (_: Exception) {}
-            }
-
-            // 3. Tertiary fallback: Direct file reading (for root environments)
-            if (content.isNullOrBlank()) {
-                val f = File("/proc/bus/input/devices")
-                if (f.exists() && f.canRead()) {
-                    content = f.readText()
-                }
-            }
-
-            if (!content.isNullOrBlank()) {
-                val blocks = if (content.contains("add device ")) {
-                    content.split(Regex("""(?=add device \d+:)"""))
-                } else {
-                    content.split("\n\n")
-                }
-
-                for (block in blocks) {
-                    val info = parseGamepadNodeInfo(block)
-                    if (info != null && seenPaths.add(info.nodePath)) {
-                        nodes.add(info)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            // Silently fallback
-        }
-        return nodes
-    }
-
     private fun isKernel64Bit(): Boolean {
         return try {
             val arch = System.getProperty("os.arch") ?: ""
@@ -786,5 +819,7 @@ data class GamepadNodeInfo(
     val name: String,
     val layoutType: ControllerLayoutType,
     var stickRange: StickRangeMode,
-    val isBluetooth: Boolean
+    val isBluetooth: Boolean,
+    /** Raw `ABS (0003)` lines of the node's `getevent -p` block, for the bug report. */
+    val absAxes: List<String> = emptyList()
 )
