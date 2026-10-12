@@ -11,7 +11,6 @@ import com.kinou.gameassist.util.InputDeviceCallbacks
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -46,7 +45,7 @@ object GamepadDetector {
             override fun onInputDeviceAdded(deviceId: Int) = publish()
 
             override fun onInputDeviceRemoved(deviceId: Int) {
-                batteryCache.remove(deviceId)
+                batteryState.onDeviceRemoved(deviceId)
                 publish()
             }
 
@@ -75,7 +74,7 @@ object GamepadDetector {
      *
      * The query now only ever runs on [batteryExecutor]; [getConnectedGamepads] reads this cache.
      */
-    private val batteryCache = ConcurrentHashMap<Int, Int>()
+    private val batteryState = BatteryState()
     private val batteryRefreshRunning = AtomicBoolean(false)
     private val batteryExecutor = Executors.newSingleThreadExecutor { r ->
         Thread(r, "GamepadBatteryQuery").apply { isDaemon = true }
@@ -94,14 +93,16 @@ object GamepadDetector {
                 try {
                     var changed = false
                     for (id in deviceIds) {
+                        // Génération capturée avant la requête bloquante : si la manette est
+                        // retirée (et remplacée) entre-temps, le résultat est ignoré.
+                        val generation = batteryState.generationOf(id)
                         val percent = try {
                             val cap = InputDevice.getDevice(id)?.batteryState?.capacity
                             if (cap != null && cap in 0.0f..1.0f) (cap * 100).toInt() else null
                         } catch (_: Throwable) {
                             null
                         }
-                        val previous = if (percent != null) batteryCache.put(id, percent) else batteryCache.remove(id)
-                        if (previous != percent) changed = true
+                        if (batteryState.onQueryResult(id, percent, generation)) changed = true
                     }
                     if (changed) onUpdated()
                 } finally {
@@ -217,8 +218,8 @@ object GamepadDetector {
 
                     // 5. Battery info (Bluetooth controllers on Android 12+).
                     // Read from the cache only: InputDevice.getBatteryState() can block for
-                    // seconds and must never run here (see batteryCache).
-                    val battery: Int? = batteryCache[id]
+                    // seconds and must never run here (see batteryState).
+                    val battery: Int? = batteryState.percentOf(id)
 
                     // 6. Accurately detect USB vs Bluetooth safely
                     var isUsbByManager = false
