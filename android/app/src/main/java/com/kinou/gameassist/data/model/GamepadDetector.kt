@@ -11,6 +11,9 @@ import com.kinou.gameassist.util.InputDeviceCallbacks
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class GamepadDevice(
     val id: Int,
@@ -28,26 +31,85 @@ object GamepadDetector {
     fun observeConnectedGamepads(context: Context): Flow<List<GamepadDevice>> = callbackFlow {
         val appContext = context.applicationContext
         val inputManager = appContext.getSystemService(Context.INPUT_SERVICE) as? InputManager
-        val listener = object : InputManager.InputDeviceListener {
-            override fun onInputDeviceAdded(deviceId: Int) {
-                trySend(getConnectedGamepads(appContext))
-            }
 
-            override fun onInputDeviceRemoved(deviceId: Int) {
-                trySend(getConnectedGamepads(appContext))
-            }
-
-            override fun onInputDeviceChanged(deviceId: Int) {
+        // Publie la liste tout de suite (batterie lue depuis le cache, jamais bloquant),
+        // puis rafraîchit la batterie en arrière-plan et republie quand elle est connue.
+        fun publish() {
+            val gamepads = getConnectedGamepads(appContext)
+            trySend(gamepads)
+            refreshBatteryAsync(gamepads.map { it.id }) {
                 trySend(getConnectedGamepads(appContext))
             }
         }
 
+        val listener = object : InputManager.InputDeviceListener {
+            override fun onInputDeviceAdded(deviceId: Int) = publish()
+
+            override fun onInputDeviceRemoved(deviceId: Int) {
+                batteryCache.remove(deviceId)
+                publish()
+            }
+
+            override fun onInputDeviceChanged(deviceId: Int) = publish()
+        }
+
         inputManager?.registerInputDeviceListener(listener, InputDeviceCallbacks.handler)
         // Émettre l'état initial immédiatement
-        trySend(getConnectedGamepads(appContext))
+        publish()
 
         awaitClose {
             inputManager?.unregisterInputDeviceListener(listener)
+        }
+    }
+
+    /**
+     * Battery level cache (deviceId -> percent).
+     *
+     * ANR root cause: `InputDevice.getBatteryState()` is a synchronous Binder call that makes
+     * system_server read the controller's power_supply sysfs node
+     * (`EventHub::getBatteryStatus` -> `ReadFileToString`). For Bluetooth controllers that read
+     * round-trips to the controller and can block for 10 s or more. It used to run inside
+     * [getConnectedGamepads], which is called on the main thread (HomeScreen flow collection,
+     * `GamepadEngine.start()` from `OverlayService.onStartCommand`), so every stall produced an
+     * "Input dispatching timed out" ANR while the engine thread kept mapping normally.
+     *
+     * The query now only ever runs on [batteryExecutor]; [getConnectedGamepads] reads this cache.
+     */
+    private val batteryCache = ConcurrentHashMap<Int, Int>()
+    private val batteryRefreshRunning = AtomicBoolean(false)
+    private val batteryExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "GamepadBatteryQuery").apply { isDaemon = true }
+    }
+
+    /**
+     * Queries the battery level of [deviceIds] off the calling thread and invokes [onUpdated]
+     * (on the worker thread) if any cached value changed. At most one query runs at a time, so a
+     * stalled controller can never pile up blocked threads.
+     */
+    private fun refreshBatteryAsync(deviceIds: List<Int>, onUpdated: () -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || deviceIds.isEmpty()) return
+        if (!batteryRefreshRunning.compareAndSet(false, true)) return
+        try {
+            batteryExecutor.execute {
+                try {
+                    var changed = false
+                    for (id in deviceIds) {
+                        val percent = try {
+                            val cap = InputDevice.getDevice(id)?.batteryState?.capacity
+                            if (cap != null && cap in 0.0f..1.0f) (cap * 100).toInt() else null
+                        } catch (_: Throwable) {
+                            null
+                        }
+                        val previous = if (percent != null) batteryCache.put(id, percent) else batteryCache.remove(id)
+                        if (previous != percent) changed = true
+                    }
+                    if (changed) onUpdated()
+                } finally {
+                    batteryRefreshRunning.set(false)
+                }
+            }
+        } catch (_: Throwable) {
+            batteryRefreshRunning.set(false)
         }
     }
 
@@ -153,16 +215,10 @@ object GamepadDetector {
                     // Must have either real gamepad keys or analog stick axes
                     if (!hasAnyGamepadKey && !hasStickAxes) continue
 
-                    // 5. Battery info (Bluetooth controllers on Android 12+)
-                    var battery: Int? = null
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        try {
-                            val cap = dev.batteryState?.capacity
-                            if (cap != null && cap in 0.0f..1.0f) {
-                                battery = (cap * 100).toInt()
-                            }
-                        } catch (_: Throwable) {}
-                    }
+                    // 5. Battery info (Bluetooth controllers on Android 12+).
+                    // Read from the cache only: InputDevice.getBatteryState() can block for
+                    // seconds and must never run here (see batteryCache).
+                    val battery: Int? = batteryCache[id]
 
                     // 6. Accurately detect USB vs Bluetooth safely
                     var isUsbByManager = false
