@@ -1,8 +1,10 @@
 package com.kinou.gameassist.ui.screens
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -28,13 +30,17 @@ class HomeScreenScrollTest {
     @get:Rule
     val rule = createComposeRule()
 
+    private companion object {
+        const val WINDOW_TAG = "home_window"
+    }
+
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val launchText = context.getString(R.string.btn_launch_overlay)
     private val reportBugText = context.getString(R.string.home_report_bug)
 
     private fun showHome(windowHeight: Dp) {
         rule.setContent {
-            Box(Modifier.size(width = 800.dp, height = windowHeight)) {
+            Box(Modifier.requiredSize(width = 800.dp, height = windowHeight).testTag(WINDOW_TAG)) {
                 HomeScreen(
                     profiles = emptyList(),
                     selectedProfile = null,
@@ -66,10 +72,11 @@ class HomeScreenScrollTest {
 
     @Test
     fun actionsStayPinnedToTheBottomInATallWindow() {
-        val windowHeight = 1600.dp
-        showHome(windowHeight)
+        showHome(windowHeight = 1600.dp)
 
+        // The window is centered (it is taller than the device viewport), so compare with its own bounds
+        val window = rule.onNodeWithTag(WINDOW_TAG).getUnclippedBoundsInRoot()
         val bottom = rule.onNodeWithText(reportBugText, substring = true).getUnclippedBoundsInRoot().bottom
-        assertTrue("the last action should sit at the bottom of the window, bottom=$bottom", bottom > windowHeight - 40.dp)
+        assertTrue("the last action should sit at the bottom of the window: ${window.bottom} vs $bottom", bottom > window.bottom - 40.dp)
     }
 }
