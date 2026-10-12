@@ -555,14 +555,14 @@ Lors de toute intervention future sur ce codebase, **chaque agent ou développeu
 - 📁 **Validation Anti-Path Traversal** : Tout accès fichier basé sur un identifiant externe (profil, image) doit valider l'ID avec `SAFE_ID_REGEX` (`^[a-zA-Z0-9_-]{1,64}$`) et vérifier canoniquement que le chemin résolu se situe dans le répertoire autorisé (`target.canonicalPath.startsWith(allowedDir)`).
 - 🔑 **Secrets & Signature** : Ne jamais hardcoder de secret dans le code source. Toute communication d'écriture avec l'API backend doit être signée par `CommunityApiClient` avec l'en-tête `X-Timestamp` et `X-Signature` calculé via HMAC-SHA256.
 
-### 🧪 3. Validation & Commandes de Test (113 Tests Automatisés)
+### 🧪 3. Validation & Commandes de Test (128 Tests Automatisés)
 Avant de soumettre des modifications, exécuter obligatoirement les suites de tests automatisés :
 
 ```bash
-# 1. Tests Unitaires Backend (Vitest - 37 tests)
+# 1. Tests Unitaires Backend (Vitest - 38 tests)
 npm --prefix backend test
 
-# 2. Tests Unitaires Android (JUnit avec JDK 17 - 76 tests)
+# 2. Tests Unitaires Android (JUnit avec JDK 17 - 90 tests)
 cd android
 JAVA_HOME=/usr/lib/jvm/java-1.17.0-openjdk-amd64 ./gradlew testDebugUnitTest
 
@@ -636,6 +636,10 @@ En cas de dysfonctionnement signalé lors de modifications, consulter cet arbre 
     - Les listeners `InputManager.registerInputDeviceListener` de `GamepadEngine`, `HapticManager` et `GamepadDetector` DOIVENT être enregistrés sur le handler d'arrière-plan partagé `InputDeviceCallbacks.handler`, jamais sur `Handler(Looper.getMainLooper())`.
     - Un branchement/débranchement de manette déclenche `LinuxInputReader.restart()` (destruction puis recréation des processus `cat /dev/input/event*` Shizuku avec `Process.waitFor`, relance de `getevent -p`), `injector.resetAllPointers()` (10 IPC Binder via le service Shizuku) et `HapticManager.refreshGamepadVibrators()` (énumération `InputDevice`/`VibratorManager`, Binder). Exécutés sur le thread principal, ces appels dépassent le délai d'ANR d'input dispatch (5 s) et One UI affiche « OpenMapper ne répond pas » **alors que le moteur (thread dédié) continue de fonctionner** — symptôme trompeur « l'app répond mais l'ANR s'affiche ».
     - De même, `PackageManager.queryIntentActivities()`/`loadLabel()` (sélecteur de jeu) ne doivent jamais tourner dans `remember {}` sur le thread UI : utiliser `produceState` + `Dispatchers.IO`.
+14. **État à remettre à zéro : curseur, combos et cache batterie** :
+    - **Pointeur partagé du curseur** : le curseur réutilise `POINTER_JOYSTICK` (0), qui n'est libéré que par le thread moteur (`processCursorFrame` → `cursorPointerFree`). Ne jamais injecter un `touchDown` curseur depuis le thread d'input avant cette libération : il serait aussitôt annulé par le `touchUp` du relâchement du joystick et le clic serait perdu. Le clic est différé (`cursorDownSent`) et rattrapé par la première frame du mode curseur.
+    - **`ComboRouter`** (déclencheur → combo actif) doit être vidé à *chaque* remise à zéro du moteur : `resetAllInputs()` (déconnexion manette, reset Shizuku), `setInjectionSuspended()` (éditeur HUD ouvert) et `setCursorMode()` (mode curseur). Une entrée périmée détourne le relâchement suivant du même déclencheur vers un combo inactif : `buttonProcessor.onButtonUp()` n'est alors jamais appelé et le bouton du profil reste enfoncé à l'écran (touche fantôme).
+    - **`BatteryState`** capture une génération par appareil avant chaque requête bloquante : un résultat qui arrive après le retrait de la manette est ignoré (Android réattribue les ids d'appareil), et une requête qui ne renvoie pas de capacité conserve la dernière valeur connue au lieu de l'effacer.
 
 ---
 
@@ -643,9 +647,13 @@ En cas de dysfonctionnement signalé lors de modifications, consulter cet arbre 
 
 Les prochaines évolutions architecturales planifiées pour OpenMapper s'articulent autour de 5 axes stratégiques :
 
-1. **🖱️ Mode Souris / Curseur Virtuel** :
-   - Maintien d'une combinaison raccourci (`L3/R3` ou `Select + R3`) transformant temporairement le stick droit en curseur à l'écran.
-   - *Composants cibles* : [`CameraProcessor.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/CameraProcessor.kt), [`GamepadEngine.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/GamepadEngine.kt).
+*Déjà livré depuis la roadmap initiale* : les **combos 2 boutons** (`BUTTON_R1+BUTTON_X`) assignables depuis l'éditeur HUD (index précalculé dans `ButtonProcessor`, lookup sans allocation) et le **mode curseur virtuel** (ci-dessous).
+
+1. **🖱️ Mode Souris / Curseur Virtuel — ✅ LIVRÉ** :
+   - `L3+R3` bascule le mode ; le stick le plus incliné (gauche ou droit) déplace un curseur à courbe quadratique, `A` tape (maintenu = glisser), `B` quitte, D-pad haut/droite et bas/gauche règlent la vitesse de 0.25x à 5x avec libellé à l'écran, vitesse persistée dans `cursor_speed`.
+   - Pendant le mode curseur, mappings, joystick de déplacement et caméra sont coupés (`buttonProcessor.releaseAll()`), et le pointeur tactile du joystick est réutilisé pour le clic (gotcha n°14).
+   - *Composants* : [`CursorOverlayView.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/ui/overlay/CursorOverlayView.kt), [`GamepadEngine.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/GamepadEngine.kt), [`OverlayService.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/service/OverlayService.kt).
+   - *Reste à faire* : auto-repeat du D-pad pour régler la vitesse, slider de vitesse dans l'éditeur de profil, vérification de l'opacité de la surcouche (voir gotcha n°14).
 2. **🔌 Pilote Direct USB Host Rumble (Impulse Triggers & Bypass OEM)** :
    - Communication directe de bas niveau (`android.hardware.usb.UsbManager` / `UsbDeviceConnection`) pour manettes connectées en USB-C OTG (Xbox Elite Series 1 & 2, DualSense).
    - Contourne le pilote noyau Android `xpad` souvent dépourvu de support Force Feedback (`EV_FF`) sur certaines ROMs OEM (Xiaomi HyperOS).
