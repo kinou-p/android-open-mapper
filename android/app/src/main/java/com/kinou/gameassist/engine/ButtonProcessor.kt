@@ -59,6 +59,33 @@ class ButtonProcessor(
                                btn.gamepadButton.equals("AXIS_LTRIGGER", ignoreCase = true)
             return matchId || matchLabel || matchGamepad
         }
+
+        /**
+         * Normalise une clé de bouton : " button_r1 + button_x " -> "BUTTON_R1+BUTTON_X".
+         * Une clé malformée perd ses parties vides ("BUTTON_R1+" -> "BUTTON_R1") et redevient donc
+         * un appui simple, au lieu de créer un combo mort jamais déclenchable.
+         */
+        internal fun canonicalGamepadKey(raw: String): String =
+            raw.split('+')
+                .map { it.trim().uppercase() }
+                .filter { it.isNotEmpty() }
+                .joinToString("+")
+
+        /**
+         * Décompose une clé combo ("BUTTON_R1+BUTTON_X").
+         *
+         * @return (modificateur, déclencheur), ou null si la clé n'est pas un combo bien formé :
+         *         il faut exactement deux parties distinctes et non vides. Une clé à trois parties
+         *         ou un auto-combo ("BUTTON_X+BUTTON_X") est ignorée.
+         */
+        internal fun parseCombo(key: String): Pair<String, String>? {
+            val parts = key.split('+')
+            if (parts.size != 2) return null
+            val modifier = parts[0].trim().uppercase()
+            val trigger = parts[1].trim().uppercase()
+            if (modifier.isEmpty() || trigger.isEmpty() || modifier == trigger) return null
+            return modifier to trigger
+        }
     }
 
     private class PendingTapSlot {
@@ -80,6 +107,7 @@ class ButtonProcessor(
     // Index des combos "MODIFICATEUR+DÉCLENCHEUR" par déclencheur, précalculé dans updateButtons()
     // pour que findCombo() ne fasse aucune allocation sur le thread d'input.
     private class ComboIndex(val modifiers: Array<String>, val comboKeys: Array<String>)
+    private class ComboSpec(val trigger: String, val modifier: String, val comboKey: String)
     @Volatile private var combosByTrigger: Map<String, ComboIndex> = emptyMap()
     @Volatile private var settings: GameSettings = GameSettings()
     private val activePointers = ConcurrentHashMap<String, Int>()
@@ -133,12 +161,16 @@ class ButtonProcessor(
             }
 
             buttons = snapshot
-            buttonsByGamepadKey = snapshot.groupBy { it.gamepadButton.trim().uppercase() }
+            buttonsByGamepadKey = snapshot.groupBy { canonicalGamepadKey(it.gamepadButton) }
+            // Combos : seules les clés bien formées ("MODIFICATEUR+DÉCLENCHEUR") sont indexées, dans
+            // l'ordre des boutons du profil (celui de la liste `buttons`). Voir findCombo().
             combosByTrigger = buttonsByGamepadKey.keys
-                .filter { '+' in it }
-                .groupBy { it.substringAfterLast('+') }
-                .mapValues { (_, keys) ->
-                    ComboIndex(keys.map { it.substringBeforeLast('+') }.toTypedArray(), keys.toTypedArray())
+                .mapNotNull { key ->
+                    parseCombo(key)?.let { (modifier, trigger) -> ComboSpec(trigger, modifier, key) }
+                }
+                .groupBy { it.trigger }
+                .mapValues { (_, specs) ->
+                    ComboIndex(specs.map { it.modifier }.toTypedArray(), specs.map { it.comboKey }.toTypedArray())
                 }
             fireButtonIds = snapshot.filter { isFireButtonStatic(it) }.map { it.id }.toSet()
             adsButtonIds = snapshot.filter { isAdsButtonStatic(it) }.map { it.id }.toSet()
@@ -166,6 +198,11 @@ class ButtonProcessor(
     /**
      * Returns the combo key (e.g. "BUTTON_R1+BUTTON_X") bound to [trigger] whose modifier is in
      * [heldButtons], or null. Allocation-free.
+     *
+     * Règle de precedence : si plusieurs modificateurs configurés visent le même déclencheur et
+     * sont maintenus en même temps, c'est le premier dans l'ordre des boutons du profil qui
+     * tranche — de façon déterministe. L'éditeur HUD refuse d'assigner deux combos au même
+     * déclencheur, donc ce cas ne devrait apparaître que sur un profil importé.
      */
     fun findCombo(trigger: String, heldButtons: Set<String>): String? {
         val index = combosByTrigger[trigger] ?: return null
