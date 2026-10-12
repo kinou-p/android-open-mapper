@@ -471,10 +471,8 @@ class GamepadEngine(
 
                 while (isRunning) {
                     try {
-                        val camCfg = cameraProcessor.config
                         val cursorActive = isCursorMode
                         val isFiring = !cursorActive && (rtPressed || buttonProcessor.isFireActive())
-                        val isAds = ltPressed || buttonProcessor.isAdsActive()
                         if (isInjectionSuspended) {
                             if (!suspendPrepared) {
                                 movementProcessor.release()
@@ -486,6 +484,8 @@ class GamepadEngine(
                         } else {
                             suspendPrepared = false
                             cursorPrepared = false
+                            val isAds = ltPressed || buttonProcessor.isAdsActive()
+                            val camCfg = cameraProcessor.config
                             val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
                             movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
                             cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
