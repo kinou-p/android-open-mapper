@@ -307,6 +307,47 @@ class HudEditorOverlayView(
     private val btnRemRect = RectF()
     private val btnShowRect = RectF()
 
+    /**
+     * Hauteur courante de la barre du haut. Elle n'est plus fixe : en portrait, la barre se replie
+     * sur plusieurs rangées (ToolbarLayout) au lieu de laisser ses derniers boutons hors écran.
+     * Sert au fond, à la bannière d'apprentissage et à la zone tactile réservée.
+     */
+    private var topBarHeight = 0f
+
+    /** Bouton d'une barre d'outils : largeur, styles, et le rect touché/dessiné. */
+    private class BarButton(
+        val label: String,
+        val width: Float,
+        val textSize: Float,
+        val bgColor: Int,
+        val textColor: Int,
+        val strokeColor: Int?,
+        val rect: RectF
+    )
+
+    /** Dessine un bouton à l'emplacement calculé par [ToolbarLayout] et met à jour son rect tactile. */
+    private fun drawBarButton(
+        canvas: Canvas,
+        button: BarButton,
+        slot: ToolbarLayout.Slot,
+        rowHeight: Float,
+        radius: Float
+    ) {
+        val top = slot.row * rowHeight + 7f * density
+        val bottom = slot.row * rowHeight + rowHeight - 7f * density
+        button.rect.set(slot.left, top, slot.right, bottom)
+
+        uiBtnBgPaint.color = button.bgColor
+        canvas.drawRoundRect(button.rect, radius, radius, uiBtnBgPaint)
+        button.strokeColor?.let { stroke ->
+            uiBtnStrokePaint.color = stroke
+            canvas.drawRoundRect(button.rect, radius, radius, uiBtnStrokePaint)
+        }
+        uiBtnTextPaint.color = button.textColor
+        uiBtnTextPaint.textSize = button.textSize
+        canvas.drawText(button.label, button.rect.centerX(), button.rect.centerY() + 5f * density, uiBtnTextPaint)
+    }
+
     // Draggable Floating "Outils" Button State
     private var showBtnNormX = -1f
     private var showBtnNormY = -1f
@@ -541,6 +582,7 @@ class HudEditorOverlayView(
             btnAddRect.setEmpty()
             btnShotRect.setEmpty()
             btnRemRect.setEmpty()
+            topBarHeight = 0f
 
             // Draw sleek floating pill to reopen the top bar (Draggable anywhere)
             val showW = 110f * density
@@ -581,154 +623,144 @@ class HudEditorOverlayView(
         // Expanded Top Bar
         btnShowRect.setEmpty()
 
-        val barH = 54f * density
-        val btnTop = 7f * density
-        val btnBottom = barH - 7f * density
+        val rowHeight = 54f * density
         val btnRadius = 10f * density
         val btnSpacing = 8f * density
+        val barMargin = 16f * density
 
-        canvas.drawRect(0f, 0f, w, barH, barBgPaint)
-
-        // 1. Button: 👁️ Masquer (on the far left)
+        // 1. Bouton « Masquer », ancré à gauche de la première rangée (réservé dans le placement)
         val hideLabel = context.getString(R.string.overlay_btn_hide_bar)
-        uiBtnTextPaint.color = 0xFF00F0FF.toInt()
-        uiBtnTextPaint.textSize = 14f * density
+        val hideTextSize = 14f * density
+        uiBtnTextPaint.textSize = hideTextSize
         val hideW = max(88f * density, uiBtnTextPaint.measureText(hideLabel) + 20f * density)
-        val hideLeft = 16f * density
-        btnHideRect.set(hideLeft, btnTop, hideLeft + hideW, btnBottom)
+
+        /**
+         * Décrit un bouton : sa largeur est calculée AVANT le dessin, ce qui permet à la barre de se
+         * replier sur plusieurs rangées au lieu de laisser des boutons hors écran.
+         */
+        fun spec(
+            label: String,
+            minWidthDp: Float,
+            textSizeDp: Float,
+            bgColor: Int,
+            textColor: Int = Color.WHITE,
+            strokeColor: Int? = null,
+            rect: RectF
+        ): BarButton {
+            val textSize = textSizeDp * density
+            uiBtnTextPaint.textSize = textSize
+            return BarButton(
+                label = label,
+                width = max(minWidthDp * density, uiBtnTextPaint.measureText(label) + 20f * density),
+                textSize = textSize,
+                bgColor = bgColor,
+                textColor = textColor,
+                strokeColor = strokeColor,
+                rect = rect
+            )
+        }
+
+        // 2. Boutons alignés à droite, dans l'ordre de dessin (index 0 = le plus à droite)
+        val buttons = ArrayList<BarButton>(9)
+
+        buttons += spec(
+            context.getString(R.string.overlay_btn_close),
+            78f, 14.5f, 0xFF333D4D.toInt(), Color.WHITE, null, btnCloseRect
+        )
+        buttons += spec(
+            context.getString(R.string.overlay_btn_save),
+            84f, 14.5f, 0xFF00FF66.toInt(), Color.BLACK, null, btnSaveRect
+        )
+
+        val strafeActive = profile.joystick.jiggleStrafe
+        buttons += spec(
+            if (strafeActive) context.getString(R.string.overlay_strafe_on) else context.getString(R.string.overlay_strafe_off),
+            94f, 13.5f,
+            if (strafeActive) 0xFF00FF66.toInt() else 0xFF1E2633.toInt(),
+            if (strafeActive) Color.BLACK else Color.WHITE,
+            if (strafeActive) 0xFF00FF66.toInt() else 0xFF445566.toInt(),
+            btnStrafeRect
+        )
+
+        val recoilActive = profile.camera.antiRecoilEnabled
+        buttons += spec(
+            if (recoilActive) context.getString(R.string.overlay_recoil_on) else context.getString(R.string.overlay_recoil_off),
+            94f, 13.5f,
+            if (recoilActive) 0xFFFF9900.toInt() else 0xFF1E2633.toInt(),
+            if (recoilActive) Color.BLACK else Color.WHITE,
+            if (recoilActive) 0xFFFF9900.toInt() else 0xFF445566.toInt(),
+            btnRecoilRect
+        )
+
+        buttons += spec(
+            context.getString(R.string.overlay_btn_opacity, (opacitySteps[opacityIndex] * 100).toInt()),
+            80f, 13.5f, 0xFF1E2633.toInt(), Color.WHITE, null, btnOpacRect
+        )
+        buttons += spec(
+            context.getString(R.string.overlay_btn_details),
+            64f, 14f,
+            if (showDetails) 0xFF243040.toInt() else 0xFF18202A.toInt(),
+            if (showDetails) 0xFF00F0FF.toInt() else 0xFF708090.toInt(),
+            null,
+            btnDetailsRect
+        )
+        buttons += spec(
+            context.getString(R.string.overlay_btn_add),
+            80f, 14.5f, 0xFF00F0FF.toInt(), Color.BLACK, null, btnAddRect
+        )
+
+        if (onOpenGallery != null) {
+            buttons += spec(
+                if (screenshotBitmap != null) context.getString(R.string.btn_change_screenshot) else context.getString(R.string.btn_import_screenshot),
+                95f, 13.5f, 0xFF1E2838.toInt(), 0xFF00F0FF.toInt(), 0xFF00F0FF.toInt(), btnShotRect
+            )
+        } else {
+            btnShotRect.setEmpty()
+        }
+
+        if (screenshotBitmap != null && onRemoveScreenshot != null) {
+            buttons += spec(
+                context.getString(R.string.btn_remove_screenshot),
+                86f, 13.5f, 0x33FF0055.toInt(), 0xFFFF0055.toInt(), 0xFFFF0055.toInt(), btnRemRect
+            )
+        } else {
+            btnRemRect.setEmpty()
+        }
+
+        // 3. Placement : une ou plusieurs rangées, jamais hors de l'écran
+        val layout = ToolbarLayout(
+            availableWidth = w,
+            margin = barMargin,
+            spacing = btnSpacing,
+            rowHeight = rowHeight,
+            firstRowLeftReserve = hideW + btnSpacing
+        )
+        val placement = layout.place(buttons.map { it.width })
+        topBarHeight = placement.height
+
+        canvas.drawRect(0f, 0f, w, topBarHeight, barBgPaint)
+
+        // 4. Bouton « Masquer » : première rangée, à gauche
+        uiBtnTextPaint.color = 0xFF00F0FF.toInt()
+        uiBtnTextPaint.textSize = hideTextSize
+        btnHideRect.set(barMargin, 7f * density, barMargin + hideW, rowHeight - 7f * density)
         uiBtnBgPaint.color = 0xFF1E2838.toInt()
         uiBtnStrokePaint.color = 0xFF00F0FF.toInt()
         canvas.drawRoundRect(btnHideRect, btnRadius, btnRadius, uiBtnBgPaint)
         canvas.drawRoundRect(btnHideRect, btnRadius, btnRadius, uiBtnStrokePaint)
         canvas.drawText(hideLabel, btnHideRect.centerX(), btnHideRect.centerY() + 5f * density, uiBtnTextPaint)
 
-        // Right-aligned Buttons
-        var curRight = w - 16f * density
-
-        // 2. Button: ✖ Fermer
-        val closeLabel = context.getString(R.string.overlay_btn_close)
-        uiBtnTextPaint.color = Color.WHITE
-        uiBtnTextPaint.textSize = 14.5f * density
-        val closeW = max(78f * density, uiBtnTextPaint.measureText(closeLabel) + 20f * density)
-        btnCloseRect.set(curRight - closeW, btnTop, curRight, btnBottom)
-        uiBtnBgPaint.color = 0xFF333D4D.toInt()
-        canvas.drawRoundRect(btnCloseRect, btnRadius, btnRadius, uiBtnBgPaint)
-        canvas.drawText(closeLabel, btnCloseRect.centerX(), btnCloseRect.centerY() + 5f * density, uiBtnTextPaint)
-        curRight -= (closeW + btnSpacing)
-
-        // 3. Button: 💾 Sauvegarder
-        val saveLabel = context.getString(R.string.overlay_btn_save)
-        uiBtnTextPaint.color = Color.BLACK
-        uiBtnTextPaint.textSize = 14.5f * density
-        val saveW = max(84f * density, uiBtnTextPaint.measureText(saveLabel) + 20f * density)
-        btnSaveRect.set(curRight - saveW, btnTop, curRight, btnBottom)
-        uiBtnBgPaint.color = 0xFF00FF66.toInt()
-        canvas.drawRoundRect(btnSaveRect, btnRadius, btnRadius, uiBtnBgPaint)
-        canvas.drawText(saveLabel, btnSaveRect.centerX(), btnSaveRect.centerY() + 5f * density, uiBtnTextPaint)
-        curRight -= (saveW + btnSpacing)
-
-        // 4. Button: ⚡ Strafe Quick Toggle
-        val strafeActive = profile.joystick.jiggleStrafe
-        val strafeLabel = if (strafeActive) context.getString(R.string.overlay_strafe_on) else context.getString(R.string.overlay_strafe_off)
-        uiBtnTextPaint.color = if (strafeActive) Color.BLACK else Color.WHITE
-        uiBtnTextPaint.textSize = 13.5f * density
-        val strafeW = max(94f * density, uiBtnTextPaint.measureText(strafeLabel) + 20f * density)
-        btnStrafeRect.set(curRight - strafeW, btnTop, curRight, btnBottom)
-        uiBtnBgPaint.color = if (strafeActive) 0xFF00FF66.toInt() else 0xFF1E2633.toInt()
-        uiBtnStrokePaint.color = if (strafeActive) 0xFF00FF66.toInt() else 0xFF445566.toInt()
-        canvas.drawRoundRect(btnStrafeRect, btnRadius, btnRadius, uiBtnBgPaint)
-        canvas.drawRoundRect(btnStrafeRect, btnRadius, btnRadius, uiBtnStrokePaint)
-        canvas.drawText(strafeLabel, btnStrafeRect.centerX(), btnStrafeRect.centerY() + 5f * density, uiBtnTextPaint)
-        curRight -= (strafeW + btnSpacing)
-
-        // 4b. Button: 🎯 Recul Quick Toggle
-        val recoilActive = profile.camera.antiRecoilEnabled
-        val recoilLabel = if (recoilActive) context.getString(R.string.overlay_recoil_on) else context.getString(R.string.overlay_recoil_off)
-        uiBtnTextPaint.color = if (recoilActive) Color.BLACK else Color.WHITE
-        uiBtnTextPaint.textSize = 13.5f * density
-        val recoilW = max(94f * density, uiBtnTextPaint.measureText(recoilLabel) + 20f * density)
-        btnRecoilRect.set(curRight - recoilW, btnTop, curRight, btnBottom)
-        uiBtnBgPaint.color = if (recoilActive) 0xFFFF9900.toInt() else 0xFF1E2633.toInt()
-        uiBtnStrokePaint.color = if (recoilActive) 0xFFFF9900.toInt() else 0xFF445566.toInt()
-        canvas.drawRoundRect(btnRecoilRect, btnRadius, btnRadius, uiBtnBgPaint)
-        canvas.drawRoundRect(btnRecoilRect, btnRadius, btnRadius, uiBtnStrokePaint)
-        canvas.drawText(recoilLabel, btnRecoilRect.centerX(), btnRecoilRect.centerY() + 5f * density, uiBtnTextPaint)
-        curRight -= (recoilW + btnSpacing)
-
-        // 5. Button: 🎨 Opacité Toggle
-        val opacPercent = (opacitySteps[opacityIndex] * 100).toInt()
-        val opacLabel = context.getString(R.string.overlay_btn_opacity, opacPercent)
-        uiBtnTextPaint.color = Color.WHITE
-        uiBtnTextPaint.textSize = 13.5f * density
-        val opacW = max(80f * density, uiBtnTextPaint.measureText(opacLabel) + 20f * density)
-        btnOpacRect.set(curRight - opacW, btnTop, curRight, btnBottom)
-        uiBtnBgPaint.color = 0xFF1E2633.toInt()
-        canvas.drawRoundRect(btnOpacRect, btnRadius, btnRadius, uiBtnBgPaint)
-        canvas.drawText(opacLabel, btnOpacRect.centerX(), btnOpacRect.centerY() + 5f * density, uiBtnTextPaint)
-        curRight -= (opacW + btnSpacing)
-
-        // 5. Button: Details Bar Toggle
-        val detailsLabel = context.getString(R.string.overlay_btn_details)
-        uiBtnTextPaint.color = if (showDetails) 0xFF00F0FF.toInt() else 0xFF708090.toInt()
-        uiBtnTextPaint.textSize = 14f * density
-        val detailsW = max(64f * density, uiBtnTextPaint.measureText(detailsLabel) + 20f * density)
-        btnDetailsRect.set(curRight - detailsW, btnTop, curRight, btnBottom)
-        uiBtnBgPaint.color = if (showDetails) 0xFF243040.toInt() else 0xFF18202A.toInt()
-        canvas.drawRoundRect(btnDetailsRect, btnRadius, btnRadius, uiBtnBgPaint)
-        canvas.drawText(detailsLabel, btnDetailsRect.centerX(), btnDetailsRect.centerY() + 5f * density, uiBtnTextPaint)
-        curRight -= (detailsW + btnSpacing)
-
-        // 6. Button: ➕ Ajouter Bouton
-        val addLabel = context.getString(R.string.overlay_btn_add)
-        uiBtnTextPaint.color = Color.BLACK
-        uiBtnTextPaint.textSize = 14.5f * density
-        val addW = max(80f * density, uiBtnTextPaint.measureText(addLabel) + 20f * density)
-        btnAddRect.set(curRight - addW, btnTop, curRight, btnBottom)
-        uiBtnBgPaint.color = 0xFF00F0FF.toInt()
-        canvas.drawRoundRect(btnAddRect, btnRadius, btnRadius, uiBtnBgPaint)
-        canvas.drawText(addLabel, btnAddRect.centerX(), btnAddRect.centerY() + 5f * density, uiBtnTextPaint)
-        curRight -= (addW + btnSpacing)
-
-        // 7. Button: 📸 Capture / Screenshot (si callback présent)
-        if (onOpenGallery != null) {
-            val shotLabel = if (screenshotBitmap != null) context.getString(R.string.btn_change_screenshot) else context.getString(R.string.btn_import_screenshot)
-            uiBtnTextPaint.color = 0xFF00F0FF.toInt()
-            uiBtnTextPaint.textSize = 13.5f * density
-            val shotW = max(95f * density, uiBtnTextPaint.measureText(shotLabel) + 22f * density)
-            btnShotRect.set(curRight - shotW, btnTop, curRight, btnBottom)
-            uiBtnBgPaint.color = 0xFF1E2838.toInt()
-            uiBtnStrokePaint.color = 0xFF00F0FF.toInt()
-            canvas.drawRoundRect(btnShotRect, btnRadius, btnRadius, uiBtnBgPaint)
-            canvas.drawRoundRect(btnShotRect, btnRadius, btnRadius, uiBtnStrokePaint)
-            canvas.drawText(shotLabel, btnShotRect.centerX(), btnShotRect.centerY() + 5f * density, uiBtnTextPaint)
-            curRight -= (shotW + btnSpacing)
-        } else {
-            btnShotRect.setEmpty()
-        }
-
-        // 8. Button: 🗑️ Retirer Fond (si capture chargée et callback présent)
-        if (screenshotBitmap != null && onRemoveScreenshot != null) {
-            val remLabel = context.getString(R.string.btn_remove_screenshot)
-            uiBtnTextPaint.color = 0xFFFF0055.toInt()
-            uiBtnTextPaint.textSize = 13.5f * density
-            val remW = max(86f * density, uiBtnTextPaint.measureText(remLabel) + 22f * density)
-            btnRemRect.set(curRight - remW, btnTop, curRight, btnBottom)
-            uiBtnBgPaint.color = 0x33FF0055.toInt()
-            uiBtnStrokePaint.color = 0xFFFF0055.toInt()
-            canvas.drawRoundRect(btnRemRect, btnRadius, btnRadius, uiBtnBgPaint)
-            canvas.drawRoundRect(btnRemRect, btnRadius, btnRadius, uiBtnStrokePaint)
-            canvas.drawText(remLabel, btnRemRect.centerX(), btnRemRect.centerY() + 5f * density, uiBtnTextPaint)
-            curRight -= (remW + btnSpacing)
-        } else {
-            btnRemRect.setEmpty()
+        // 5. Boutons de droite à gauche, répartis sur les rangées calculées
+        buttons.forEachIndexed { index, button ->
+            drawBarButton(canvas, button, placement.slots[index], rowHeight, btnRadius)
         }
 
         if (isLearning && selectedButton != null) {
             val bannerH = 40f * density
-            canvas.drawRect(0f, barH, w, barH + bannerH, bannerBgPaint)
+            canvas.drawRect(0f, topBarHeight, w, topBarHeight + bannerH, bannerBgPaint)
             canvas.drawText(
                 context.getString(R.string.overlay_learning_banner, selectedButton?.label ?: ""),
-                w / 2f, barH + bannerH / 2f + 5f * density, bannerTextPaint
+                w / 2f, topBarHeight + bannerH / 2f + 5f * density, bannerTextPaint
             )
         }
     }
@@ -1074,8 +1106,7 @@ class HudEditorOverlayView(
                     }
 
                     // If tap is inside the top bar background area (not on a button), consume it
-                    val barH = 54f * density
-                    if (ty <= barH) {
+                    if (ty <= topBarHeight) {
                         return true
                     }
                 }
