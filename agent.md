@@ -71,7 +71,7 @@ timeline
     2026-09-03 : v1.2.2 : Détection matérielle des plages de sticks (min/max getevent -p), Zéro-Allocation IPC & Taps (240 Hz), Fallback dynamique Shizuku/IInputManager Android 11-15+
     2026-10-07 : v1.2.3 : Correctif ANR Samsung One UI 8.5, sélecteur de package de jeu par profil, analytics backend (pays, heatmap horaire, rétention par cohorte)
     2026-10-07 : v1.2.4-beta : Hotplug des manettes déporté sur un HandlerThread dédié, lecture batterie hors thread principal
-    2026-10-12 : (non tagué) : Combos 2 boutons, Mode curseur virtuel (L3+R3), refonte des écrans profils (liste / édition), rapport de bug in-app & diagnostics, durcissement post-merge & CI Actions v5
+    2026-10-12 : v1.2.5 : Combos 2 boutons, Mode curseur virtuel (L3+R3) avec slider de vitesse, refonte des écrans profils (liste / édition), rapport de bug in-app & diagnostics, durcissement post-merge & CI Actions v5
 ```
 
 ### Détail des Phases de Développement :
@@ -126,7 +126,7 @@ timeline
    - **Double Fallback Résilient `IInputManagerHelper`** : Détection dynamique AIDL / Réflexion 2 et 3 paramètres garantissant une compatibilité transparente d'Android 11 à Android 15+. Isolation des cancels préventifs de démarrage pour ne jamais tuer le helper au lancement.
    - **Filtrage matériel & Bluetooth générique** : Exclusion des touches physiques du téléphone (`keypad`/`kpd`), routage précis des manettes Bluetooth tierces (`GENERIC_BLUETOOTH`) et seuils de gâchettes 0..255 recalibrés.
 
-10. **Combos, Curseur Virtuel & Durcissement Post-Merge v1.2.3 ➔ `main` (non tagué)** :
+10. **Combos, Curseur Virtuel & Durcissement Post-Merge v1.2.3 ➔ v1.2.5** :
    - **Correctif ANR Samsung One UI 8.5 (v1.2.3)** : cf. commit `59d38d0`.
    - **Sélecteur de package de jeu par profil (v1.2.3)** : dialogue de sélection d'application (icône + label) mémorisé dans `profile.packageName` et affiché dans l'éditeur.
    - **Analytics backend** : géolocalisation par pays, heatmap horaire d'activité et rétention par cohorte exposées par `/api/stats`.
