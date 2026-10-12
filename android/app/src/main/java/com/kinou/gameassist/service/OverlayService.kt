@@ -50,6 +50,9 @@ class OverlayService : LifecycleService() {
         const val ACTION_STOP = "ACTION_STOP"
         const val EXTRA_PROFILE_ID = "EXTRA_PROFILE_ID"
 
+        // Délai avant d'écrire la vitesse du curseur sur disque (voir cursorSpeedSave).
+        private const val CURSOR_SPEED_SAVE_DEBOUNCE_MS = 400L
+
         private val _isServiceRunning = MutableStateFlow(false)
         val isServiceRunningFlow: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
         val isServiceRunning: Boolean get() = _isServiceRunning.value
@@ -85,6 +88,15 @@ class OverlayService : LifecycleService() {
         cursorRedrawPending.set(false)
         cursorView?.update(engine.cursorX, engine.cursorY, engine.isCursorTouching)
     }
+    // Le D-pad peut être pressé 16 fois d'affilée (0.25x par cran) : on diffère l'écriture disque
+    // et on sauvegarde une copie immuable plutôt que de muter l'objet vivant du StateFlow.
+    private val cursorSpeedSave = Runnable {
+        val profile = currentProfile ?: return@Runnable
+        val updated = profile.deepCopy()
+        updated.settings.cursorSpeed = engine.cursorSpeed
+        currentProfile = updated
+        lifecycleScope.launch { repository.saveProfileAsync(updated) }
+    }
     private var currentEditorBitmap: Bitmap? = null
     private var screenshotLoadJob: kotlinx.coroutines.Job? = null
 
@@ -114,10 +126,8 @@ class OverlayService : LifecycleService() {
         engine.onCursorSpeedChanged = { speed ->
             mainHandler.post {
                 cursorView?.showLabel(formatCursorSpeed(speed))
-                currentProfile?.let { profile ->
-                    profile.settings.cursorSpeed = speed
-                    lifecycleScope.launch { repository.saveProfileAsync(profile) }
-                }
+                mainHandler.removeCallbacks(cursorSpeedSave)
+                mainHandler.postDelayed(cursorSpeedSave, CURSOR_SPEED_SAVE_DEBOUNCE_MS)
             }
         }
 
@@ -614,6 +624,7 @@ class OverlayService : LifecycleService() {
 
     override fun onDestroy() {
         _isServiceRunning.value = false
+        mainHandler.removeCallbacks(cursorSpeedSave)
         try {
             unregisterReceiver(bluetoothDisconnectReceiver)
         } catch (_: Exception) {}
