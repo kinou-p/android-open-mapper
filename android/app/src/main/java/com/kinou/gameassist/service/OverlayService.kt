@@ -602,7 +602,7 @@ class OverlayService : LifecycleService() {
 
     private fun showHotSwitchToast(profileName: String) {
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            android.widget.Toast.makeText(applicationContext, "🎮 Profil actif : $profileName", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(applicationContext, getString(R.string.overlay_active_profile_toast, profileName), android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 

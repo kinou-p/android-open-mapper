@@ -360,10 +360,10 @@ fun HomeScreen(
                         if (launchIntent != null) {
                             context.startActivity(launchIntent)
                         } else {
-                            Toast.makeText(context, "${selectedProfile.packageName} not installed", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.app_not_installed_toast, selectedProfile.packageName), Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
-                        Toast.makeText(context, "Cannot launch app", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.cannot_launch_app_toast), Toast.LENGTH_SHORT).show()
                     }
                 },
                 shape = RoundedCornerShape(12.dp),
@@ -619,7 +619,7 @@ fun HomeScreen(
                                 coroutineScope.launch {
                                     val res = AppUpdateManager.installApk(context, downloadedApkFile!!)
                                     if (res.isFailure) {
-                                        Toast.makeText(context, "Erreur install: ${res.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.install_error_toast, res.exceptionOrNull()?.message ?: ""), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             },

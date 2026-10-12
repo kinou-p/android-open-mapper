@@ -173,7 +173,7 @@ fun CommunityScreen(
                         IconButton(onClick = {
                             searchQuery = ""
                         }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondary)
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.community_clear_cd), tint = TextSecondary)
                         }
                     }
                 },
@@ -373,11 +373,11 @@ fun CommunityScreen(
                             try {
                                 val res = apiClient.publishProfile(req)
                                 res.onSuccess {
-                                    Toast.makeText(context, "Profil publié sur le Hub Communautaire !", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, context.getString(R.string.community_publish_success), Toast.LENGTH_LONG).show()
                                     showPublishDialog = false
                                     loadProfiles(forceRefresh = true)
                                 }.onFailure { ex ->
-                                    Toast.makeText(context, "Erreur: ${ex.message}", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(context, context.getString(R.string.community_publish_error, ex.message ?: ""), Toast.LENGTH_LONG).show()
                                 }
                             } finally {
                                 isPublishing = false
@@ -457,7 +457,7 @@ fun CommunityProfileCard(
                 ) {
                     Icon(Icons.Default.Download, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Importer", color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    Text(stringResource(R.string.btn_import), color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
             }
 
@@ -474,7 +474,7 @@ fun CommunityProfileCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Par ${profile.authorName ?: ""}", color = TextSecondary, fontSize = 11.sp)
+                    Text(stringResource(R.string.community_author_prefix, profile.authorName ?: ""), color = TextSecondary, fontSize = 11.sp)
                     if (dateStr.isNotEmpty()) {
                         Text("• $dateStr", color = TextSecondary.copy(alpha = 0.6f), fontSize = 11.sp)
                     }
@@ -499,7 +499,7 @@ fun CommunityProfileCard(
                     ) {
                         Icon(
                             Icons.Default.ThumbUp,
-                            contentDescription = "Like",
+                            contentDescription = stringResource(R.string.community_like_cd),
                             tint = if (profile.userVote == 1) NeonGreen else TextSecondary,
                             modifier = Modifier.size(14.dp)
                         )
@@ -523,7 +523,7 @@ fun CommunityProfileCard(
                     ) {
                         Icon(
                             Icons.Default.ThumbDown,
-                            contentDescription = "Dislike",
+                            contentDescription = stringResource(R.string.community_dislike_cd),
                             tint = if (profile.userVote == -1) NeonPink else TextSecondary,
                             modifier = Modifier.size(14.dp)
                         )
@@ -555,10 +555,10 @@ fun PublishProfileDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Partager un Profil", fontWeight = FontWeight.Bold, color = TextPrimary) },
+        title = { Text(stringResource(R.string.community_publish_title), fontWeight = FontWeight.Bold, color = TextPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Sélectionnez le profil local à publier :", color = TextSecondary, fontSize = 12.sp)
+                Text(stringResource(R.string.community_publish_select), color = TextSecondary, fontSize = 12.sp)
 
                 // Select profile dropdown / list
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -584,7 +584,7 @@ fun PublishProfileDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Titre du profil (ex: CODM Pro Flick 180°)") },
+                    label = { Text(stringResource(R.string.community_publish_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -592,7 +592,7 @@ fun PublishProfileDialog(
                 OutlinedTextField(
                     value = authorName,
                     onValueChange = { authorName = it },
-                    label = { Text("Votre pseudo / auteur") },
+                    label = { Text(stringResource(R.string.community_publish_author)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -600,14 +600,14 @@ fun PublishProfileDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Description / conseils de jeu (optionnel)") },
+                    label = { Text(stringResource(R.string.community_publish_desc)) },
                     modifier = Modifier.fillMaxWidth().height(80.dp)
                 )
 
                 OutlinedTextField(
                     value = controllerType,
                     onValueChange = { controllerType = it },
-                    label = { Text("Type de manette conseillée") },
+                    label = { Text(stringResource(R.string.community_publish_gamepad)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -638,12 +638,12 @@ fun PublishProfileDialog(
                 enabled = selectedProfile != null && title.isNotBlank() && authorName.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
             ) {
-                Text("Publier", color = DarkBackground, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.community_publish_btn), color = DarkBackground, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Annuler", color = TextSecondary)
+                Text(stringResource(R.string.btn_cancel), color = TextSecondary)
             }
         },
         containerColor = DarkCard

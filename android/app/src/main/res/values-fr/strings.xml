@@ -305,4 +305,52 @@
     <!-- Home secondary actions -->
     <string name="home_check_update">Mises à jour</string>
     <string name="home_report_bug">Signaler un bug</string>
+    <string name="community_download_error">Erreur téléchargement: %1$s</string>
+    <string name="community_empty_desc">Soyez le premier à partager votre configuration !</string>
+    <string name="community_empty_title">Aucun profil trouvé pour ce filtre.</string>
+    <string name="community_filter_all">Tous</string>
+    <string name="community_import_error">Erreur lors du décodage du profil</string>
+    <string name="community_import_success">Profil \"%1$s\" importé avec succès !</string>
+    <string name="community_refresh">Actualiser</string>
+    <string name="community_retry">Réessayer</string>
+    <string name="community_search_placeholder">Rechercher un profil, jeu, créateur...</string>
+    <string name="community_share">Partager</string>
+    <string name="community_sort_downloads">📥 Téléchargés</string>
+    <string name="community_sort_popular">🔥 Populaires</string>
+    <string name="community_sort_recent">🆕 Récents</string>
+    <string name="community_title">Communauté</string>
+    <string name="community_vote_error">Erreur de vote: %1$s</string>
+    <string name="nav_community">Communauté</string>
+
+    <!-- i18n fill-in -->
+    <string name="community_author_prefix">Par %1$s</string>
+    <string name="community_like_cd">J\'aime</string>
+    <string name="community_dislike_cd">Je n\'aime pas</string>
+    <string name="community_clear_cd">Effacer</string>
+    <string name="community_publish_title">Partager un Profil</string>
+    <string name="community_publish_select">Sélectionnez le profil local à publier :</string>
+    <string name="community_publish_name">Titre du profil (ex: CODM Pro Flick 180°)</string>
+    <string name="community_publish_author">Votre pseudo / auteur</string>
+    <string name="community_publish_desc">Description / conseils de jeu (optionnel)</string>
+    <string name="community_publish_gamepad">Type de manette conseillée</string>
+    <string name="community_publish_btn">Publier</string>
+    <string name="community_publish_success">Profil publié sur le Hub Communautaire !</string>
+    <string name="community_publish_error">Erreur : %1$s</string>
+    <string name="polling_live_flow_title">📊 Flux de Fréquence en Direct</string>
+    <string name="polling_packets_label">Paquets : %1$d</string>
+    <string name="polling_axis_bt_std">125 Hz (BT Standard)</string>
+    <string name="polling_axis_bt_pro">250 Hz (BT Pro)</string>
+    <string name="polling_axis_usb">500 Hz (USB)</string>
+    <string name="rumble_patterns_title">Motifs de vibration tactiles</string>
+    <string name="paddles_rear_title">PALETTES ARRIÈRE (ELITE / SCUF / M1-M4)</string>
+    <string name="stick_magnitude_label">Mag : %1$d%% (X : %2$s, Y : %3$s)</string>
+    <string name="app_not_installed_toast">%1$s n\'est pas installé</string>
+    <string name="cannot_launch_app_toast">Impossible de lancer l\'application</string>
+    <string name="install_error_toast">Erreur install: %1$s</string>
+    <string name="overlay_active_profile_toast">🎮 Profil actif : %1$s</string>
+    <string name="overlay_speed_label">Vitesse : %1$.1fx</string>
+    <string name="overlay_delete_btn">🗑️ Suppr</string>
+    <string name="overlay_role_label">Rôle: %1$s</string>
+    <string name="overlay_mode_label">Mode: %1$s</string>
+    <string name="profile_game_placeholder">Mon Jeu</string>
 </resources>

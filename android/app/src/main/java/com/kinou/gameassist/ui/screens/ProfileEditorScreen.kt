@@ -911,7 +911,7 @@ fun CreateProfileDialog(
                 OutlinedTextField(
                     value = profileNameText,
                     onValueChange = { profileNameText = it },
-                    placeholder = { Text("Mon Jeu", fontSize = 13.sp, color = TextSecondary) },
+                    placeholder = { Text(stringResource(R.string.profile_game_placeholder), fontSize = 13.sp, color = TextSecondary) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(

@@ -677,7 +677,7 @@ fun RealisticGamepadVisualizer(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "PALETTES ARRIÈRE (ELITE / SCUF / M1-M4)",
+                    text = stringResource(R.string.paddles_rear_title),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = TextSecondary
@@ -1239,7 +1239,7 @@ fun StickVisualizer(title: String, x: Float, y: Float, deadzone: Float = 0.08f, 
             }
         }
         val mag = hypot(x.toDouble(), y.toDouble()).toFloat()
-        Text("Mag: ${(mag * 100).toInt()}%  (X: ${"%.2f".format(x)}, Y: ${"%.2f".format(y)})", color = TextSecondary, fontSize = 11.sp)
+        Text(stringResource(R.string.stick_magnitude_label, (mag * 100).toInt(), "%.2f".format(x), "%.2f".format(y)), color = TextSecondary, fontSize = 11.sp)
     }
 }
 
@@ -1470,8 +1470,8 @@ fun PollingRateDiagnosticView(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("📊 Flux de Fréquence en Direct", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text("Paquets : $sampleCount", color = TextSecondary, fontSize = 11.sp)
+                    Text(stringResource(R.string.polling_live_flow_title), color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(stringResource(R.string.polling_packets_label, sampleCount), color = TextSecondary, fontSize = 11.sp)
                 }
 
                 Surface(
@@ -1550,9 +1550,9 @@ fun PollingRateDiagnosticView(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text("0 Hz", fontSize = 10.sp, color = TextSecondary)
-                    Text("125 Hz (BT Standard)", fontSize = 10.sp, color = TextSecondary)
-                    Text("250 Hz (BT Pro)", fontSize = 10.sp, color = TextSecondary)
-                    Text("500 Hz (USB)", fontSize = 10.sp, color = TextSecondary)
+                    Text(stringResource(R.string.polling_axis_bt_std), fontSize = 10.sp, color = TextSecondary)
+                    Text(stringResource(R.string.polling_axis_bt_pro), fontSize = 10.sp, color = TextSecondary)
+                    Text(stringResource(R.string.polling_axis_usb), fontSize = 10.sp, color = TextSecondary)
                 }
             }
         }
@@ -1699,7 +1699,7 @@ fun GamepadRumbleDiagnosticView(
 
             // Test Controls
             Text(
-                text = "Motifs de vibration tactiles",
+                text = stringResource(R.string.rumble_patterns_title),
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary,
                 fontSize = 13.sp

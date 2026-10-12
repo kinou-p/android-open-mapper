@@ -314,4 +314,45 @@
     <!-- Home secondary actions -->
     <string name="home_check_update">Atualizações</string>
     <string name="home_report_bug">Reportar um erro</string>
+
+    <!-- i18n fill-in -->
+    <string name="rumble_rescan_btn">Atualizar comandos</string>
+    <string name="rumble_test_burst_btn">🔥 Recuo contínuo (rajada)</string>
+    <string name="rumble_test_desc">Testa a resposta dos motores de vibração do teu comando com diferentes padrões táteis.</string>
+    <string name="rumble_test_fire_btn">💥 Disparo único (50 ms)</string>
+    <string name="rumble_test_long_btn">⚡ Pulso longo (500 ms)</string>
+    <string name="rumble_test_reload_btn">🔄 Recarga (dupla)</string>
+    <string name="rumble_test_title">Diagnóstico dos motores de vibração</string>
+    <string name="tab_rumble">📳 Vibração</string>
+    <string name="visual_editor_no_screenshot_hint">📸 Toca em « Importar captura » para carregar uma captura do teu jogo e colocar os controlos por cima!</string>
+    <string name="community_author_prefix">Por %1$s</string>
+    <string name="community_like_cd">Gosto</string>
+    <string name="community_dislike_cd">Não gosto</string>
+    <string name="community_clear_cd">Limpar</string>
+    <string name="community_publish_title">Partilhar um perfil</string>
+    <string name="community_publish_select">Seleciona o perfil local a publicar:</string>
+    <string name="community_publish_name">Título do perfil (ex.: CODM Pro Flick 180°)</string>
+    <string name="community_publish_author">O teu nick / autor</string>
+    <string name="community_publish_desc">Descrição / dicas (opcional)</string>
+    <string name="community_publish_gamepad">Tipo de comando recomendado</string>
+    <string name="community_publish_btn">Publicar</string>
+    <string name="community_publish_success">Perfil publicado no Hub da Comunidade!</string>
+    <string name="community_publish_error">Erro: %1$s</string>
+    <string name="polling_live_flow_title">📊 Fluxo de frequência em direto</string>
+    <string name="polling_packets_label">Pacotes: %1$d</string>
+    <string name="polling_axis_bt_std">125 Hz (BT padrão)</string>
+    <string name="polling_axis_bt_pro">250 Hz (BT Pro)</string>
+    <string name="polling_axis_usb">500 Hz (USB)</string>
+    <string name="rumble_patterns_title">Padrões de vibração táteis</string>
+    <string name="paddles_rear_title">PÁS TRASEIRAS (ELITE / SCUF / M1-M4)</string>
+    <string name="stick_magnitude_label">Mag: %1$d%% (X: %2$s, Y: %3$s)</string>
+    <string name="app_not_installed_toast">%1$s não está instalado</string>
+    <string name="cannot_launch_app_toast">Não é possível abrir a aplicação</string>
+    <string name="install_error_toast">Erro de instalação: %1$s</string>
+    <string name="overlay_active_profile_toast">🎮 Perfil ativo: %1$s</string>
+    <string name="overlay_speed_label">Velocidade: %1$.1fx</string>
+    <string name="overlay_delete_btn">🗑️ Apagar</string>
+    <string name="overlay_role_label">Função: %1$s</string>
+    <string name="overlay_mode_label">Modo: %1$s</string>
+    <string name="profile_game_placeholder">O meu jogo</string>
 </resources>

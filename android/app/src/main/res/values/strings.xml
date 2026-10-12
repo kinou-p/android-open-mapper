@@ -203,7 +203,7 @@
     <string name="drift_grade_bad">🔴 Heavy Drift</string>
     <string name="drift_measured">Measured drift: %1$.1f%%</string>
     <string name="deadzone_ideal">Ideal Deadzone: %1$.0f%%</string>
-    <string name="circ_test_title">🎯 360° Calibration &amp; Max Reach</string>
+    <string name="circ_test_title">🎯 Calibration &amp; Max Reach</string>
     <string name="circ_test_desc">Slowly rotate joysticks 360° to trace physical shape and calibrate max reach for aiming modes (180° Flick, Dynamic).</string>
     <string name="circ_start_btn">Start 360° Trace</string>
     <string name="circ_stop_btn">Stop 360° Trace</string>
@@ -252,26 +252,26 @@
     <string name="gamepad_disconnected">No gamepad detected</string>
 
     <!-- New Feature Strings: ADS, Invert, Hot-Switch, Polling -->
-    <string name="ads_multiplier_title">🎯 Sensibilité ADS Séparée (Visée LT)</string>
-    <string name="ads_multiplier_desc">Applique un multiplicateur dédié de sensibilité quand vous visez avec LT.</string>
-    <string name="ads_multiplier_label">Multiplicateur Sensibilité ADS</string>
-    <string name="invert_y_title">↕️ Inverser l\'Axe Vertical (Y)</string>
-    <string name="invert_y_desc">Inverse les mouvements Haut / Bas du stick caméra.</string>
-    <string name="invert_x_title">↔️ Inverser l\'Axe Horizontal (X)</string>
-    <string name="invert_x_desc">Inverse les mouvements Gauche / Droite du stick caméra.</string>
-    <string name="hot_switch_hint">💡 Raccourci Hot-Switch : Maintenez SELECT + D-Pad Haut/Bas pour changer de profil en plein jeu !</string>
-    <string name="tab_polling_rate">⚡ Polling &amp; Latence</string>
-    <string name="polling_test_title">⚡ Analyseur de Polling Rate &amp; Latence</string>
-    <string name="polling_test_desc">Mesure en temps réel la fréquence des paquets manette (Hz), l\'input lag estimé et la stabilité sans fil.</string>
-    <string name="polling_live_rate">Fréquence Actuelle</string>
-    <string name="polling_peak_rate">Fréquence Max (Peak)</string>
-    <string name="polling_latency">Input Lag Estimé</string>
-    <string name="polling_jitter">Jitter / Stabilité</string>
-    <string name="polling_samples">Paquets Analysés</string>
-    <string name="conn_quality_usb">⚡ USB Ultra-Rapide (500Hz+)</string>
-    <string name="conn_quality_bt_fast">🟢 Bluetooth Excellent (250Hz)</string>
-    <string name="conn_quality_bt_std">🟡 Bluetooth Standard (125Hz)</string>
-    <string name="conn_quality_slow">🔴 Latence Élevée (&gt;16ms)</string>
+    <string name="ads_multiplier_title">🎯 Separate ADS Sensitivity (LT Scope)</string>
+    <string name="ads_multiplier_desc">Applies dedicated sensitivity multiplier when aiming down sights with LT.</string>
+    <string name="ads_multiplier_label">ADS Sensitivity Multiplier</string>
+    <string name="invert_y_title">↕️ Invert Vertical Axis (Y)</string>
+    <string name="invert_y_desc">Inverts Up / Down camera movements.</string>
+    <string name="invert_x_title">↔️ Invert Horizontal Axis (X)</string>
+    <string name="invert_x_desc">Inverts Left / Right camera movements.</string>
+    <string name="hot_switch_hint">💡 Hot-Switch Shortcut: Hold SELECT + D-Pad Up/Down to switch profiles mid-game!</string>
+    <string name="tab_polling_rate">⚡ Polling &amp; Latency</string>
+    <string name="polling_test_title">⚡ Polling Rate &amp; Latency Analyzer</string>
+    <string name="polling_test_desc">Real-time measurement of controller polling rate (Hz), estimated input lag, and wireless stability.</string>
+    <string name="polling_live_rate">Live Polling Rate</string>
+    <string name="polling_peak_rate">Peak Polling Rate</string>
+    <string name="polling_latency">Estimated Input Lag</string>
+    <string name="polling_jitter">Jitter / Stability</string>
+    <string name="polling_samples">Packets Analyzed</string>
+    <string name="conn_quality_usb">⚡ Ultra-Fast USB (500Hz+)</string>
+    <string name="conn_quality_bt_fast">🟢 Excellent Bluetooth (250Hz)</string>
+    <string name="conn_quality_bt_std">🟡 Standard Bluetooth (125Hz)</string>
+    <string name="conn_quality_slow">🔴 High Latency (&gt;16ms)</string>
 
     <!-- Visual HUD Layout Editor & Screenshots -->
     <string name="btn_visual_editor">📐 Visual Layout (HUD Screenshot)</string>
@@ -287,22 +287,22 @@
     <string name="visual_editor_bg_opacity">BG: %1$d%%</string>
 
     <!-- Community Screen -->
-    <string name="nav_community">Communauté</string>
-    <string name="community_title">Communauté</string>
-    <string name="community_share">Partager</string>
-    <string name="community_refresh">Actualiser</string>
-    <string name="community_search_placeholder">Rechercher un profil, jeu, créateur...</string>
-    <string name="community_filter_all">Tous</string>
-    <string name="community_sort_popular">🔥 Populaires</string>
-    <string name="community_sort_recent">🆕 Récents</string>
-    <string name="community_sort_downloads">📥 Téléchargés</string>
-    <string name="community_empty_title">Aucun profil trouvé pour ce filtre.</string>
-    <string name="community_empty_desc">Soyez le premier à partager votre configuration !</string>
-    <string name="community_retry">Réessayer</string>
-    <string name="community_import_success">Profil \"%1$s\" importé avec succès !</string>
-    <string name="community_import_error">Erreur lors du décodage du profil</string>
-    <string name="community_download_error">Erreur téléchargement: %1$s</string>
-    <string name="community_vote_error">Erreur de vote: %1$s</string>
+    <string name="nav_community">Community</string>
+    <string name="community_title">Community</string>
+    <string name="community_share">Share</string>
+    <string name="community_refresh">Refresh</string>
+    <string name="community_search_placeholder">Search profile, game, author...</string>
+    <string name="community_filter_all">All</string>
+    <string name="community_sort_popular">🔥 Popular</string>
+    <string name="community_sort_recent">🆕 Recent</string>
+    <string name="community_sort_downloads">📥 Downloads</string>
+    <string name="community_empty_title">No profiles found for this filter.</string>
+    <string name="community_empty_desc">Be the first to share your configuration!</string>
+    <string name="community_retry">Retry</string>
+    <string name="community_import_success">Profile \"%1$s\" imported successfully!</string>
+    <string name="community_import_error">Error decoding profile</string>
+    <string name="community_download_error">Download error: %1$s</string>
+    <string name="community_vote_error">Vote error: %1$s</string>
     <string name="cursor_speed">🖱️ Speed %1$sx</string>
     <string name="cursor_mode_on">🖱️ Cursor ON · Speed %1$sx · D-pad: speed · B: exit</string>
     <!-- Bug report / diagnostics export -->
@@ -323,4 +323,36 @@
     <!-- Home secondary actions -->
     <string name="home_check_update">Updates</string>
     <string name="home_report_bug">Report a bug</string>
+
+    <!-- i18n fill-in -->
+    <string name="community_author_prefix">By %1$s</string>
+    <string name="community_like_cd">Like</string>
+    <string name="community_dislike_cd">Dislike</string>
+    <string name="community_clear_cd">Clear</string>
+    <string name="community_publish_title">Share a Profile</string>
+    <string name="community_publish_select">Select the local profile to publish:</string>
+    <string name="community_publish_name">Profile title (e.g. CODM Pro Flick 180°)</string>
+    <string name="community_publish_author">Your nickname / author</string>
+    <string name="community_publish_desc">Description / tips (optional)</string>
+    <string name="community_publish_gamepad">Recommended controller type</string>
+    <string name="community_publish_btn">Publish</string>
+    <string name="community_publish_success">Profile published to the Community Hub!</string>
+    <string name="community_publish_error">Error: %1$s</string>
+    <string name="polling_live_flow_title">📊 Live Frequency Stream</string>
+    <string name="polling_packets_label">Packets: %1$d</string>
+    <string name="polling_axis_bt_std">125 Hz (BT Standard)</string>
+    <string name="polling_axis_bt_pro">250 Hz (BT Pro)</string>
+    <string name="polling_axis_usb">500 Hz (USB)</string>
+    <string name="rumble_patterns_title">Tactile vibration patterns</string>
+    <string name="paddles_rear_title">REAR PADDLES (ELITE / SCUF / M1-M4)</string>
+    <string name="stick_magnitude_label">Mag: %1$d%%  (X: %2$s, Y: %3$s)</string>
+    <string name="app_not_installed_toast">%1$s is not installed</string>
+    <string name="cannot_launch_app_toast">Cannot launch the app</string>
+    <string name="install_error_toast">Install error: %1$s</string>
+    <string name="overlay_active_profile_toast">🎮 Active profile: %1$s</string>
+    <string name="overlay_speed_label">Speed: %1$.1fx</string>
+    <string name="overlay_delete_btn">🗑️ Del</string>
+    <string name="overlay_role_label">Role: %1$s</string>
+    <string name="overlay_mode_label">Mode: %1$s</string>
+    <string name="profile_game_placeholder">My Game</string>
 </resources>

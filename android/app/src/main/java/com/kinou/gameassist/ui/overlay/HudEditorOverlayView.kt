@@ -758,7 +758,7 @@ class HudEditorOverlayView(
             canvas.drawRoundRect(btnDelRect, btnRadius, btnRadius, uiBtnBgPaint)
             uiBtnTextPaint.color = Color.WHITE
             uiBtnTextPaint.textSize = 13.5f * density
-            canvas.drawText("🗑️ Suppr", btnDelRect.centerX(), btnDelRect.centerY() + 5f * density, uiBtnTextPaint)
+            canvas.drawText(context.getString(R.string.overlay_delete_btn), btnDelRect.centerX(), btnDelRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (delW + btnSpacing)
         } else {
             btnDelRect.setEmpty()
@@ -827,7 +827,7 @@ class HudEditorOverlayView(
             canvas.drawRoundRect(btnRoleRect, btnRadius, btnRadius, uiBtnBgPaint)
             uiBtnTextPaint.color = if (btn.role == ButtonRole.NORMAL) 0xFF00F0FF.toInt() else if (btn.role == ButtonRole.SWITCH_PROFILE) Color.WHITE else Color.BLACK
             uiBtnTextPaint.textSize = 12f * density
-            canvas.drawText("Rôle: $roleLabel", btnRoleRect.centerX(), btnRoleRect.centerY() + 5f * density, uiBtnTextPaint)
+            canvas.drawText(context.getString(R.string.overlay_role_label, roleLabel), btnRoleRect.centerX(), btnRoleRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (roleW + btnSpacing)
 
             // Mode Toggle
@@ -846,7 +846,7 @@ class HudEditorOverlayView(
             canvas.drawRoundRect(btnModeRect, btnRadius, btnRadius, uiBtnBgPaint)
             uiBtnTextPaint.color = if (btn.mode == ButtonMode.RAPID_FIRE) Color.WHITE else Color.BLACK
             uiBtnTextPaint.textSize = 12.5f * density
-            canvas.drawText("Mode: $modeLabel", btnModeRect.centerX(), btnModeRect.centerY() + 5f * density, uiBtnTextPaint)
+            canvas.drawText(context.getString(R.string.overlay_mode_label, modeLabel), btnModeRect.centerX(), btnModeRect.centerY() + 5f * density, uiBtnTextPaint)
             rightX -= (modeW + btnSpacing)
 
             // Assign Button (🎮 Assigner)

@@ -373,7 +373,7 @@ class EdgeHandleOverlayView(
             textPaint.textSize = 11.5f * density
             textPaint.color = 0xFFFF9900.toInt()
             textPaint.alpha = a
-            canvas.drawText("Vitesse : ${String.format(java.util.Locale.US, "%.1fx", curSpeed)}", btnLeft + 10 * density, curTop + 14 * density, textPaint)
+            canvas.drawText(context.getString(com.kinou.gameassist.R.string.overlay_speed_label, curSpeed), btnLeft + 10 * density, curTop + 14 * density, textPaint)
 
             // Minus button [ ➖ ]
             val stepBtnW = 24 * density
