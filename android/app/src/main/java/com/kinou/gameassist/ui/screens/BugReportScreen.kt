@@ -114,7 +114,6 @@ fun BugReportScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -152,7 +151,9 @@ fun BugReportScreen(
                 color = DarkCard,
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, DarkCardBorder),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
                 SelectionContainer {
                     Text(
@@ -160,7 +161,9 @@ fun BugReportScreen(
                         color = TextSecondary,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
-                        modifier = Modifier.padding(12.dp)
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp)
                     )
                 }
             }
