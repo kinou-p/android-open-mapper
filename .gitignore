@@ -67,3 +67,6 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.vtt
+
+# superpowers: plans/specs locaux des sessions d'agents (ne pas versionner)
+docs/superpowers/
