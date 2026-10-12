@@ -399,6 +399,7 @@
     <string name="rumble_effect_single">Tir Simple</string>
     <string name="rumble_effect_burst">Rafale Continue</string>
     <string name="rumble_effect_long">Impulsion 500ms</string>
+    <string name="rumble_effect_reload">Rechargement (double)</string>
     <string name="rumble_stop_burst">⏹ Arrêter Rafale</string>
     <string name="community_offline">Impossible de joindre la communauté</string>
     <string name="community_gamepad_placeholder">Xbox / PS5 / Générique</string>

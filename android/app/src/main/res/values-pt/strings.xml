@@ -401,6 +401,7 @@
     <string name="rumble_effect_single">Disparo único</string>
     <string name="rumble_effect_burst">Rajada contínua</string>
     <string name="rumble_effect_long">Impulso de 500 ms</string>
+    <string name="rumble_effect_reload">Recarga (dupla)</string>
     <string name="rumble_stop_burst">⏹ Parar rajada</string>
     <string name="community_offline">Não é possível aceder à comunidade</string>
     <string name="community_gamepad_placeholder">Xbox / PS5 / Genérico</string>
