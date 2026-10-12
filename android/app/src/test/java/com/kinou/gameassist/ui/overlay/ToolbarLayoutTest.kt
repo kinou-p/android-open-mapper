@@ -121,4 +121,31 @@ class ToolbarLayoutTest {
         assertTrue(placement.slots.isEmpty())
         assertEquals(0f, placement.height, 0.01f)
     }
+
+    @Test
+    fun bottomBarSpecAlsoStaysOnScreen() {
+        // Scénario reproduit sur l'appareil : « Détails » actif + un bouton sélectionné, la barre du
+        // bas doit alors afficher Del + 4 flèches + ➕/➖ + Role + Mode + Assigner (11 boutons), sans
+        // que Role/Mode/Assigner disparaissent hors écran.
+        val widths = listOf(
+            84f * DENSITY,   // Del
+            38f * DENSITY, 38f * DENSITY, 38f * DENSITY, 38f * DENSITY,   // ➡️ ⬇️ ⬆️ ⬅️
+            44f * DENSITY, 44f * DENSITY,                                  // ➕ ➖
+            96f * DENSITY,   // Role
+            92f * DENSITY,   // Mode
+            96f * DENSITY    // Assigner
+        )
+        val placement = ToolbarLayout(
+            availableWidth = PORTRAIT_W,
+            margin = 28f * DENSITY,
+            spacing = 6f * DENSITY,
+            rowHeight = ROW_H
+        ).place(widths)
+
+        placement.slots.forEach { slot ->
+            assertTrue("bouton coupé à gauche : left=${slot.left}", slot.left >= 0f)
+            assertTrue("bouton coupé à droite : right=${slot.right}", slot.right <= PORTRAIT_W)
+        }
+        assertTrue("la barre du bas doit se replier (rows=${placement.rows})", placement.rows >= 2)
+    }
 }
