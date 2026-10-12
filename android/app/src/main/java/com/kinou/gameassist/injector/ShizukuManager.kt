@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
+import com.kinou.gameassist.util.AppLog
 
 enum class ShizukuStatus {
     DEAD,
@@ -18,20 +19,28 @@ object ShizukuManager {
     private val _status = MutableStateFlow(ShizukuStatus.DEAD)
     val status: StateFlow<ShizukuStatus> = _status
 
+    /** Publishes a status change and records it for bug reports (state transitions only, not hot). */
+    private fun setStatus(newStatus: ShizukuStatus) {
+        val previous = _status.value
+        if (previous == newStatus) return
+        _status.value = newStatus
+        AppLog.i("Shizuku", "status $previous -> $newStatus")
+    }
+
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
         checkStatus()
     }
 
     private val binderDeadListener = Shizuku.OnBinderDeadListener {
-        _status.value = ShizukuStatus.DEAD
+        setStatus(ShizukuStatus.DEAD)
     }
 
     private val requestPermissionResultListener =
         Shizuku.OnRequestPermissionResultListener { _, grantResult ->
             if (grantResult == PackageManager.PERMISSION_GRANTED) {
-                _status.value = ShizukuStatus.RUNNING_AUTHORIZED
+                setStatus(ShizukuStatus.RUNNING_AUTHORIZED)
             } else {
-                _status.value = ShizukuStatus.RUNNING_UNAUTHORIZED
+                setStatus(ShizukuStatus.RUNNING_UNAUTHORIZED)
             }
         }
 
@@ -60,18 +69,18 @@ object ShizukuManager {
 
     fun checkStatus() {
         if (!Shizuku.pingBinder()) {
-            _status.value = ShizukuStatus.DEAD
+            setStatus(ShizukuStatus.DEAD)
             return
         }
 
         try {
             if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
-                _status.value = ShizukuStatus.RUNNING_AUTHORIZED
+                setStatus(ShizukuStatus.RUNNING_AUTHORIZED)
             } else {
-                _status.value = ShizukuStatus.RUNNING_UNAUTHORIZED
+                setStatus(ShizukuStatus.RUNNING_UNAUTHORIZED)
             }
         } catch (e: Exception) {
-            _status.value = ShizukuStatus.DEAD
+            setStatus(ShizukuStatus.DEAD)
         }
     }
 

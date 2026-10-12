@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
@@ -53,7 +54,8 @@ fun HomeScreen(
     onStopService: () -> Unit,
     isServiceRunning: Boolean,
     onNavigateToTest: () -> Unit,
-    onNavigateToProfiles: () -> Unit
+    onNavigateToProfiles: () -> Unit,
+    onNavigateToBugReport: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -127,17 +129,23 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            // Le bloc titre est flexible : il cède la place au groupe de boutons, sinon le header
+            // déborde à droite dès qu'un contrôle est ajouté (le sous-titre est large).
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "OpenMapper",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = NeonCyan
+                    color = NeonCyan,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = stringResource(R.string.subtitle_native_mapper, currentVersion),
                     fontSize = 12.sp,
-                    color = TextSecondary
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -254,6 +262,18 @@ fun HomeScreen(
                         .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
                 ) {
                     Icon(Icons.Default.SportsEsports, contentDescription = stringResource(R.string.test_gamepad), tint = NeonCyan, modifier = Modifier.size(20.dp))
+                }
+
+                // Bug Report Button
+                IconButton(
+                    onClick = onNavigateToBugReport,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DarkCard)
+                        .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
+                ) {
+                    Icon(Icons.Default.BugReport, contentDescription = stringResource(R.string.bug_report_title), tint = NeonCyan, modifier = Modifier.size(20.dp))
                 }
             }
         }

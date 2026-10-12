@@ -287,4 +287,15 @@
     <string name="visual_editor_bg_opacity">Fond : %1$d%%</string>
     <string name="cursor_speed">🖱️ Vitesse %1$sx</string>
     <string name="cursor_mode_on">🖱️ Curseur ACTIF · Vitesse %1$sx · D-pad : vitesse · B : quitter</string>
+    <!-- Bug report / diagnostics export -->
+    <string name="bug_report_title">Signaler un bug</string>
+    <string name="bug_report_back">Retour</string>
+    <string name="bug_report_note_label">Qu\'est-ce qui a mal tourné ?</string>
+    <string name="bug_report_note_hint">Décris ce que tu attendais et ce qui s\'est passé.</string>
+    <string name="bug_report_privacy_note">Ce rapport contient les infos de ton appareil, ton profil actif et les logs récents. Il n\'est jamais envoyé automatiquement — tu décides de ce que tu en fais.</string>
+    <string name="bug_report_preview_label">Aperçu du rapport</string>
+    <string name="bug_report_copy">Copier le rapport</string>
+    <string name="bug_report_share">Partager le rapport</string>
+    <string name="bug_report_copied">Rapport copié dans le presse-papier</string>
+    <string name="bug_report_share_failed">Impossible de partager le rapport</string>
 </resources>

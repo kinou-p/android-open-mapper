@@ -8,6 +8,7 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import com.kinou.gameassist.util.InputDeviceCallbacks
+import com.kinou.gameassist.util.AppLog
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -34,6 +35,10 @@ object GamepadDetector {
         // puis rafraîchit la batterie en arrière-plan et republie quand elle est connue.
         fun publish() {
             val gamepads = getConnectedGamepads(appContext)
+            AppLog.i(
+                "Gamepad",
+                "connected: " + gamepads.joinToString { "${it.name} [${if (it.isBluetooth) "Bluetooth" else "USB-C"}]" }
+            )
             trySend(gamepads)
             refreshBatteryAsync(gamepads.map { it.id }) {
                 trySend(getConnectedGamepads(appContext))

@@ -31,6 +31,7 @@ import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.service.OverlayService
+import com.kinou.gameassist.ui.screens.BugReportScreen
 import com.kinou.gameassist.ui.screens.CommunityScreen
 import com.kinou.gameassist.ui.screens.GamepadTestScreen
 import com.kinou.gameassist.ui.screens.HomeScreen
@@ -43,7 +44,8 @@ enum class Screen {
     PROFILES,
     COMMUNITY,
     GAMEPAD_TEST,
-    VISUAL_HUD_EDITOR
+    VISUAL_HUD_EDITOR,
+    BUG_REPORT
 }
 
 class MainActivity : AppCompatActivity() {
@@ -247,7 +249,8 @@ class MainActivity : AppCompatActivity() {
                                 },
                                 isServiceRunning = isServiceRunning,
                                 onNavigateToTest = { currentScreen = Screen.GAMEPAD_TEST },
-                                onNavigateToProfiles = { currentScreen = Screen.PROFILES }
+                                onNavigateToProfiles = { currentScreen = Screen.PROFILES },
+                                onNavigateToBugReport = { currentScreen = Screen.BUG_REPORT }
                             )
 
                             Screen.GAMEPAD_TEST -> GamepadTestScreen(
@@ -351,6 +354,11 @@ class MainActivity : AppCompatActivity() {
                                     currentScreen = Screen.PROFILES
                                 }
                             }
+
+                            Screen.BUG_REPORT -> BugReportScreen(
+                                activeProfile = selectedProfile,
+                                onBack = { currentScreen = Screen.HOME }
+                            )
 
                             Screen.COMMUNITY -> CommunityScreen(
                                 repository = repository,

@@ -296,4 +296,15 @@
     <string name="gamepad_none_connected">Nenhum controle conectado</string>
     <string name="cursor_speed">🖱️ Velocidade %1$sx</string>
     <string name="cursor_mode_on">🖱️ Cursor ATIVO · Velocidade %1$sx · D-pad: velocidade · B: sair</string>
+    <!-- Bug report / diagnostics export -->
+    <string name="bug_report_title">Reportar um erro</string>
+    <string name="bug_report_back">Voltar</string>
+    <string name="bug_report_note_label">O que correu mal?</string>
+    <string name="bug_report_note_hint">Descreve o que esperavas e o que aconteceu.</string>
+    <string name="bug_report_privacy_note">Este relatório inclui as informações do teu dispositivo, o teu perfil ativo e os registos recentes. Nunca é enviado automaticamente — tu decides o que fazer com ele.</string>
+    <string name="bug_report_preview_label">Pré-visualização do relatório</string>
+    <string name="bug_report_copy">Copiar relatório</string>
+    <string name="bug_report_share">Partilhar relatório</string>
+    <string name="bug_report_copied">Relatório copiado para a área de transferência</string>
+    <string name="bug_report_share_failed">Não foi possível partilhar o relatório</string>
 </resources>

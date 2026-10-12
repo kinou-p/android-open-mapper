@@ -305,4 +305,15 @@
     <string name="community_vote_error">Erreur de vote: %1$s</string>
     <string name="cursor_speed">🖱️ Speed %1$sx</string>
     <string name="cursor_mode_on">🖱️ Cursor ON · Speed %1$sx · D-pad: speed · B: exit</string>
+    <!-- Bug report / diagnostics export -->
+    <string name="bug_report_title">Report a bug</string>
+    <string name="bug_report_back">Back</string>
+    <string name="bug_report_note_label">What went wrong?</string>
+    <string name="bug_report_note_hint">Describe what you expected and what happened.</string>
+    <string name="bug_report_privacy_note">This report includes your device info, your active profile and recent logs. It is never sent automatically — you decide what to do with it.</string>
+    <string name="bug_report_preview_label">Report preview</string>
+    <string name="bug_report_copy">Copy report</string>
+    <string name="bug_report_share">Share report</string>
+    <string name="bug_report_copied">Report copied to clipboard</string>
+    <string name="bug_report_share_failed">Could not share the report</string>
 </resources>

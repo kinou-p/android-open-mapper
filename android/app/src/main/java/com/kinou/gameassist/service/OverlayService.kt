@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import com.kinou.gameassist.util.AppLog
 
 class OverlayService : LifecycleService() {
 
@@ -224,6 +225,7 @@ class OverlayService : LifecycleService() {
         // En cas de redémarrage START_STICKY après révocation de la permission (MIUI/EMUI),
         // windowManager.addView() lèverait une BadTokenException et crasherait l'app en pleine partie.
         if (!Settings.canDrawOverlays(this)) {
+            AppLog.w("Service", "overlay permission missing, service stopped")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -231,6 +233,7 @@ class OverlayService : LifecycleService() {
         val action = intent?.action
 
         if (action == ACTION_STOP) {
+            AppLog.i("Service", "overlay stop requested")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -242,6 +245,7 @@ class OverlayService : LifecycleService() {
         _isServiceRunning.value = true
 
         currentProfile?.let { prof ->
+            AppLog.i("Service", "engine started with profile '${prof.name}' (${prof.packageName})")
             engine.setProfile(prof)
             engine.start()
         }
