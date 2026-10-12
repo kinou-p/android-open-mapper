@@ -115,7 +115,7 @@ class HapticManager(context: Context) : InputManager.InputDeviceListener {
                     infos.add(
                         GamepadHapticInfo(
                             deviceId = dev.id,
-                            name = dev.name ?: "Gamepad #${dev.id}",
+                            name = dev.name ?: appContext.getString(com.kinou.gameassist.R.string.haptic_gamepad_fallback, dev.id),
                             motorCount = devVibrators.size,
                             hasRumble = hasRumble,
                             hasAmplitudeControl = amplitudeSupport

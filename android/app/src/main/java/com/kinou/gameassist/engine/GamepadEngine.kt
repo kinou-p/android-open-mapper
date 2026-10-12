@@ -12,6 +12,10 @@ import com.kinou.gameassist.injector.ShizukuTouchInjector
 import com.kinou.gameassist.util.InputDeviceCallbacks
 import kotlinx.coroutines.*
 
+enum class TacticalKind { ANTI_RECOIL, JIGGLE_STRAFE }
+
+data class TacticalEvent(val kind: TacticalKind, val enabled: Boolean, val speed: Float = 0f)
+
 class GamepadEngine(
     private val context: Context,
     private val injector: ShizukuTouchInjector,
@@ -138,7 +142,7 @@ class GamepadEngine(
     @Volatile private var engineThread: Thread? = null
     private val lifecycleLock = Any()
     var onHotSwitchProfile: ((forward: Boolean) -> Unit)? = null
-    var onTacticalToggle: ((message: String) -> Unit)? = null
+    var onTacticalToggle: ((event: TacticalEvent) -> Unit)? = null
     @Volatile private var isSelectHeld = false
 
     // Mode curseur (L3+R3) : le stick déplace un curseur, A tape à sa position, B quitte,
@@ -171,7 +175,7 @@ class GamepadEngine(
             if (cam != null) {
                 cam.antiRecoilEnabled = !cam.antiRecoilEnabled
                 cameraProcessor.config = cam.copy()
-                onTacticalToggle?.invoke("🎯 Anti-Recul: " + if (cam.antiRecoilEnabled) "ACTIF (${cam.antiRecoilSpeed}x)" else "DÉSACTIVÉ")
+                onTacticalToggle?.invoke(TacticalEvent(TacticalKind.ANTI_RECOIL, cam.antiRecoilEnabled, cam.antiRecoilSpeed))
             }
         }
         buttonProcessor.onToggleStrafe = {
@@ -179,7 +183,7 @@ class GamepadEngine(
             if (joy != null) {
                 joy.jiggleStrafe = !joy.jiggleStrafe
                 movementProcessor.config = joy.copy()
-                onTacticalToggle?.invoke("⚡ Jiggle Strafe: " + if (joy.jiggleStrafe) "ACTIF" else "DÉSACTIVÉ")
+                onTacticalToggle?.invoke(TacticalEvent(TacticalKind.JIGGLE_STRAFE, joy.jiggleStrafe))
             }
         }
         buttonProcessor.onSwitchProfile = {

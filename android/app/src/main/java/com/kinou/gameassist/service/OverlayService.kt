@@ -22,6 +22,7 @@ import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.deepCopy
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.engine.GamepadEngine
+import com.kinou.gameassist.engine.TacticalKind
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.injector.ShizukuStatus
 import com.kinou.gameassist.injector.ShizukuTouchInjector
@@ -112,7 +113,19 @@ class OverlayService : LifecycleService() {
         engine.onHotSwitchProfile = { forward ->
             cycleProfile(forward)
         }
-        engine.onTacticalToggle = { message ->
+        engine.onTacticalToggle = { event ->
+            val message = when (event.kind) {
+                TacticalKind.ANTI_RECOIL -> if (event.enabled) {
+                    getString(R.string.tactical_antirecoil_on, event.speed)
+                } else {
+                    getString(R.string.tactical_antirecoil_off)
+                }
+                TacticalKind.JIGGLE_STRAFE -> if (event.enabled) {
+                    getString(R.string.tactical_strafe_on)
+                } else {
+                    getString(R.string.tactical_strafe_off)
+                }
+            }
             showHotSwitchToast(message)
         }
         engine.onCursorModeChanged = { on ->
@@ -156,7 +169,7 @@ class OverlayService : LifecycleService() {
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         android.widget.Toast.makeText(
                             applicationContext,
-                            "⚠️ Connexion Shizuku perdue. Vérifiez l'application Shizuku.",
+                            getString(R.string.service_shizuku_lost),
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }
@@ -289,10 +302,10 @@ class OverlayService : LifecycleService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "OpenMapper Service",
+                getString(R.string.notif_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "OpenMapper Overlay & Mapping Service"
+                description = getString(R.string.notif_channel_desc)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -356,7 +369,7 @@ class OverlayService : LifecycleService() {
                     lifecycleScope.launch(Dispatchers.IO) {
                         repository.saveProfileAsync(prof)
                     }
-                    val stateMsg = if (prof.joystick.jiggleStrafe) "⚡ Auto Jiggle Strafe ACTIVÉ" else "Auto Jiggle Strafe DÉSACTIVÉ"
+                    val stateMsg = if (prof.joystick.jiggleStrafe) getString(R.string.service_jiggle_on) else getString(R.string.service_jiggle_off)
                     android.widget.Toast.makeText(this, stateMsg, android.widget.Toast.LENGTH_SHORT).show()
                 }
             },
@@ -371,9 +384,9 @@ class OverlayService : LifecycleService() {
                         repository.saveProfileAsync(prof)
                     }
                     val stateMsg = if (prof.camera.antiRecoilEnabled) {
-                        "🎯 Anti-Recul (${String.format(java.util.Locale.US, "%.1fx", prof.camera.antiRecoilSpeed)}) ACTIVÉ"
+                        getString(com.kinou.gameassist.R.string.service_antirecoil_on, prof.camera.antiRecoilSpeed)
                     } else {
-                        "Anti-Recul DÉSACTIVÉ"
+                        getString(R.string.service_antirecoil_off)
                     }
                     android.widget.Toast.makeText(this, stateMsg, android.widget.Toast.LENGTH_SHORT).show()
                 }

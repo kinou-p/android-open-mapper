@@ -606,7 +606,7 @@ fun ResponseCurveVisualizer(
                                 .background(NeonPink)
                         )
                         Text(
-                            "🕹️ Position Stick RS : $liveInputPercent%",
+                            stringResource(com.kinou.gameassist.R.string.visual_stick_position, liveInputPercent),
                             fontSize = 11.sp,
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold
@@ -614,7 +614,7 @@ fun ResponseCurveVisualizer(
                     }
 
                     Text(
-                        "Sortie : $liveOutputPercent%",
+                        stringResource(com.kinou.gameassist.R.string.visual_stick_output, liveOutputPercent),
                         fontSize = 11.sp,
                         color = NeonCyan,
                         fontWeight = FontWeight.Bold
@@ -1027,7 +1027,7 @@ fun CreateProfileDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val finalName = if (profileNameText.isNotBlank()) profileNameText.trim() else "Nouveau Profil"
+                    val finalName = if (profileNameText.isNotBlank()) profileNameText.trim() else context.getString(R.string.profile_new_default_name)
                     val finalPkg = if (selectedPackageText.isNotBlank()) selectedPackageText.trim() else "com.game.app"
                     onConfirm(finalName, finalPkg)
                 },

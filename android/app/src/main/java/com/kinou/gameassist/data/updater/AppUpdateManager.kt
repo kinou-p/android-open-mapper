@@ -51,7 +51,7 @@ object AppUpdateManager {
     /**
      * Checks for the latest release on GitHub asynchronously.
      */
-    suspend fun checkForUpdate(currentVersion: String): AppReleaseInfo? = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdate(context: Context, currentVersion: String): AppReleaseInfo? = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
         try {
             val url = URL(API_URL)
@@ -72,7 +72,7 @@ object AppUpdateManager {
             val json = Json.parseToJsonElement(responseText).jsonObject
             val tagName = json["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@withContext null
             val remoteVersion = tagName.removePrefix("v").trim()
-            val title = json["name"]?.jsonPrimitive?.contentOrNull ?: "Update $tagName"
+            val title = json["name"]?.jsonPrimitive?.contentOrNull ?: context.getString(com.kinou.gameassist.R.string.update_fallback_title, tagName)
             val changelog = json["body"]?.jsonPrimitive?.contentOrNull ?: ""
             val htmlUrl = json["html_url"]?.jsonPrimitive?.contentOrNull ?: "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases"
 
@@ -153,7 +153,7 @@ object AppUpdateManager {
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
         if (downloadUrl.isBlank() || (!downloadUrl.endsWith(".apk", ignoreCase = true) && !downloadUrl.contains(".apk", ignoreCase = true))) {
-            return@withContext Result.failure(IllegalArgumentException("URL de téléchargement APK invalide ou aucun package APK disponible dans la release"))
+            return@withContext Result.failure(IllegalArgumentException(context.getString(com.kinou.gameassist.R.string.err_apk_url_invalid)))
         }
 
         var connection: HttpURLConnection? = null
@@ -165,7 +165,7 @@ object AppUpdateManager {
             val safeFileName = sanitizeApkFileName(targetFileName)
             val candidateFile = File(updateDir, safeFileName)
             if (!candidateFile.canonicalPath.startsWith(updateDir.canonicalPath)) {
-                return@withContext Result.failure(SecurityException("Tentative de traversée de répertoire détectée : $targetFileName"))
+                return@withContext Result.failure(SecurityException(context.getString(com.kinou.gameassist.R.string.err_path_traversal, targetFileName)))
             }
             outputFile = candidateFile
             if (outputFile.exists()) {
@@ -182,13 +182,13 @@ object AppUpdateManager {
             while (redirectCount < maxRedirects) {
                 val url = URL(currentUrl)
                 if (!url.protocol.equals("https", ignoreCase = true)) {
-                    return@withContext Result.failure(SecurityException("URL non sécurisée rejetée : $currentUrl"))
+                    return@withContext Result.failure(SecurityException(context.getString(com.kinou.gameassist.R.string.err_insecure_url, currentUrl)))
                 }
 
                 val host = (url.host ?: "").lowercase()
                 val isTrusted = trustedHostSuffixes.any { host == it || host.endsWith(".$it") }
                 if (!isTrusted) {
-                    return@withContext Result.failure(SecurityException("Hôte de téléchargement non autorisé : ${url.host}"))
+                    return@withContext Result.failure(SecurityException(context.getString(com.kinou.gameassist.R.string.err_host_not_allowed, url.host)))
                 }
 
                 connection = (url.openConnection() as HttpURLConnection).apply {
@@ -205,11 +205,11 @@ object AppUpdateManager {
                     status == HttpURLConnection.HTTP_SEE_OTHER ||
                     status == 307 || status == 308) {
                     val newUrl = connection.getHeaderField("Location")
-                        ?: return@withContext Result.failure(SecurityException("Redirection sans en-tête Location"))
+                        ?: return@withContext Result.failure(SecurityException(context.getString(com.kinou.gameassist.R.string.err_redirect_no_location)))
                     val targetUrl = URL(URL(currentUrl), newUrl)
 
                     if (!targetUrl.protocol.equals("https", ignoreCase = true)) {
-                        return@withContext Result.failure(SecurityException("Redirection non sécurisée bloquée : $targetUrl"))
+                        return@withContext Result.failure(SecurityException(context.getString(com.kinou.gameassist.R.string.err_insecure_redirect, targetUrl)))
                     }
 
                     currentUrl = targetUrl.toString()
@@ -222,11 +222,11 @@ object AppUpdateManager {
 
             val responseCode = connection?.responseCode ?: -1
             if (responseCode !in 200..299) {
-                return@withContext Result.failure(Exception("Erreur réseau HTTP $responseCode"))
+                return@withContext Result.failure(Exception(context.getString(com.kinou.gameassist.R.string.err_http_network, responseCode)))
             }
 
             val totalBytes = connection?.contentLengthLong ?: -1L
-            inputStream = connection?.inputStream ?: return@withContext Result.failure(Exception("Flux de téléchargement inaccessible"))
+            inputStream = connection?.inputStream ?: return@withContext Result.failure(Exception(context.getString(com.kinou.gameassist.R.string.err_stream_unavailable)))
             outputStream = FileOutputStream(outputFile)
 
             val buffer = ByteArray(16 * 1024)
@@ -257,7 +257,7 @@ object AppUpdateManager {
                 val actual = calculateFileSha256(outputFile)
                 if (actual.isBlank() || !actual.equals(expectedSha256, ignoreCase = true)) {
                     outputFile.delete()
-                    return@withContext Result.failure(Exception("Échec de vérification d'intégrité de l'APK téléchargé"))
+                    return@withContext Result.failure(Exception(context.getString(com.kinou.gameassist.R.string.err_apk_integrity)))
                 }
             }
 
@@ -356,22 +356,22 @@ object AppUpdateManager {
     suspend fun installApk(context: Context, apkFile: File): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             if (!apkFile.exists() || apkFile.length() <= 0L) {
-                return@withContext Result.failure(FileNotFoundException("Fichier APK introuvable ou incomplet"))
+                return@withContext Result.failure(FileNotFoundException(context.getString(com.kinou.gameassist.R.string.err_apk_missing)))
             }
 
             // 1. Verify that the APK is structurally valid and targets the correct package name
             val archiveInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
             if (archiveInfo == null || archiveInfo.packageName.isNullOrBlank()) {
-                return@withContext Result.failure(IllegalStateException("Le fichier APK téléchargé est corrompu ou incomplet"))
+                return@withContext Result.failure(IllegalStateException(context.getString(com.kinou.gameassist.R.string.err_apk_corrupt)))
             }
             if (archiveInfo.packageName != context.packageName) {
-                return@withContext Result.failure(SecurityException("Le package cible de l'APK (${archiveInfo.packageName}) ne correspond pas à l'application courante (${context.packageName})."))
+                return@withContext Result.failure(SecurityException(context.getString(com.kinou.gameassist.R.string.err_apk_package_mismatch, archiveInfo.packageName ?: "", context.packageName)))
             }
 
             // 2. Vérification cryptographique : l'APK téléchargé doit être signé par le même certificat que l'app installée
             val signaturesMatch = verifyApkSignatureAgainstCurrentApp(context, apkFile)
             if (!signaturesMatch) {
-                return@withContext Result.failure(SecurityException("Échec de vérification cryptographique : le certificat de signature de la mise à jour APK ne correspond pas à l'application installée."))
+                return@withContext Result.failure(SecurityException(context.getString(com.kinou.gameassist.R.string.err_apk_signature)))
             }
 
             withContext(Dispatchers.Main) {

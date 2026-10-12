@@ -1267,7 +1267,7 @@ fun PollingRateDiagnosticView(
         pollingHz >= 200f || peakHz >= 220f -> stringResource(R.string.conn_quality_bt_fast)
         pollingHz >= 90f || peakHz >= 100f -> stringResource(R.string.conn_quality_bt_std)
         pollingHz > 0f -> stringResource(R.string.conn_quality_slow)
-        else -> "🕹️ Bougez les joysticks ou appuyez sur des touches..."
+        else -> stringResource(R.string.gamepad_move_hint)
     }
 
     val connQualityColor = when {
@@ -1361,7 +1361,7 @@ fun PollingRateDiagnosticView(
                         fontWeight = FontWeight.Black
                     )
                     Text(
-                        "${(pollingHz / 1000f * 100f).coerceIn(0f, 100f).toInt()}% de 1000Hz",
+                        stringResource(R.string.polling_of_1000hz, (pollingHz / 1000f * 100f).coerceIn(0f, 100f).toInt()),
                         color = TextSecondary.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
@@ -1387,7 +1387,7 @@ fun PollingRateDiagnosticView(
                         fontWeight = FontWeight.Black
                     )
                     Text(
-                        "Max enregistré",
+                        stringResource(R.string.polling_max_recorded),
                         color = TextSecondary.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
@@ -1419,7 +1419,7 @@ fun PollingRateDiagnosticView(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Intervalle moyen",
+                        stringResource(R.string.polling_avg_interval),
                         color = TextSecondary.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
@@ -1446,7 +1446,7 @@ fun PollingRateDiagnosticView(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "Écart-type deltas",
+                        stringResource(R.string.polling_std_dev),
                         color = TextSecondary.copy(alpha = 0.7f),
                         fontSize = 10.sp
                     )
@@ -1567,6 +1567,10 @@ fun GamepadRumbleDiagnosticView(
     hapticManager: com.kinou.gameassist.engine.HapticManager,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val effectSingle = stringResource(R.string.rumble_effect_single)
+    val effectBurst = stringResource(R.string.rumble_effect_burst)
+    val effectLong = stringResource(R.string.rumble_effect_long)
     var intensity by remember { mutableFloatStateOf(0.8f) }
     var isContinuousRumbling by remember { mutableStateOf(false) }
     var lastTriggeredEffect by remember { mutableStateOf<String?>(null) }
@@ -1657,7 +1661,7 @@ fun GamepadRumbleDiagnosticView(
                                 )
                                 Text(
                                     text = if (info.hasRumble) {
-                                        stringResource(R.string.gamepad_rumble_detected, info.motorCount) + if (info.hasAmplitudeControl) " • Contrôle PWM supporté" else ""
+                                        stringResource(R.string.gamepad_rumble_detected, info.motorCount) + if (info.hasAmplitudeControl) stringResource(R.string.rumble_pwm_supported) else ""
                                     } else {
                                         stringResource(R.string.gamepad_rumble_not_supported)
                                     },
@@ -1713,7 +1717,7 @@ fun GamepadRumbleDiagnosticView(
                 ) {
                     Button(
                         onClick = {
-                            lastTriggeredEffect = "Tir Simple"
+                            lastTriggeredEffect = effectSingle
                             hapticManager.playFireHaptic(intensity)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
@@ -1756,7 +1760,7 @@ fun GamepadRumbleDiagnosticView(
                     Button(
                         onClick = {
                             isContinuousRumbling = !isContinuousRumbling
-                            lastTriggeredEffect = if (isContinuousRumbling) "Rafale Continue" else null
+                            lastTriggeredEffect = if (isContinuousRumbling) effectBurst else null
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (isContinuousRumbling) NeonGreen else DarkSurface
@@ -1769,7 +1773,7 @@ fun GamepadRumbleDiagnosticView(
                         modifier = Modifier.weight(1f).height(44.dp)
                     ) {
                         Text(
-                            if (isContinuousRumbling) "⏹ Arrêter Rafale" else stringResource(R.string.rumble_test_burst_btn),
+                            if (isContinuousRumbling) stringResource(R.string.rumble_stop_burst) else stringResource(R.string.rumble_test_burst_btn),
                             color = if (isContinuousRumbling) DarkBackground else NeonGreen,
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.5.sp,
@@ -1779,7 +1783,7 @@ fun GamepadRumbleDiagnosticView(
 
                     Button(
                         onClick = {
-                            lastTriggeredEffect = "Impulsion 500ms"
+                            lastTriggeredEffect = effectLong
                             hapticManager.playTestHaptic(500L, intensity)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = DarkSurface),

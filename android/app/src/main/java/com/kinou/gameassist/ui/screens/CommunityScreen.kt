@@ -106,7 +106,7 @@ fun CommunityScreen(
                 profiles = response.profiles
                 isLoading = false
             }.onFailure { ex ->
-                errorMessage = ex.localizedMessage ?: "Impossible de joindre la communauté"
+                errorMessage = ex.localizedMessage ?: context.getString(R.string.community_offline)
                 isLoading = false
             }
         }
@@ -546,12 +546,14 @@ fun PublishProfileDialog(
     onDismiss: () -> Unit,
     onPublish: (PublishProfileRequest) -> Unit
 ) {
+    val context = LocalContext.current
+    val defaultGamepadType = stringResource(R.string.community_gamepad_placeholder)
     val jsonSerializer = remember { Json { prettyPrint = true; encodeDefaults = true } }
     var selectedProfile by remember { mutableStateOf(localProfiles.firstOrNull()) }
     var title by remember(selectedProfile) { mutableStateOf(selectedProfile?.name ?: "") }
     var description by remember { mutableStateOf("") }
     var authorName by remember { mutableStateOf("") }
-    var controllerType by remember { mutableStateOf("Xbox / PS5 / Générique") }
+    var controllerType by remember { mutableStateOf(defaultGamepadType) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

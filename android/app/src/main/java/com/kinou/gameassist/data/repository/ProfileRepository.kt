@@ -54,11 +54,11 @@ class ProfileRepository private constructor(context: Context) {
 
         private val SAFE_ID_REGEX = Regex("^[a-zA-Z0-9_-]{1,64}$")
 
-        fun validateAndSanitizeProfile(p: GameProfile): Boolean {
+        fun validateAndSanitizeProfile(p: GameProfile, defaultName: String): Boolean {
             if (p.id.isBlank() || !SAFE_ID_REGEX.matches(p.id)) {
                 p.id = "profile_${UUID.randomUUID().toString().take(8)}"
             }
-            if (p.name.isBlank()) p.name = "Custom Profile"
+            if (p.name.isBlank()) p.name = defaultName
             if (p.packageName.isBlank()) p.packageName = "com.game.app"
 
             // Sanitize Joystick
@@ -146,7 +146,7 @@ class ProfileRepository private constructor(context: Context) {
                     val jsonText = f.readText()
                     val p = json.decodeFromString<GameProfile>(jsonText)
                     ensureRolesMigrated(p)
-                    validateAndSanitizeProfile(p)
+                    validateAndSanitizeProfile(p, localizedDefaultProfileName())
                     profileCache[p.id] = p
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -203,7 +203,7 @@ class ProfileRepository private constructor(context: Context) {
             return try {
                 val p = json.decodeFromString<GameProfile>(file.readText())
                 ensureRolesMigrated(p)
-                validateAndSanitizeProfile(p)
+                validateAndSanitizeProfile(p, localizedDefaultProfileName())
                 profileCache[p.id] = p
                 p.deepCopy()
             } catch (e: Exception) {
@@ -236,7 +236,7 @@ class ProfileRepository private constructor(context: Context) {
 
     private fun saveProfileInternal(profile: GameProfile) {
         val sanitized = profile.deepCopy()
-        validateAndSanitizeProfile(sanitized)
+        validateAndSanitizeProfile(sanitized, localizedDefaultProfileName())
         val file = getProfileFile(sanitized.id) ?: return
         val atomicFile = AtomicFile(file)
         val jsonBytes = json.encodeToString(sanitized).toByteArray(Charsets.UTF_8)
@@ -284,13 +284,13 @@ class ProfileRepository private constructor(context: Context) {
             val imported = json.decodeFromString<GameProfile>(jsonText)
             ensureRolesMigrated(imported)
             imported.customScreenshotPath = sanitizeImportedScreenshotPath(imported.customScreenshotPath)
-            if (!validateAndSanitizeProfile(imported)) {
+            if (!validateAndSanitizeProfile(imported, localizedDefaultProfileName())) {
                 return null
             }
             // Ensure unique ID if imported
             if (getProfile(imported.id) != null) {
                 imported.id = "profile_${UUID.randomUUID().toString().take(8)}"
-                imported.name = "${imported.name} (Importé)"
+                imported.name = localizedImportSuffix(imported.name)
             }
             saveProfile(imported)
             imported
@@ -334,13 +334,45 @@ class ProfileRepository private constructor(context: Context) {
         val newScreenshotPath = ScreenshotManager.duplicateScreenshot(context, newId, profile.customScreenshotPath)
         val copy = profile.deepCopy().copy(
             id = newId,
-            name = "${profile.name} (Copie)",
+            name = localizedCopySuffix(profile.name),
             customScreenshotPath = newScreenshotPath,
             buttons = profile.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
         )
         saveProfile(copy)
         return copy
     }
+
+    private fun localizedImportSuffix(name: String): String =
+        when (com.kinou.gameassist.data.language.LanguageManager.getCurrentLanguage(context)) {
+            "fr" -> "$name (Importé)"
+            "es" -> "$name (Importado)"
+            "pt" -> "$name (Importado)"
+            else -> "$name (Imported)"
+        }
+
+    private fun localizedCopySuffix(name: String): String =
+        when (com.kinou.gameassist.data.language.LanguageManager.getCurrentLanguage(context)) {
+            "fr" -> "$name (Copie)"
+            "es" -> "$name (Copia)"
+            "pt" -> "$name (Cópia)"
+            else -> "$name (Copy)"
+        }
+
+    private fun localizedDefaultProfileName(): String =
+        when (com.kinou.gameassist.data.language.LanguageManager.getCurrentLanguage(context)) {
+            "fr" -> "Profil personnalisé"
+            "es" -> "Perfil personalizado"
+            "pt" -> "Perfil personalizado"
+            else -> "Custom Profile"
+        }
+
+    private fun localizedNewProfileName(): String =
+        when (com.kinou.gameassist.data.language.LanguageManager.getCurrentLanguage(context)) {
+            "fr" -> "Nouveau profil"
+            "es" -> "Nuevo perfil"
+            "pt" -> "Novo perfil"
+            else -> "New profile"
+        }
 
     fun createDefaultCodmProfile(): GameProfile {
         val lang = com.kinou.gameassist.data.language.LanguageManager.getCurrentLanguage(context)
@@ -446,9 +478,9 @@ class ProfileRepository private constructor(context: Context) {
         val newId = "profile_${UUID.randomUUID().toString().take(8)}"
         val newProf = base.deepCopy().copy(
             id = newId,
-            name = if (name.isNotBlank()) name.trim() else "Nouveau profil",
+            name = if (name.isNotBlank()) name.trim() else localizedNewProfileName(),
             packageName = if (targetPackage.isNotBlank()) targetPackage.trim() else "com.game.app",
-            description = "Profil personnalisé",
+            description = localizedDefaultProfileName(),
             customScreenshotPath = null,
             buttons = base.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
         )

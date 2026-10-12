@@ -298,7 +298,7 @@ class EdgeHandleOverlayView(
         textPaint.alpha = a
         textPaint.textSize = 13 * density
         textPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("🎮 GAMEASSIST", left + 14 * density, 24 * density, textPaint)
+        canvas.drawText("🎮 OpenMapper", left + 14 * density, 24 * density, textPaint)
 
         // Close button (✖)
         textPaint.color = if (pressedButton == MenuButton.CLOSE) 0xFFFF0055.toInt() else 0xFF888888.toInt()
@@ -327,7 +327,7 @@ class EdgeHandleOverlayView(
         val btn2Top = 78 * density
         val btn2Bottom = btn2Top + btnHeight
         val strafeOn = isStrafeActive?.invoke() ?: false
-        val strafeLabel = if (strafeOn) "Strafe: ACTIF" else "Strafe: OFF"
+        val strafeLabel = if (strafeOn) context.getString(com.kinou.gameassist.R.string.overlay_handle_strafe_on) else context.getString(com.kinou.gameassist.R.string.overlay_handle_strafe_off)
         val strafeColor = if (strafeOn) 0xFF00FF66.toInt() else 0xFF8899AA.toInt()
         drawMenuButton(
             canvas, RectF(btnLeft, btn2Top, btnRight, btn2Bottom),
@@ -341,7 +341,7 @@ class EdgeHandleOverlayView(
         val btn3Top = 120 * density
         val btn3Bottom = btn3Top + btnHeight
         val recoilOn = isAntiRecoilActive?.invoke() ?: false
-        val recoilLabel = if (recoilOn) "Recul: ACTIF" else "Recul: OFF"
+        val recoilLabel = if (recoilOn) context.getString(com.kinou.gameassist.R.string.overlay_handle_recoil_on) else context.getString(com.kinou.gameassist.R.string.overlay_handle_recoil_off)
         val recoilColor = if (recoilOn) 0xFFFF9900.toInt() else 0xFF8899AA.toInt()
         drawMenuButton(
             canvas, RectF(btnLeft, btn3Top, btnRight, btn3Bottom),

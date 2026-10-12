@@ -106,7 +106,7 @@ class ProfileRepositoryTest {
             )
         )
 
-        val valid = ProfileRepository.validateAndSanitizeProfile(badProfile)
+        val valid = ProfileRepository.validateAndSanitizeProfile(badProfile, "Custom Profile")
         assertTrue(valid)
 
         // Assert sanitized values
@@ -123,11 +123,11 @@ class ProfileRepositoryTest {
         assertEquals(55.0f, badProfile.camera.maxStepPixels, 0.001f) // Default fallback
 
         badProfile.camera.maxStepPixels = 999.0f
-        ProfileRepository.validateAndSanitizeProfile(badProfile)
+        ProfileRepository.validateAndSanitizeProfile(badProfile, "Custom Profile")
         assertEquals(150.0f, badProfile.camera.maxStepPixels, 0.001f) // Clamped to 150.0
 
         badProfile.camera.maxStepPixels = -5.0f
-        ProfileRepository.validateAndSanitizeProfile(badProfile)
+        ProfileRepository.validateAndSanitizeProfile(badProfile, "Custom Profile")
         assertEquals(55.0f, badProfile.camera.maxStepPixels, 0.001f) // Reset to default for <= 0
 
         val btn = badProfile.buttons.first()
@@ -155,7 +155,7 @@ class ProfileRepositoryTest {
                 id = dangerId,
                 name = "Test Traversal"
             )
-            val result = ProfileRepository.validateAndSanitizeProfile(profile)
+            val result = ProfileRepository.validateAndSanitizeProfile(profile, "Custom Profile")
             assertTrue(result)
             assertNotEquals(dangerId, profile.id)
             assertTrue("ID assaini doit correspondre au pattern sûr: ${profile.id}", profile.id.matches(Regex("^[a-zA-Z0-9_-]{1,64}$")))
@@ -176,7 +176,7 @@ class ProfileRepositoryTest {
                 id = validId,
                 name = "Valid Profile"
             )
-            ProfileRepository.validateAndSanitizeProfile(profile)
+            ProfileRepository.validateAndSanitizeProfile(profile, "Custom Profile")
             assertEquals(validId, profile.id)
         }
     }

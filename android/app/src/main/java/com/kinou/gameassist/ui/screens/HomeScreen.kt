@@ -105,7 +105,7 @@ fun HomeScreen(
 
     // Automatic check on launch & sync cached APK state for the exact release
     LaunchedEffect(Unit) {
-        val release = AppUpdateManager.checkForUpdate(currentVersion)
+        val release = AppUpdateManager.checkForUpdate(context, currentVersion)
         if (release != null && release.isNewer) {
             updateInfo = release
             AppUpdateManager.cleanupOldApks(context, release.apkFileName)
@@ -426,7 +426,7 @@ fun HomeScreen(
                 onClick = {
                     coroutineScope.launch {
                         isCheckingUpdate = true
-                        val release = AppUpdateManager.checkForUpdate(currentVersion)
+                        val release = AppUpdateManager.checkForUpdate(context, currentVersion)
                         isCheckingUpdate = false
                         if (release != null) {
                             updateInfo = release

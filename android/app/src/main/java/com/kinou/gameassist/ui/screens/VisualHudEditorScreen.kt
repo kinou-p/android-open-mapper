@@ -103,7 +103,7 @@ fun VisualHudEditorScreen(
                     profile = profile,
                     onSave = { updatedProfile ->
                         onSaveProfile(updatedProfile)
-                        Toast.makeText(ctx, ctx.getString(R.string.profile_copied_toast).replace("copié dans le presse-papier", "sauvegardé"), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, ctx.getString(R.string.profile_saved_toast), Toast.LENGTH_SHORT).show()
                     },
                     onClose = {
                         onSaveProfile(profile)
