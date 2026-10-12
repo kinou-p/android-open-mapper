@@ -322,7 +322,9 @@ class HudEditorOverlayView(
         val bgColor: Int,
         val textColor: Int,
         val strokeColor: Int?,
-        val rect: RectF
+        val rect: RectF,
+        /** Indication de placement : ce bouton doit rester sur la même rangée que le suivant. */
+        val keepWithNext: Boolean = false
     )
 
     /** Dessine un bouton à l'emplacement calculé par [ToolbarLayout] et met à jour son rect tactile. */
@@ -785,8 +787,9 @@ class HudEditorOverlayView(
             bgColor: Int,
             textColor: Int,
             strokeColor: Int? = null,
-            rect: RectF
-        ) = BarButton(label, width, textSize, bgColor, textColor, strokeColor, rect)
+            rect: RectF,
+            keepWithNext: Boolean = false
+        ) = BarButton(label, width, textSize, bgColor, textColor, strokeColor, rect, keepWithNext)
 
         // 1. Boutons communs, dans l'ordre de dessin (index 0 = le plus à droite)
         val buttons = ArrayList<BarButton>(12)
@@ -807,7 +810,8 @@ class HudEditorOverlayView(
         buttons += spec("⬅️", nudgeW, 14f * density, 0xFF1B2433.toInt(), Color.WHITE, 0xFF00F0FF.toInt(), btnNudgeLeftRect)
 
         val sizeW = 44f * density
-        buttons += spec("➕", sizeW, 16f * density, 0xFF243040.toInt(), 0xFF00F0FF.toInt(), null, btnSizeIncRect)
+        // ➕ et ➖ ne doivent jamais être séparés par un repli : ils n'ont de sens que côte à côte.
+        buttons += spec("➕", sizeW, 16f * density, 0xFF243040.toInt(), 0xFF00F0FF.toInt(), null, btnSizeIncRect, keepWithNext = true)
         buttons += spec("➖", sizeW, 16f * density, 0xFF243040.toInt(), 0xFF00F0FF.toInt(), null, btnSizeDecRect)
 
         // 2. Actions dépendant de la sélection
@@ -912,8 +916,9 @@ class HudEditorOverlayView(
 
             if (recoilActive) {
                 val spdText = String.format(java.util.Locale.US, "%.1fx", profile.camera.antiRecoilSpeed)
-                buttons += spec("➕", sizeW, 16f * density, 0xFF243040.toInt(), 0xFFFF9900.toInt(), null, btnCamRecoilIncRect)
-                buttons += spec("➖", sizeW, 16f * density, 0xFF243040.toInt(), 0xFFFF9900.toInt(), null, btnCamRecoilDecRect)
+                // Le trio ➕ ➖ valeur reste d'un bloc (c'est le réglage de vitesse de recul).
+                buttons += spec("➕", sizeW, 16f * density, 0xFF243040.toInt(), 0xFFFF9900.toInt(), null, btnCamRecoilIncRect, keepWithNext = true)
+                buttons += spec("➖", sizeW, 16f * density, 0xFF243040.toInt(), 0xFFFF9900.toInt(), null, btnCamRecoilDecRect, keepWithNext = true)
                 buttons += spec(
                     spdText, 42f * density, 12f * density,
                     0xFF141A22.toInt(), 0xFFFF9900.toInt(), 0xFFFF9900.toInt(), btnCamRecoilSpdRect
@@ -939,7 +944,7 @@ class HudEditorOverlayView(
             spacing = btnSpacing,
             rowHeight = rowHeight
         )
-        val placement = layout.place(buttons.map { it.width })
+        val placement = layout.place(buttons.map { ToolbarLayout.Item(it.width, it.keepWithNext) })
         bottomBarHeight = placement.height
 
         val barTop = h - bottomBarHeight - 12f * density

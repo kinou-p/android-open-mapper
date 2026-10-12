@@ -1,6 +1,7 @@
 package com.kinou.gameassist.ui.overlay
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -42,6 +43,23 @@ class ToolbarLayoutTest {
             spacing = SPACING,
             rowHeight = ROW_H,
             firstRowLeftReserve = HIDE_RESERVE
+        )
+
+        /** Barre du bas (bouton sélectionné + « Détails » actif) : 11 boutons. */
+        val BOTTOM_BAR_WIDTHS = listOf(
+            84f * DENSITY,   // Del
+            38f * DENSITY, 38f * DENSITY, 38f * DENSITY, 38f * DENSITY,   // ➡️ ⬇️ ⬆️ ⬅️
+            44f * DENSITY, 44f * DENSITY,                                  // ➕ ➖
+            96f * DENSITY,   // Role
+            92f * DENSITY,   // Mode
+            96f * DENSITY    // Assigner
+        )
+
+        fun bottomBarLayout() = ToolbarLayout(
+            availableWidth = PORTRAIT_W,
+            margin = 28f * DENSITY,
+            spacing = 6f * DENSITY,
+            rowHeight = ROW_H
         )
     }
 
@@ -116,7 +134,7 @@ class ToolbarLayoutTest {
 
     @Test
     fun emptyBarHasNoRowAndNoHeight() {
-        val placement = layout(PORTRAIT_W).place(emptyList())
+        val placement = layout(PORTRAIT_W).place(emptyList<Float>())
 
         assertTrue(placement.slots.isEmpty())
         assertEquals(0f, placement.height, 0.01f)
@@ -127,25 +145,55 @@ class ToolbarLayoutTest {
         // Scénario reproduit sur l'appareil : « Détails » actif + un bouton sélectionné, la barre du
         // bas doit alors afficher Del + 4 flèches + ➕/➖ + Role + Mode + Assigner (11 boutons), sans
         // que Role/Mode/Assigner disparaissent hors écran.
-        val widths = listOf(
-            84f * DENSITY,   // Del
-            38f * DENSITY, 38f * DENSITY, 38f * DENSITY, 38f * DENSITY,   // ➡️ ⬇️ ⬆️ ⬅️
-            44f * DENSITY, 44f * DENSITY,                                  // ➕ ➖
-            96f * DENSITY,   // Role
-            92f * DENSITY,   // Mode
-            96f * DENSITY    // Assigner
-        )
-        val placement = ToolbarLayout(
-            availableWidth = PORTRAIT_W,
-            margin = 28f * DENSITY,
-            spacing = 6f * DENSITY,
-            rowHeight = ROW_H
-        ).place(widths)
+        val placement = bottomBarLayout().place(BOTTOM_BAR_WIDTHS)
 
         placement.slots.forEach { slot ->
             assertTrue("bouton coupé à gauche : left=${slot.left}", slot.left >= 0f)
             assertTrue("bouton coupé à droite : right=${slot.right}", slot.right <= PORTRAIT_W)
         }
         assertTrue("la barre du bas doit se replier (rows=${placement.rows})", placement.rows >= 2)
+    }
+
+    @Test
+    fun gluedButtonsAreNeverSplitAcrossRows() {
+        // ➕ (index 5) et ➖ (index 6) doivent rester côte à côte : sans collage, le repli les
+        // sépare (constaté sur l'appareil : ➕ finissait la 1re rangée, ➖ ouvrait la 2e).
+        val splitByAccident = bottomBarLayout().place(BOTTOM_BAR_WIDTHS)
+        assertNotEquals(
+            "sans collage, le cas de test doit bien séparer la paire (sinon le test ne prouve rien)",
+            splitByAccident.slots[5].row,
+            splitByAccident.slots[6].row
+        )
+
+        val items = BOTTOM_BAR_WIDTHS.mapIndexed { index, width ->
+            ToolbarLayout.Item(width, keepWithNext = index == 5)
+        }
+        val glued = bottomBarLayout().place(items)
+
+        assertEquals("➕ et ➖ doivent partager la même rangée", glued.slots[5].row, glued.slots[6].row)
+        glued.slots.forEach { slot ->
+            assertTrue("bouton coupé à gauche : left=${slot.left}", slot.left >= 0f)
+        }
+    }
+
+    @Test
+    fun glueIsIgnoredWhenThePairCannotFitOnAWholeRow() {
+        // Filet de sécurité : une paire collée plus large que l'écran ne doit pas sortir du cadre.
+        val items = listOf(
+            ToolbarLayout.Item(2000f, keepWithNext = true),
+            ToolbarLayout.Item(2000f)
+        )
+
+        val placement = ToolbarLayout(
+            availableWidth = PORTRAIT_W,
+            margin = MARGIN,
+            spacing = SPACING,
+            rowHeight = ROW_H
+        ).place(items)
+
+        placement.slots.forEach { slot ->
+            assertTrue("left=${slot.left}", slot.left >= MARGIN)
+            assertTrue("right=${slot.right}", slot.right <= PORTRAIT_W - MARGIN)
+        }
     }
 }
