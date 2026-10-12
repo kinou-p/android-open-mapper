@@ -35,12 +35,15 @@ the tests run, so it does not feed the engine.
 | `MobaGameActivity` | Brawl Stars | floating move stick, attack and super aim joysticks, gadget | `MobaGameE2eTest` |
 | `TapGameActivity` | menus, puzzle games | 4x3 grid of tap targets | `ComboE2eTest`, `CursorE2eTest` |
 
+The simulated games live in `src/debug` (not in `androidTest`): an activity of the test APK would run in
+the test process, and the engine and the game must share the app process. They are only in debug builds.
+
 ## Add a game
 
-1. `games/`: extend `GameView` (pointer callbacks and a `snapshotState()` returning an immutable
+1. `src/debug/.../e2e/games/`: extend `GameView` (pointer callbacks and a `snapshotState()` returning an immutable
    data class), add an object with the normalized layout, wrap the view in a
    `SimulatedGameActivity` subclass.
-2. Declare the activity in `src/androidTest/AndroidManifest.xml` (full class name).
+2. Declare the activity in `src/debug/AndroidManifest.xml` (full class name).
 3. `scenarios/`: subclass `GameE2eTest<YourActivity, YourView>`, build a profile with `Profiles`
    (use the layout constants for button positions), call `startEngine(profile)` and script the
    gamepad with the returned `E2eRig`. Use `waitFor` / `assertStays` instead of fixed sleeps.

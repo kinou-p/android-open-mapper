@@ -32,6 +32,15 @@ class E2eRig(profile: GameProfile) : AutoCloseable {
         engine = GamepadEngine(context, injector, scope)
         engine.setProfile(profile)
         engine.start()
+        // The real /dev/input reader needs Shizuku. Without it, it fails right after start and resets
+        // every input once; with it, a real gamepad would feed the engine. Stop it and let that
+        // one reset happen now, so the scripted inputs below are never wiped.
+        engine.linuxReader.stop()
+        Thread.sleep(READER_SETTLE_MS)
+    }
+
+    private companion object {
+        const val READER_SETTLE_MS = 400L
     }
 
     fun press(button: String) = engine.onRawButtonDown(button)

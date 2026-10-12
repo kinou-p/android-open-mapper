@@ -39,6 +39,6 @@ abstract class GameE2eTest<A : SimulatedGameActivity<V>, V : GameView>(
     @After
     fun tearDown() {
         rig?.close()
-        scenario.close()
+        if (::scenario.isInitialized) scenario.close()
     }
 }

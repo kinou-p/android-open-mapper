@@ -1,6 +1,7 @@
 package com.kinou.gameassist.e2e
 
 import android.os.SystemClock
+import android.util.Log
 import android.view.InputDevice
 import android.view.MotionEvent
 import androidx.test.platform.app.InstrumentationRegistry
@@ -16,6 +17,10 @@ import com.kinou.gameassist.injector.ShizukuTouchInjector
  * active pointer, POINTER_UP / UP.
  */
 class UiAutomationTouchInjector : ShizukuTouchInjector() {
+
+    private companion object {
+        const val TAG = "E2eInjector"
+    }
 
     private val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
     private val lock = Any()
@@ -97,7 +102,8 @@ class UiAutomationTouchInjector : ShizukuTouchInjector() {
             downTime, SystemClock.uptimeMillis(), action, count, properties, coords,
             0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0
         )
-        uiAutomation.injectInputEvent(event, true)
+        val accepted = uiAutomation.injectInputEvent(event, true)
+        Log.d(TAG, "inject action=$action pointers=$count accepted=$accepted ${coords.joinToString { "(${it.x.toInt()},${it.y.toInt()})" }}")
         event.recycle()
     }
 }
