@@ -17,6 +17,7 @@ import com.kinou.gameassist.data.model.ButtonMode
 import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ScreenshotManager
+import com.kinou.gameassist.engine.ButtonProcessor
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -1452,8 +1453,28 @@ class HudEditorOverlayView(
         val keys = learnChord.toList()
         learnChord.clear()
         if (keys.isEmpty()) return
-        selectedButton?.gamepadButton = if (keys.size >= 2) "${keys.first()}+${keys.last()}" else keys.first()
+        // Avec trois touches maintenues, on retient les deux plus récentes : c'est l'appui qui vient
+        // d'être relâché qui définit le combo.
+        val chord = if (keys.size > 2) keys.takeLast(2) else keys
+        val candidate = chord.joinToString("+")
+        val target = selectedButton
+
+        // Ambiguïté refusée : deux combos visant le même déclencheur. findCombo() trancherait par
+        // l'ordre des boutons du profil, ce qui n'est pas compréhensible pour l'utilisateur.
+        val trigger = ButtonProcessor.parseCombo(candidate)?.second
+        val clashes = trigger != null && target != null && profile.buttons.any { other ->
+            other !== target &&
+                ButtonProcessor.parseCombo(ButtonProcessor.canonicalGamepadKey(other.gamepadButton))?.second == trigger
+        }
+
         isLearning = false
+        if (target == null || clashes) {
+            if (clashes) performHapticFeedback(HapticFeedbackConstants.REJECT)
+            invalidate()
+            return
+        }
+
+        target.gamepadButton = candidate
         performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         invalidate()
     }
