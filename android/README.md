@@ -47,6 +47,7 @@ Grâce à l'intégration de **Shizuku**, l'application injecte des événements 
   - Exportation / Partage et Duplication instantanée de profils en JSON.
   - Assignation des rôles clés (Tir, Rechargement, Visée ADS) et modes (Hold / Tap).
   - Sélecteur de package de jeu par profil (icône + label de l'application) pour retrouver le bon mapping.
+  - **Interface multilingue** : anglais, français, espagnol et portugais — sélecteur de langue sur l'accueil ; toutes les chaînes centralisées dans `res/values*/strings.xml`.
 
 ### 📐 4. Diagnostic & Calibration Manette
 - **Visualiseur en temps réel** : Position des sticks et matrice d'état de tous les boutons.

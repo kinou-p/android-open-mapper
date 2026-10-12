@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Statut : ✅ Implémenté** — livré par le commit `b78c3ea` (*refactor(profiles): split list and edit screen, simplify home header*), qui couvre les Task 1 et 2.
+
 **Goal:** Séparer « activer » de « éditer » un profil (liste compacte + écran d'édition dédié) et alléger le header de l'accueil (mise à jour et signaler un bug en boutons secondaires).
 
 **Architecture:** `ProfileEditorScreen.kt` ne garde que la liste compacte (`ProfileCard` avec contour actif, bouton `Activer`, crayon d'édition, menu ⋮). Tout le bloc d'édition part dans un nouveau `ProfileEditScreen.kt` plein écran. `MainActivity` gagne `Screen.PROFILE_EDIT` et un état `editTargetProfile` distinct du profil actif. `HomeScreen` perd ses trois `IconButton` de header au profit de deux boutons secondaires.
@@ -48,7 +50,7 @@ Ces comportements ne sont couverts par aucun test automatique et cassent facilem
   - `ProfileEditorScreen(profiles: List<GameProfile>, currentProfile: GameProfile?, onActivate: (GameProfile) -> Unit, onEdit: (GameProfile) -> Unit, onSaveProfile: (GameProfile) -> Unit, onDeleteProfile: (String) -> Unit, onDuplicateProfile: (GameProfile) -> Unit, onCreateProfile: ((String, String) -> Unit)?, onImportProfile: (String, (Boolean) -> Unit) -> Unit, onBack: () -> Unit)` — `onSelectProfile` devient `onActivate` ; `onOpenVisualEditor`, `liveRx`, `liveRy` disparaissent.
   - `ProfileCard(profile: GameProfile, isActive: Boolean, canDelete: Boolean, onActivate: () -> Unit, onEdit: () -> Unit, onDuplicate: () -> Unit, onExport: () -> Unit, onDelete: () -> Unit)`.
 
-- [ ] **Step 1: Ajouter les chaînes dans les 5 locales**
+- [x] **Step 1: Ajouter les chaînes dans les 5 locales**
 
 Dans chacun de `res/values/strings.xml`, `values-en`, `values-fr`, `values-es`, `values-pt`, juste avant `</resources>`, ajouter :
 
@@ -60,7 +62,7 @@ Dans chacun de `res/values/strings.xml`, `values-en`, `values-fr`, `values-es`, 
 
 Adaptations : `values`/`values-en` en anglais (`Edit profile`, `Edit`, `More actions`), `values-es` (`Editar el perfil`, `Editar`, `Más acciones`), `values-pt` (`Editar perfil`, `Editar`, `Mais ações`).
 
-- [ ] **Step 2: Créer `ProfileEditScreen.kt`**
+- [x] **Step 2: Créer `ProfileEditScreen.kt`**
 
 Créer le fichier avec le package `com.kinou.gameassist.ui.screens`, un `@OptIn(ExperimentalMaterial3Api::class) @Composable fun ProfileEditScreen(...)` de la signature ci-dessus, et **copier** dedans, depuis `ProfileEditorScreen.kt:263-1407`, en conservant le code tel quel (la suppression du bloc d'origine se fait au Step 3) :
 
@@ -72,7 +74,7 @@ Créer le fichier avec le package `com.kinou.gameassist.ui.screens`, un `@OptIn(
 
 Le `Scaffold` de l'écran porte : `TopAppBar` (flèche `onBack`, titre `R.string.profile_edit_title`), puis un en-tête avec le **nom** éditable (crayon → `showRenameDialog`) et le **package** cliquable (→ `showPackageDialog`), puis le bouton « Éditeur visuel », puis les sous-onglets et leurs contenus. Ajouter un `BackHandler { onBack() }`. **Ne pas** réintroduire de `Card` ni de `if (isSelected)` : le contenu est affiché directement.
 
-- [ ] **Step 3: Composant `ProfileCard` compact + liste**
+- [x] **Step 3: Composant `ProfileCard` compact + liste**
 
 Dans `ProfileEditorScreen.kt`, remplacer tout le corps de `ProfileCard` (263-1407) par une carte compacte : `Card` (`fillMaxWidth`, contour `NeonCyan` si `isActive`, sinon `DarkCardBorder`) → `Row` :
 - `Column(weight(1f))` : `profile.name` (bold, `maxLines=2`, ellipsis), `profile.packageName` (12 sp, `TextSecondary`, 1 ligne ellipsée), `stringResource(R.string.buttons_count_configured, profile.buttons.size)`.
@@ -82,7 +84,7 @@ Dans `ProfileEditorScreen.kt`, remplacer tout le corps de `ProfileCard` (263-140
 
 Mettre à jour l'appel dans la `LazyColumn` (lignes 116-149) : passer `isActive = prof.id == currentProfile?.id`, `onActivate = { onSelectProfile(prof) }` → `onActivate`, `onEdit = { onEditProfile(prof) }`, et déplacer la logique d'export JSON actuelle (lignes 133-147) en paramètre `onExport`. Supprimer `editingProfileId`, les paramètres `liveRx`/`liveRy`/`onOpenVisualEditor`, et les imports devenus inutilisés.
 
-- [ ] **Step 4: Navigation dans `MainActivity.kt`**
+- [x] **Step 4: Navigation dans `MainActivity.kt`**
 
 - Ajouter `PROFILE_EDIT` à `enum class Screen`.
 - Ajouter les états `var editTargetProfile by remember { mutableStateOf<GameProfile?>(null) }` et `var visualEditorOrigin by remember { mutableStateOf(Screen.PROFILES) }`.
@@ -92,14 +94,14 @@ Mettre à jour l'appel dans la `LazyColumn` (lignes 116-149) : passer `isActive 
 - `BackHandler` : `when (currentScreen) { VISUAL_HUD_EDITOR -> visualEditorOrigin; HOME -> HOME; else -> HOME }` en remplaçant le `if` actuel, et `PROFILE_EDIT` → `PROFILES`.
 - Masquer la barre basse pour `PROFILE_EDIT` comme pour `VISUAL_HUD_EDITOR` (conditions aux lignes 167 et 233).
 
-- [ ] **Step 5: Build + suite unitaire**
+- [x] **Step 5: Build + suite unitaire**
 
 ```bash
 cd android && JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew :app:testDebugUnitTest :app:assembleDebug --console=plain
 ```
 Attendu : `BUILD SUCCESSFUL`, **130 tests**, aucune erreur ni warning Kotlin.
 
-- [ ] **Step 6: Vérification sur l'appareil**
+- [x] **Step 6: Vérification sur l'appareil**
 
 ```bash
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
@@ -108,7 +110,7 @@ adb exec-out screencap -p > /tmp/opencode/profiles_after.png
 ```
 Vérifier dans les captures, en cochant les points 1-4 du Review Focus : la liste est compacte avec contour sur le profil actif, `Activer` change l'actif sans ouvrir l'édition, le crayon ouvre l'édition, un slider déplacé y persiste après retour/réouverture, `⋮` propose dupliquer/exporter/supprimer, le retour de l'éditeur visuel revient à l'édition.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add android/app/src/main/java/com/kinou/gameassist/ui/screens/ProfileEditScreen.kt \
@@ -131,7 +133,7 @@ git commit -m "refactor(profiles): split profile list from a dedicated edit scre
 - Consumes: le flux `AppUpdateManager.checkForUpdate` et la bannière existante (inchangés) ; `onNavigateToBugReport` (déjà fourni par `MainActivity`).
 - Produces: `HomeScreen(profiles, selectedProfile, onSelectProfile, onStartService, onStopService, isServiceRunning, onNavigateToProfiles, onNavigateToBugReport)` — le paramètre `onNavigateToTest` disparaît.
 
-- [ ] **Step 1: Ajouter les chaînes dans les 5 locales**
+- [x] **Step 1: Ajouter les chaînes dans les 5 locales**
 
 ```xml
 <string name="home_check_update">Mises à jour</string>   <!-- traduire par locale -->
@@ -140,28 +142,28 @@ git commit -m "refactor(profiles): split profile list from a dedicated edit scre
 
 Adaptations : `values`/`values-en` (`Updates`, `Report a bug`), `values-es` (`Actualizaciones`, `Informar de un error`), `values-pt` (`Atualizações`, `Reportar um erro`).
 
-- [ ] **Step 2: Retirer les trois `IconButton` du header**
+- [x] **Step 2: Retirer les trois `IconButton` du header**
 
 Dans `HomeScreen.kt`, supprimer les `IconButton` *Check Update* (210-246), *Gamepad Tester* (248-258) et *Bug Report* (260-271) du `Row` du header. Conserver le bloc titre (`Column(Modifier.weight(1f))` avec `maxLines = 1` + `TextOverflow.Ellipsis`, lignes 126-143) et la chip langue (151-208). Retirer `onNavigateToTest` de la signature et `Icons.Default.CloudSync` / `SportsEsports` / `BugReport` s'ils deviennent inutilisés.
 
-- [ ] **Step 3: Ajouter les deux boutons secondaires**
+- [x] **Step 3: Ajouter les deux boutons secondaires**
 
 Dans la `Column` principale, juste **après** le bouton principal « LAUNCH OVERLAY & MAPPING », insérer une `Row(fillMaxWidth, spacedBy(8.dp))` de deux `OutlinedButton(weight(1f))`, texte 12 sp, `maxLines = 1` :
 - `R.string.home_check_update` : reprend **tel quel** le corps `onClick` de l'ancien bouton *Check Update* (210-229), avec `CircularProgressIndicator(Modifier.size(16.dp))` en icône de tête quand `isCheckingUpdate`.
 - `R.string.home_report_bug` : `onClick = onNavigateToBugReport`.
 
-- [ ] **Step 4: Mettre à jour l'appel dans `MainActivity.kt`**
+- [x] **Step 4: Mettre à jour l'appel dans `MainActivity.kt`**
 
 Retirer `onNavigateToTest = { ... }` du passage à `HomeScreen` (l'onglet basse `Diagnostic` reste le seul accès à `GAMEPAD_TEST`).
 
-- [ ] **Step 5: Build + suite unitaire**
+- [x] **Step 5: Build + suite unitaire**
 
 ```bash
 cd android && JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 ./gradlew :app:testDebugUnitTest :app:assembleDebug --console=plain
 ```
 Attendu : `BUILD SUCCESSFUL`, 130 tests, aucun warning.
 
-- [ ] **Step 6: Vérification sur l'appareil**
+- [x] **Step 6: Vérification sur l'appareil**
 
 ```bash
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
@@ -170,7 +172,7 @@ adb exec-out screencap -p > /tmp/opencode/home_after_v2.png
 ```
 Vérifier (Review Focus point 5) : header = titre + sous-titre ellipsé + chip langue **uniquement**, aucun débordement ; les deux boutons s'affichent sous l'action principale ; « Mises à jour » déclenche le flux et affiche l'indicateur ; « Signaler un bug » ouvre l'écran de rapport ; l'onglet basse `Diagnostic` ouvre toujours l'écran de test.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add android/app/src/main/java/com/kinou/gameassist/ui/screens/HomeScreen.kt \

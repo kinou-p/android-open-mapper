@@ -619,6 +619,11 @@ JAVA_HOME=/usr/lib/jvm/java-1.17.0-openjdk-amd64 ./gradlew testDebugUnitTest
 ./gradlew assembleDebug
 ```
 
+### 🌍 4. Internationalisation & Chaînes de Caractères (i18n)
+- 🌐 **Aucune chaîne visible en dur** : tout texte affiché à l'utilisateur (écrans Compose, overlays, toasts, dialogues, messages d'erreur, libellés de rôles) DOIT passer par une ressource `strings.xml` via `stringResource(...)` / `context.getString(...)`. Ne jamais écrire un littéral affiché directement dans le code Kotlin.
+- 🗂️ **Cinq dossiers de ressources** : toute chaîne ajoutée ou modifiée est répercutée dans `res/values` (anglais — ressource par défaut) **et** `values-en`, `values-fr`, `values-es`, `values-pt`.
+- ✅ **Exceptions volontaires** : matchers de mots-clés (ex. `"visée"`), profils par défaut par langue, noms natifs des langues dans le sélecteur, et lignes de log développeur (jamais affichées).
+
 ---
 
 ## 9. Playbook de Diagnostic & Troubleshooting pour les Agents
@@ -700,7 +705,7 @@ En cas de dysfonctionnement signalé lors de modifications, consulter cet arbre 
 
 ## 11. Roadmap Technique & Prochains Chantiers (`TODO.md`)
 
-Les prochaines évolutions architecturales planifiées pour OpenMapper s'articulent autour de 5 axes stratégiques :
+Les prochaines évolutions architecturales planifiées pour OpenMapper s'articulent autour de 6 axes stratégiques :
 
 *Déjà livré depuis la roadmap initiale* : les **combos 2 boutons** (`BUTTON_R1+BUTTON_X`) assignables depuis l'éditeur HUD (index précalculé dans `ButtonProcessor`, lookup sans allocation) et le **mode curseur virtuel** (ci-dessous).
 
@@ -723,6 +728,10 @@ Les prochaines évolutions architecturales planifiées pour OpenMapper s'articul
 5. **💤 Standby Intelligent & Polling Adaptatif** :
    - Réduction dynamique de la fréquence d'interrogation (de 240 Hz à 30 Hz) en cas d'absence d'action pendant plus de 2 secondes, avec reprise instantanée à la première pression, pour préserver la batterie pendant les cinématiques.
    - *Composants cibles* : [`GamepadEngine.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/GamepadEngine.kt).
+6. **🎯 MOBA-Style Controls (Visée par Joystick Virtuel)** :
+   - Alternative « MOBA » à la visée caméra FPS : un bouton physique (ex. `R1`) devient un modificateur qui ouvre un joystick virtuel à position fixe ; tant qu'il est maintenu, le stick droit pilote ce joystick (au lieu de la caméra) et le relâchement déclenche l'action dans la direction courante. Cible les jeux à visée par joystick virtuel (*Brawl Stars*, twin-stick/MOBA).
+   - *Origine* : issue GitHub [#7 — MOBA-Style Controls](https://github.com/kinou-p/android-open-mapper/issues/7).
+   - *Composants cibles* : [`GamepadEngine.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/GamepadEngine.kt), [`MovementProcessor.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/MovementProcessor.kt), [`CameraProcessor.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/CameraProcessor.kt), [`ShizukuTouchInjector.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/injector/ShizukuTouchInjector.kt), [`JoystickConfig.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/data/model/JoystickConfig.kt).
 
 ---
 

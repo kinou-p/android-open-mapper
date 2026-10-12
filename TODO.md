@@ -7,11 +7,20 @@ This document tracks planned features, technical enhancements, and upcoming mile
 ## 🎮 Gameplay & Core Mapping Engine
 
 - [x] **🖱️ Virtual Mouse / Pointer Mode** — ✅ **Shipped** (`L3+R3` toggles, either stick moves a quadratic-curve pointer, `A` taps/holds, `B` exits, D-pad sets the speed 0.25x–5x in game, saved as `cursor_speed`).
-  - Remaining polish: D-pad auto-repeat, in-app speed slider, overlay opacity check on Android 12+.
+  - Remaining polish: D-pad auto-repeat, overlay opacity check on Android 12+.
   - Target Components: `ui/overlay/CursorOverlayView.kt`, `engine/GamepadEngine.kt`, `service/OverlayService.kt`.
 
 - [x] **🧩 Two-Button Combos** (`R1+X`) — ✅ **Shipped**, assignable from the HUD editor (hold the modifier, press the trigger, release).
   - Target Components: `engine/ButtonProcessor.kt`, `ui/overlay/HudEditorOverlayView.kt`.
+
+- [ ] **🎯 MOBA-Style Controls (Virtual Joystick Aim)**
+  - **Description**: Add a MOBA-style alternative to the FPS camera aiming. A physical button (e.g. `R1`) becomes a *modifier* that opens a virtual on-screen joystick at a fixed position; while it is held, the right stick steers that joystick instead of the camera, and releasing the modifier casts the stick at its current direction (touch-style tap-and-drag aiming).
+  - **Benefit**: Makes games whose attacks are aimed through a virtual joystick (*Brawl Stars* and other MOBA / twin-stick titles) playable, instead of only free-camera shooters.
+  - **Use Cases**:
+    - *Aim attack*: hold the modifier → the joystick opens at its HUD position → steer with the right stick → release to cast.
+    - *Variable range*: the further the stick is pushed, the further the aim reaches.
+  - **Target Components**: `engine/GamepadEngine.kt`, `engine/MovementProcessor.kt`, `engine/CameraProcessor.kt`, `injector/ShizukuTouchInjector.kt`, `data/model/JoystickConfig.kt`, `ui/overlay/HudEditorOverlayView.kt`.
+  - **Origin**: GitHub issue [#7 — MOBA-Style Controls](https://github.com/kinou-p/android-open-mapper/issues/7) (*enhancement*, by @MrAnarE8).
 
 - [ ] **⚡ e-Sport Macros & Combos**
   - **Description**: Record or configure multi-action button sequences with customizable millisecond delays and execution order.

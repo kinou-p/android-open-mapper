@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Statut : ✅ Implémenté** — livré en v1.2.0 (commits `97e1ea5` *route /api/device/register* ➔ `aa06350` *DeviceTokenStore Android*).
+
 **Goal:** Remplacer le `deviceHash` calculé côté client (`SHA256(ANDROID_ID:salt)`) par un token opaque de haute entropie émis par le serveur, stocké chiffré côté client et haché (`SHA256`) côté serveur — afin d'éliminer la trivialité du forgage.
 
 **Architecture:** Le client ne connaît plus de sel/salt de device. Au premier lancement, il appelle `POST /api/device/register` ; le serveur génère un token 64-hex, stocke `device_hash = SHA256(token)` dans `devices`, et renvoie le token une fois. Le client le persiste dans `EncryptedSharedPreferences` et l'envoie en `deviceToken` dans `/vote`, `/profiles`, `/telemetry/ping`. Le serveur en dérive `SHA256(deviceToken)` et réutilise la colonne `device_hash` (et les clés `dev:*`) inchangée. L'ancien champ `deviceHash` est rejeté (400) → ré-enregistrement forcé.
@@ -37,7 +39,7 @@ Note tests backend : le repo n'a actuellement aucun framework de test. On ajoute
 - Create: `backend/vitest.config.ts`
 - Modify: `backend/package.json`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/src/device-identity.test.ts`:
 
@@ -82,12 +84,12 @@ describe('normalizeDeviceToken', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && npm install --save-dev vitest && npx vitest run src/device-identity.test.ts`
 Expected: FAIL — "Failed to resolve import './device-identity'".
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Create `backend/src/device-identity.ts`:
 
@@ -111,12 +113,12 @@ export async function normalizeDeviceToken(token: unknown): Promise<string | nul
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && npx vitest run src/device-identity.test.ts`
 Expected: PASS (3 suites, 6 tests).
 
-- [ ] **Step 5: Add vitest config + test script**
+- [x] **Step 5: Add vitest config + test script**
 
 Create `backend/vitest.config.ts`:
 
@@ -139,7 +141,7 @@ cd backend && npm pkg set scripts.test="vitest run"
 Verify full suite: `cd backend && npm test`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/src/device-identity.ts backend/src/device-identity.test.ts backend/vitest.config.ts backend/package.json backend/package-lock.json
@@ -153,7 +155,7 @@ git commit -m "feat(device): module device-identity (+ vitest) pour token et has
 **Files:**
 - Modify: `backend/src/index.ts`
 
-- [ ] **Step 1: Import the module**
+- [x] **Step 1: Import the module**
 
 Add near the top imports of `backend/src/index.ts`:
 
@@ -161,7 +163,7 @@ Add near the top imports of `backend/src/index.ts`:
 import { generateDeviceToken, normalizeDeviceToken } from './device-identity';
 ```
 
-- [ ] **Step 2: Add the register route**
+- [x] **Step 2: Add the register route**
 
 Insert this route after the `/api/profiles/:id/download` handler (before the telemetry ping route):
 
@@ -214,12 +216,12 @@ app.post('/api/device/register', verifySignature, async (c) => {
 });
 ```
 
-- [ ] **Step 3: Type-check**
+- [x] **Step 3: Type-check**
 
 Run: `cd backend && npx tsc --noEmit`
 Expected: no errors.
 
-- [ ] **Step 4: Verify manually (wrangler dev + curl)**
+- [x] **Step 4: Verify manually (wrangler dev + curl)**
 
 Run in one terminal: `cd backend && npm run dev`
 In another terminal (adjust for your local auth env):
@@ -241,7 +243,7 @@ Expected: `{"success":true,"deviceToken":"<64 hex>"}`.
 
 Repeat the same command immediately → Expected: `429` with « Trop de tentatives » (cooldown 30s).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/src/index.ts
@@ -255,7 +257,7 @@ git commit -m "feat(device): route POST /api/device/register émettant un token 
 **Files:**
 - Modify: `backend/src/index.ts`
 
-- [ ] **Step 1: Route `/api/profiles` (publish)**
+- [x] **Step 1: Route `/api/profiles` (publish)**
 
 Replace at the top of the handler:
 ```ts
@@ -288,7 +290,7 @@ Replace the insert `.bind(...)` value `deviceHash,` with `deviceIdentity,` (the 
 
 Expected end state: no remaining reference to `deviceHash` variable in this handler.
 
-- [ ] **Step 2: Route `/api/profiles/:id/vote`**
+- [x] **Step 2: Route `/api/profiles/:id/vote`**
 
 Replace:
 ```ts
@@ -325,7 +327,7 @@ Replace `device_hash` SQL binds that use `deviceHash`:
 - Cancel: `.bind(profileId, deviceHash)` → `.bind(profileId, deviceIdentity)`
 - Upsert: `.bind(profileId, deviceHash, hashedIp, voteVal, now)` → `.bind(profileId, deviceIdentity, hashedIp, voteVal, now)`
 
-- [ ] **Step 3: Route `/api/telemetry/ping`**
+- [x] **Step 3: Route `/api/telemetry/ping`**
 
 Replace:
 ```ts
@@ -349,20 +351,20 @@ Replace `ping:${deviceHash}` with `ping:${deviceIdentity}`.
 
 Replace `.bind(deviceHash, now, now, version)` and `.bind(todayStr, deviceHash, version, now)` with `deviceIdentity`.
 
-- [ ] **Step 4: Remove unused `HASH_REGEX`**
+- [x] **Step 4: Remove unused `HASH_REGEX`**
 
 The constant `const HASH_REGEX = /^[a-f0-9]{64}$/i;` (line ~114) is now unused. Delete it.
 
-- [ ] **Step 5: Type-check + full tests**
+- [x] **Step 5: Type-check + full tests**
 
 Run: `cd backend && npx tsc --noEmit && npm test`
 Expected: type-check OK, vitest PASS.
 
-- [ ] **Step 6: Manual sanity (curl)**
+- [x] **Step 6: Manual sanity (curl)**
 
 Repeat the vote/ping curl with a token obtained from `/api/device/register`, using `"deviceToken"` in the body. Expected: `success:true`. With the old key `"deviceHash"` → Expected: `400`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/src/index.ts
@@ -377,7 +379,7 @@ git commit -m "feat(device): routes /vote /profiles /telemetry via deviceToken (
 - Modify: `android/app/build.gradle.kts`
 - Create: `android/app/src/main/java/com/kinou/gameassist/data/community/DeviceTokenStore.kt`
 
-- [ ] **Step 1: Add dependency**
+- [x] **Step 1: Add dependency**
 
 In `android/app/build.gradle.kts`, in the `dependencies` block add:
 
@@ -386,7 +388,7 @@ In `android/app/build.gradle.kts`, in the `dependencies` block add:
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 ```
 
-- [ ] **Step 2: Create `DeviceTokenStore.kt`**
+- [x] **Step 2: Create `DeviceTokenStore.kt`**
 
 ```kotlin
 package com.kinou.gameassist.data.community
@@ -421,7 +423,7 @@ object DeviceTokenStore {
 }
 ```
 
-- [ ] **Step 3: Verify compile (can fail if dependency unresolved — run after Gradle sync)**
+- [x] **Step 3: Verify compile (can fail if dependency unresolved — run after Gradle sync)**
 
 > Build requiert les secrets du repo (`APP_SECRET`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD`) via env ou `android/local.properties` ; sans eux `assembleDebug` échoue avant la compilation.
 
@@ -437,7 +439,7 @@ Expected: BUILD SUCCESSFUL (dependency download may take a while first time).
 - Modify: `android/app/src/main/java/com/kinou/gameassist/data/community/CommunityProfile.kt`
 - Delete: `android/app/src/main/java/com/kinou/gameassist/data/community/DeviceFingerprint.kt`
 
-- [ ] **Step 1: Rename `PublishProfileRequest.deviceHash`**
+- [x] **Step 1: Rename `PublishProfileRequest.deviceHash`**
 
 In `CommunityProfile.kt`, change:
 ```kotlin
@@ -448,7 +450,7 @@ to:
 @SerializedName("deviceToken") var deviceToken: String? = null
 ```
 
-- [ ] **Step 2: Add `RegisterResponse` + token logic**
+- [x] **Step 2: Add `RegisterResponse` + token logic**
 
 In `CommunityApiClient.kt`, add near the top (after the data class declarations):
 
@@ -515,7 +517,7 @@ with:
     }
 ```
 
-- [ ] **Step 3: Remap payload field in `vote`**
+- [x] **Step 3: Remap payload field in `vote`**
 
 Replace:
 ```kotlin
@@ -532,7 +534,7 @@ with:
             )
 ```
 
-- [ ] **Step 4: Remap payload field in `publishProfile`**
+- [x] **Step 4: Remap payload field in `publishProfile`**
 
 Replace:
 ```kotlin
@@ -543,7 +545,7 @@ with:
             request.deviceToken = ensureDeviceToken()
 ```
 
-- [ ] **Step 5: Remap payload field in `sendTelemetryPing`**
+- [x] **Step 5: Remap payload field in `sendTelemetryPing`**
 
 Replace:
 ```kotlin
@@ -560,30 +562,30 @@ with:
             )
 ```
 
-- [ ] **Step 6: Verify no remaining `deviceHash` / `DeviceFingerprint` references**
+- [x] **Step 6: Verify no remaining `deviceHash` / `DeviceFingerprint` references**
 
 Run: `cd android && ./gradlew assembleDebug`
 Note: if `DeviceFingerprint.kt` still exists, delete it (Task 5 Step 7) — otherwise remove usage so compile passes.
 
-- [ ] **Step 7: Delete `DeviceFingerprint.kt`**
+- [x] **Step 7: Delete `DeviceFingerprint.kt`**
 
 ```bash
 git rm android/app/src/main/java/com/kinou/gameassist/data/community/DeviceFingerprint.kt
 ```
 
-- [ ] **Step 8: Build**
+- [x] **Step 8: Build**
 
 > Nécessite `APP_SECRET`, `KEYSTORE_PASSWORD`, `KEY_PASSWORD` (env ou `local.properties`).
 
 Run: `cd android && ./gradlew assembleDebug`
 Expected: BUILD SUCCESSFUL.
 
-- [ ] **Step 9: Manual verification**
+- [x] **Step 9: Manual verification**
 
 - First launch (fresh install / cleared data) → app registers via `/api/device/register`, token stored, ping sent.
 - Subsequent launches → no `/register` call (token reused), ping + vote + publish use `deviceToken`.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add android/app/build.gradle.kts android/app/src/main/java/com/kinou/gameassist/data/community/

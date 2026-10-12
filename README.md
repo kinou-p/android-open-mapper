@@ -101,6 +101,7 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
   - **Special Button Roles**: One-tap assignment for *Primary Fire*, *Reload Magazine*, and *ADS Scope* with dedicated sensitivities.
   - **Multi-Profile Management**: Create, duplicate, rename, backup, and export custom mappings for any game.
   - **Per-Profile Game Package**: Tag a profile with a game's package from a built-in app picker, so it is obvious which mapping belongs to which game.
+  - **Multi-Language UI**: Full English, French, Spanish and Portuguese translations, switchable from the home screen.
 
 ### 🌐 Cloud Community & Hardware Diagnostic
   - **1-Click Community Hub**: Search, download, and vote on community-made game presets backed by Cloudflare D1 edge database.
@@ -110,20 +111,9 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
 
 ---
 
-## 🎮 Controller Compatibility
-
-| Controller Type | Supported Models | Connection Modes |
-| :--- | :--- | :---: |
-| **Xbox Controllers** | Xbox Series X/S, Xbox One, **Xbox Elite Series 2**, Xbox Adaptive | Bluetooth / USB-C |
-| **PlayStation** | DualSense (PS5), DualShock 4 (PS4) | Bluetooth / USB |
-| **Telescopic Mobile** | Razer Kishi V1/V2, GameSir (G8 Galileo, X2/X3), Backbone One, BSP-D8 | USB-C OTG / Bluetooth |
-| **Nintendo & Others** | Nintendo Switch Pro Controller, 8BitDo (Ultimate, Pro 2, SN30 Pro) | Bluetooth / USB |
-
----
-
 ## 🗺️ Roadmap & Planned Features
 
-Check out our [**TODO.md**](TODO.md) roadmap for upcoming features and technical improvements (e-Sport Macros, Radial Menus, Per-App Auto-Switching, Advanced Community Filters, Adaptive Polling, and more).
+Check out our [**TODO.md**](TODO.md) roadmap for upcoming features and technical improvements (e-Sport Macros, MOBA-Style Controls, Radial Menus, Per-App Auto-Switching, Advanced Community Filters, Adaptive Polling, and more).
 
 
 ---
