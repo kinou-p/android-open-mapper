@@ -90,3 +90,15 @@ data class DiagnosticsReport(
         }
     }
 }
+
+/**
+ * Combines the count of persisted crash entries (previous process) with the current session's log
+ * window, so the report header never claims fewer lines than it shows.
+ */
+internal fun combineLogWindow(crashCount: Int, sessionWindow: String?): String? = when {
+    crashCount <= 0 -> sessionWindow
+    else -> {
+        val word = if (crashCount == 1) "crash entry" else "crash entries"
+        if (sessionWindow == null) "$crashCount $word" else "$crashCount $word + $sessionWindow"
+    }
+}

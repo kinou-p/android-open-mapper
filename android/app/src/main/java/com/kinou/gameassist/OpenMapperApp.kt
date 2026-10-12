@@ -2,6 +2,7 @@ package com.kinou.gameassist
 
 import android.app.Application
 import com.kinou.gameassist.util.AppLog
+import java.io.File
 
 /**
  * Installs the process-wide diagnostics hook as early as possible, so crashes and early events are
@@ -10,6 +11,7 @@ import com.kinou.gameassist.util.AppLog
 class OpenMapperApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        AppLog.setCrashLogFile(File(cacheDir, AppLog.CRASH_LOG_NAME))
         AppLog.installCrashHandler()
         AppLog.i("App", "OpenMapper ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) started")
     }

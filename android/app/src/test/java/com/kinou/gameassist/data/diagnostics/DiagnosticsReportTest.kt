@@ -1,6 +1,8 @@
 package com.kinou.gameassist.data.diagnostics
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -144,13 +146,32 @@ class DiagnosticsReportTest {
     }
 
     @Test
-    fun forbiddenKeysAreNeverEmitted() {
-        // Le rapport est construit par liste blanche : aucun token d'appareil, secret de
+    fun forbiddenKeysAreNeverEmitted() {        // Le rapport est construit par liste blanche : aucun token d'appareil, secret de
         // signature ou adresse réseau ne doit jamais y apparaître.
         val out = sample().format().lowercase()
 
         listOf("device_token", "devicetoken", "app_secret", "api_signing_secret", "bearer ").forEach {
             assertFalse("forbidden key '$it' leaked into the report", out.contains(it))
         }
+    }
+
+    @Test
+    fun crashEntriesAreAddedAheadOfTheSessionWindow() {
+        assertEquals(
+            "2 crash entries + 5 entries over 1 min",
+            combineLogWindow(crashCount = 2, sessionWindow = "5 entries over 1 min")
+        )
+    }
+
+    @Test
+    fun withoutCrashesTheWindowIsJustTheSessionWindow() {
+        assertEquals("5 entries over 1 min", combineLogWindow(crashCount = 0, sessionWindow = "5 entries over 1 min"))
+    }
+
+    @Test
+    fun withoutASessionOnlyTheCrashesAreReported() {
+        assertNull(combineLogWindow(crashCount = 0, sessionWindow = null))
+        assertEquals("1 crash entry", combineLogWindow(crashCount = 1, sessionWindow = null))
+        assertEquals("3 crash entries", combineLogWindow(crashCount = 3, sessionWindow = null))
     }
 }

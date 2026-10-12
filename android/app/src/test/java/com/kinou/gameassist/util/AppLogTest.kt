@@ -5,9 +5,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
 
 class AppLogTest {
+
+    @get:Rule
+    val tempFolder = TemporaryFolder()
 
     private var now = 1_000_000L
 
@@ -123,13 +129,61 @@ class AppLogTest {
     }
 
     @Test
-    fun anErrorIncludesTheThrowableStackTrace() {
-        val failure = IllegalStateException("input device gone")
+    fun anErrorIncludesTheThrowableStackTrace() {        val failure = IllegalStateException("input device gone")
         AppLog.e("Injector", "failed to inject", failure)
 
         val line = AppLog.snapshot().single()
 
         assertTrue("exception message missing in: $line", line.contains("input device gone"))
         assertTrue("stack frame missing in: $line", line.contains("IllegalStateException"))
+    }
+
+    @Test
+    fun anUncaughtExceptionIsPersistedToTheCrashFile() {
+        // Régression (revue de branche) : le buffer en mémoire meurt avec le process ; sans persistance
+        // sur disque, le crash handler ne pouvait jamais alimenter un rapport.
+        val file = File(tempFolder.root, "crash.log")
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        try {
+            AppLog.setCrashLogFile(file)
+            AppLog.installCrashHandler()
+
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread("worker"), IllegalStateException("boom"))
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous)
+        }
+
+        assertTrue("crash file was not created", file.exists())
+        assertTrue("crash trace not persisted", file.readText().contains("boom"))
+    }
+
+    @Test
+    fun thePreviousUncaughtExceptionHandlerIsStillCalled() {
+        var chained = false
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, _ -> chained = true }
+        try {
+            AppLog.setCrashLogFile(File(tempFolder.root, "crash.log"))
+            AppLog.installCrashHandler()
+
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread("worker"), RuntimeException("boom"))
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous)
+        }
+
+        assertTrue("the original handler must still run so the process dies normally", chained)
+    }
+
+    @Test
+    fun theCrashHandlerStillLogsInMemoryWithoutAConfiguredFile() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        try {
+            AppLog.installCrashHandler()
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread("worker"), RuntimeException("boom"))
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(previous)
+        }
+
+        assertTrue("crash missing from the in-memory buffer", AppLog.snapshot().any { it.contains("boom") })
     }
 }

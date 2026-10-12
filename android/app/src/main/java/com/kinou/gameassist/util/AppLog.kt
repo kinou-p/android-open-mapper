@@ -1,5 +1,6 @@
 package com.kinou.gameassist.util
 
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -22,6 +23,10 @@ object AppLog {
     const val MAX_MESSAGE_LENGTH = 500
     const val MAX_ERROR_LENGTH = 4000
 
+    /** Fichier où le crash handler persiste une trace, lisible au prochain lancement. */
+    const val CRASH_LOG_NAME = "crash.log"
+    private const val MAX_CRASH_FILE_LENGTH = 16_384
+
     private const val TRUNCATION_MARK = "…"
 
     private class Entry(
@@ -40,6 +45,9 @@ object AppLog {
 
     @Volatile
     private var crashHandlerInstalled = false
+
+    @Volatile
+    private var crashLogFile: File? = null
 
     private val timeFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
 
@@ -91,21 +99,43 @@ object AppLog {
     fun clear() = synchronized(lock) { buffer.clear() }
 
     /**
-     * Routes uncaught exceptions through the ring buffer before delegating to the previous
-     * handler, so crashes show up in the report even when Shizuku is unusable.
+     * Persists uncaught exceptions before delegating to the previous handler.
+     *
+     * The in-memory buffer dies with the process, so a crash is written to [setCrashLogFile] as well —
+     * that file is what lets a crash show up in a report generated on the *next* launch.
      */
     fun installCrashHandler() {
         if (crashHandlerInstalled) return
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                e("Crash", "Uncaught exception on thread '${thread.name}'", throwable)
+                val text = crashText(thread, throwable)
+                log('E', "Crash", text, MAX_ERROR_LENGTH)
+                persistCrash(text)
             } catch (_: Throwable) {
                 // Never let logging mask the original crash.
             }
             previous?.uncaughtException(thread, throwable)
         }
         crashHandlerInstalled = true
+    }
+
+    /** File the crash handler appends to; null disables persistence. */
+    fun setCrashLogFile(file: File?) {
+        crashLogFile = file
+    }
+
+    private fun crashText(thread: Thread, throwable: Throwable): String =
+        "Uncaught exception on thread '${thread.name}'\n$throwable\n${throwable.stackTraceToString()}"
+
+    private fun persistCrash(text: String) {
+        val file = crashLogFile ?: return
+        val line = format(Entry(clock(), 'E', "Crash", truncate(text, MAX_ERROR_LENGTH)))
+        runCatching {
+            file.parentFile?.mkdirs()
+            val existing = if (file.exists()) file.readText() else ""
+            file.writeText((existing + line + "\n").takeLast(MAX_CRASH_FILE_LENGTH))
+        }
     }
 
     private fun format(entry: Entry): String {
@@ -134,6 +164,8 @@ object AppLog {
     internal fun resetForTest() {
         synchronized(lock) { buffer.clear() }
         clock = { System.currentTimeMillis() }
+        crashLogFile = null
+        crashHandlerInstalled = false
     }
 
     internal fun setClockForTest(newClock: () -> Long) {

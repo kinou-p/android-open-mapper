@@ -31,6 +31,7 @@ import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.service.OverlayService
+import com.kinou.gameassist.util.shouldPushLiveProfileUpdate
 import com.kinou.gameassist.ui.screens.BugReportScreen
 import com.kinou.gameassist.ui.screens.CommunityScreen
 import com.kinou.gameassist.ui.screens.GamepadTestScreen
@@ -352,7 +353,9 @@ class MainActivity : AppCompatActivity() {
                                             lifecycleScope.launch {
                                                 repository.saveProfileAsync(updated)
                                             }
-                                            OverlayService.updateLiveProfile(updated)
+                                            if (shouldPushLiveProfileUpdate(updated.id, selectedProfile?.id)) {
+                                                OverlayService.updateLiveProfile(updated)
+                                            }
                                         },
                                         onBack = { currentScreen = visualEditorOrigin }
                                     )
@@ -369,7 +372,9 @@ class MainActivity : AppCompatActivity() {
                                         liveRy = liveRy.floatValue,
                                         onSaveProfile = { updated ->
                                             lifecycleScope.launch { repository.saveProfileAsync(updated) }
-                                            OverlayService.updateLiveProfile(updated)
+                                            if (shouldPushLiveProfileUpdate(updated.id, selectedProfile?.id)) {
+                                                OverlayService.updateLiveProfile(updated)
+                                            }
                                         },
                                         onOpenVisualEditor = { target ->
                                             editTargetProfile = target

@@ -24,6 +24,8 @@ object DiagnosticsReporter {
     private val humanTimestamp: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
     fun collect(context: Context, activeProfile: GameProfile?, userNote: String): DiagnosticsReport {
+        val crashLines = readCrashLines(context)
+
         val mappings = activeProfile?.let { profile ->
             runCatching { ProfileRepository.getInstance(context).exportProfileToJson(profile) }.getOrNull()
         }
@@ -52,9 +54,16 @@ object DiagnosticsReporter {
             profileName = activeProfile?.name,
             profilePackage = activeProfile?.packageName,
             profileMappings = mappings,
-            logLines = AppLog.snapshot(),
-            logWindow = AppLog.windowLabel()
+            logLines = crashLines + AppLog.snapshot(),
+            logWindow = combineLogWindow(crashLines.size, AppLog.windowLabel())
         )
+    }
+
+    /** Crash traces persisted by [AppLog] during a previous process, oldest first. */
+    private fun readCrashLines(context: Context): List<String> {
+        val file = File(context.cacheDir, AppLog.CRASH_LOG_NAME)
+        if (!file.exists()) return emptyList()
+        return runCatching { file.readLines().filter { it.isNotBlank() } }.getOrElse { emptyList() }
     }
 
     /** Writes the report into the app cache and returns the file, shareable through the FileProvider. */

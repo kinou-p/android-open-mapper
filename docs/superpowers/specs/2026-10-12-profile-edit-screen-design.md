@@ -104,8 +104,11 @@ service.
 - Ajout de `Screen.PROFILE_EDIT`.
 - Nouvel état `editTargetProfile: GameProfile?` (indépendant de `selectedProfile`).
 - `ProfileEditorScreen` : `onEdit = { editTargetProfile = it; currentScreen = Screen.PROFILE_EDIT }`.
-- `ProfileEditScreen` : `onSaveProfile` → `repository.saveProfileAsync` + `OverlayService.updateLiveProfile`
-  (comme aujourd'hui) ; `onOpenVisualEditor = { editTargetProfile = it; visualEditorOrigin = Screen.PROFILE_EDIT; currentScreen = Screen.VISUAL_HUD_EDITOR }`.
+- `ProfileEditScreen` : `onSaveProfile` → `repository.saveProfileAsync`, puis
+  `OverlayService.updateLiveProfile` **uniquement si le profil édité est le profil actif** — l'édition
+  étant découplée de l'activation, pousser la mise à jour live d'un profil non actif ferait diverger
+  l'UI (profil actif affiché) et le moteur (profil réellement mappé) ; (correctif de revue, voir
+  `util/LiveProfileSync.kt`). `onOpenVisualEditor = { editTargetProfile = it; visualEditorOrigin = Screen.PROFILE_EDIT; currentScreen = Screen.VISUAL_HUD_EDITOR }`.
 - `BackHandler` :
   - `PROFILE_EDIT` → `PROFILES` ;
   - `VISUAL_HUD_EDITOR` → `visualEditorOrigin` (`PROFILE_EDIT` s'il a été ouvert depuis l'édition, sinon `PROFILES`) ;
