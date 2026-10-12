@@ -555,10 +555,18 @@ describe('Telemetry & Device Metadata (deviceModel + osVersion)', () => {
   });
 
   it('renvoie les statistiques et l\'activité par appareil lors de GET /api/stats', async () => {
+    // /api/stats exige désormais la signature HMAC : l'endpoint est coûteux (~11 300 lignes D1 lues
+    // par appel) et il était ouvert à tous.
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const canonical = `GET\n/api/stats\n${timestamp}\n${await sha256Hex('')}`;
+    const signature = await hmacSha256Hex(mockEnv.APP_SECRET, canonical);
+
     const req = new Request('http://localhost/api/stats', {
       method: 'GET',
       headers: {
-        'cf-connecting-ip': '1.2.3.4'
+        'cf-connecting-ip': '1.2.3.4',
+        'x-timestamp': timestamp,
+        'x-signature': signature
       }
     });
 

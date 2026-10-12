@@ -180,7 +180,18 @@ describe('Rétention : jours calendaires distincts', () => {
   it('expose la rétention « jours distincts » à côté des métriques existantes', async () => {
     const env = { APP_SECRET, DB: statsFakeDb() };
 
-    const res = await app.fetch(new Request('http://localhost/api/stats'), env as any, mockExecCtx as any);
+    // /api/stats est protégé par signature depuis le correctif de quota D1.
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const canonical = `GET\n/api/stats\n${timestamp}\n${await sha256Hex('')}`;
+    const signature = await hmacSha256Hex(APP_SECRET, canonical);
+    const res = await app.fetch(
+      new Request('http://localhost/api/stats', {
+        method: 'GET',
+        headers: { 'x-timestamp': timestamp, 'x-signature': signature },
+      }),
+      env as any,
+      mockExecCtx as any
+    );
     expect(res.status).toBe(200);
     const json = await res.json() as any;
 

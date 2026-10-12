@@ -1199,8 +1199,34 @@ app.post('/api/telemetry/ping', verifySignature, async (c) => {
 });
 
 // 8. Global Statistics & Time-Series History
-app.get('/api/stats', async (c) => {
+app.get('/api/stats', verifySignature, async (c) => {
   const rateLimitIp = getRateLimitIp(c);
+
+  // Cache au bord : cette route lit ~11 300 lignes D1 par calcul (dont 5 scans de `devices`) et le
+  // tableau de bord local l'interroge toutes les 15 s → ~65 M lignes/jour, soit le quota gratuit
+  // (5 M lignes lues/jour) épuisé en moins de deux heures. Les en-têtes `s-maxage` posés plus bas ne
+  // suffisent pas : un Worker EST l'origine, il faut passer par l'API Cache pour que le bord
+  // conserve la réponse. La lecture du cache se fait APRÈS verifySignature, donc seuls les
+  // appelants autorisés peuvent obtenir — ou provoquer — une réponse mise en cache.
+  const cacheKey = c.req.raw;
+  const edgeCache = typeof caches !== 'undefined' ? (caches as any).default : null;
+  if (edgeCache) {
+    try {
+      const hit = await edgeCache.match(cacheKey);
+      if (hit) {
+        const fresh = new Response(hit.body, {
+          status: hit.status,
+          statusText: hit.statusText,
+          headers: new Headers(hit.headers)
+        });
+        fresh.headers.set('X-Cache', 'HIT');
+        return fresh;
+      }
+    } catch (_) {
+      // Cache indisponible : on continue sans, jamais au détriment de la réponse.
+    }
+  }
+
   try {
     // Rate limit stats queries per IP: max 15 per minute to protect D1 read quotas
     const ipLimit = await checkRateLimit(c.env.DB, `ip:stats:${rateLimitIp}`, 15, 60_000, c.executionCtx);
@@ -1410,7 +1436,7 @@ app.get('/api/stats', async (c) => {
       LIMIT 100
     `).all();
 
-    return c.json({
+    const response = c.json({
       success: true,
       devices: {
         total_unique_devices: devicesStats?.total_devices || 0,
@@ -1450,6 +1476,14 @@ app.get('/api/stats', async (c) => {
       os_versions: osResults || [],
       history: Array.from(historyMap.values())
     });
+
+    if (edgeCache) {
+      response.headers.set('X-Cache', 'MISS');
+      c.executionCtx.waitUntil(
+        edgeCache.put(cacheKey, response.clone()).catch(() => {})
+      );
+    }
+    return response;
   } catch (err: any) {
     console.error('[API Error] GET /api/stats:', err);
     return c.json({ success: false, error: 'Une erreur interne est survenue sur le serveur.' }, 500);
