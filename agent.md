@@ -71,7 +71,7 @@ timeline
     2026-09-03 : v1.2.2 : Détection matérielle des plages de sticks (min/max getevent -p), Zéro-Allocation IPC & Taps (240 Hz), Fallback dynamique Shizuku/IInputManager Android 11-15+
     2026-10-07 : v1.2.3 : Correctif ANR Samsung One UI 8.5, sélecteur de package de jeu par profil, analytics backend (pays, heatmap horaire, rétention par cohorte)
     2026-10-07 : v1.2.4-beta : Hotplug des manettes déporté sur un HandlerThread dédié, lecture batterie hors thread principal
-    2026-10-12 : (non tagué) : Combos 2 boutons, Mode curseur virtuel (L3+R3), durcissement post-merge & CI Actions v5
+    2026-10-12 : (non tagué) : Combos 2 boutons, Mode curseur virtuel (L3+R3), refonte des écrans profils (liste / édition), rapport de bug in-app & diagnostics, durcissement post-merge & CI Actions v5
 ```
 
 ### Détail des Phases de Développement :
@@ -135,6 +135,8 @@ timeline
    - **Mode curseur virtuel (L3+R3)** : `CursorOverlayView` non touchable, déplacement au stick (courbe quadratique), `A` tape/glisse, `B` quitte, vitesse au D-pad (0.25x–5x) persistée en `cursor_speed` ; le clic est différé tant que le pointeur joystick n'est pas libéré.
    - **Durcissement moteur & données** : touches fantômes des combos périmés, clic perdu du curseur, file de requêtes batterie (`BatteryRefreshQueue`) et écriture du profil différée sur copie immuable.
    - **CI** : `actions/checkout` et `actions/setup-node` en `@v5` (runners Node 24).
+   - **Refonte des écrans profils** : `ProfileEditorScreen` devient la liste (création, duplication, renommage, import/export, activation) et `ProfileEditScreen` l'édition d'un profil ; `LiveProfileSync` empêche qu'un profil non actif bascule le moteur live.
+   - **Rapport de bug in-app & diagnostics** : `OpenMapperApp` installe très tôt un gestionnaire de crash et un journal borné (`util/AppLog.kt`, jamais appelé depuis la boucle d'input) ; `data/diagnostics/` construit un rapport sur liste blanche (version, appareil, ROM, Shizuku, manettes, profil actif, journal), affiché par `BugReportScreen` et prêt à copier.
    - **Vibrations asynchrones & Concurrence Overlay** : `playFireHaptic` déporté sur `hapticScope.launch` non bloquant et `liveProfileUpdateFlow` converti en `MutableSharedFlow(replay = 0, extraBufferCapacity = 1)`.
 
 ---
@@ -426,10 +428,22 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
 ### 4.5 Interface Utilisateur Jetpack Compose (`ui/screens`)
 
 - **Thème Cyberpunk / Neon** : Palette sombre (`DarkBackground` `#0A0E17`, `DarkSurface` `#121824`) avec accents fluorescents (`NeonCyan` `#00F0FF`, `NeonPink` `#FF0055`, `NeonGreen` `#00FF66`).
-- **`HomeScreen`** : Vue d'ensemble de l'état de Shizuku, sélection rapide du profil, raccourci de lancement d'overlay et indicateur de statut du service.
-- **`ProfileEditorScreen`** : Édition exhaustive des paramètres de zones mortes, sensibilités X/Y, courbes de caméra, assignation de boutons et import/export JSON.
+- **`HomeScreen`** : Vue d'ensemble de l'état de Shizuku, sélection rapide du profil, raccourci de lancement d'overlay et indicateur de statut du service (en-tête allégé : le widget manette et les cartes de statut portent l'information utile).
+- **`ProfileEditorScreen`** : écran **liste** des profils — création, duplication, renommage, import/export JSON, sélection du profil actif. Depuis la refonte, éditer (crayon) et activer sont deux gestes distincts.
+- **`ProfileEditScreen`** : édition d'un profil (zones mortes, sensibilités X/Y, courbes de caméra, assignation des boutons, combos, package de jeu). Une sauvegarde ne bascule le moteur live que si le profil édité est le profil **actif** (`LiveProfileSync.shouldPushLiveProfileUpdate`).
 - **`GamepadTestScreen`** : Banc d'essai pour manette physique avec calcul temps réel de la fréquence d'échantillonnage (Hz), de la latence, de la gigue, visualiseur de stick dynamique et calibration automatique du drift en 3 secondes.
 - **`CommunityScreen`** : Hub communautaire avec recherche textuelle, filtrage par jeu/manette, tri par popularité/récence/téléchargements et système de vote (👍/👎).
+- **`BugReportScreen`** : Rapport de bug prêt à copier (version, appareil, ROM, Shizuku, manettes connectées, profil actif, journal borné). Construit sur une **liste blanche** de champs : ni device token ni secret n'y entrent.
+
+---
+
+### 4.6 Journalisation & Diagnostics Transversaux (`util` & `data/diagnostics`)
+
+- **`OpenMapperApp` (`Application`)** : Installe le gestionnaire de crash et le fichier de journal le plus tôt possible, pour capturer les événements même quand l'overlay tourne sans `MainActivity` au premier plan.
+- **`util/AppLog.kt`** : Anneau de journalisation **borné** (nombre d'entrées plafonné, lignes tronquées, entrées identiques consécutives fusionnées en `(xN)`), plus un fichier de crash en cache. Contrainte : **jamais appelé depuis la boucle d'input** (contrat zéro-allocation) — uniquement sur transitions d'état (start/stop du moteur, connexion manette, statut Shizuku, chargement de profil, erreurs d'injection, crashs).
+- **`data/diagnostics/DiagnosticsReport.kt`** : Modèle du rapport, en valeurs simples pour rester testable en JVM ; construit sur une liste blanche explicite de champs.
+- **`data/diagnostics/DiagnosticsReporter.kt`** : Glue Android qui collecte l'état appareil/environnement ; ne lit délibérément ni device token ni secret de signature.
+- **`util/LiveProfileSync.kt`** : Décide si une sauvegarde de profil doit être poussée au moteur d'overlay (seul le profil actif le peut).
 
 ---
 
@@ -571,6 +585,8 @@ OpenMapper applique un modèle de confiance pragmatique adapté aux applications
    Les attaquants disposant de blocs IPv6 peuvent changer d'adresse IP à chaque requête. Le backend OpenMapper tronque systématiquement les adresses IPv6 à leur préfixe `/64`, appliquant le rate-limit au sous-réseau entier de l'opérateur.
 5. **Rejet de Play Integrity** :
    L'API Google Play Integrity a été délibérément écartée : elle rejetterait les utilisateurs sous Custom ROMs, appareils déverrouillés, ou téléphones sans Google Play Services, en contradiction avec la philosophie open-source du projet.
+6. **Rapport de bug sur liste blanche** :
+   Le rapport in-app (`data/diagnostics/`) ne sérialise qu'une liste explicite de champs (version, appareil, ROM, statut Shizuku, manettes, profil actif, journal borné). Ni le device token, ni `APP_SECRET`, ni le contenu des profils n'y entrent par construction — `DiagnosticsReporter` ne les lit jamais. Toute évolution du rapport doit passer par cette liste blanche.
 
 ---
 
@@ -588,14 +604,14 @@ Lors de toute intervention future sur ce codebase, **chaque agent ou développeu
 - 📁 **Validation Anti-Path Traversal** : Tout accès fichier basé sur un identifiant externe (profil, image) doit valider l'ID avec `SAFE_ID_REGEX` (`^[a-zA-Z0-9_-]{1,64}$`) et vérifier canoniquement que le chemin résolu se situe dans le répertoire autorisé (`target.canonicalPath.startsWith(allowedDir)`).
 - 🔑 **Secrets & Signature** : Ne jamais hardcoder de secret dans le code source. Toute communication d'écriture avec l'API backend doit être signée par `CommunityApiClient` avec l'en-tête `X-Timestamp` et `X-Signature` calculé via HMAC-SHA256.
 
-### 🧪 3. Validation & Commandes de Test (144 Tests Automatisés)
+### 🧪 3. Validation & Commandes de Test (177 Tests Automatisés)
 Avant de soumettre des modifications, exécuter obligatoirement les suites de tests automatisés :
 
 ```bash
 # 1. Tests Unitaires Backend (Vitest - 38 tests)
 npm --prefix backend test
 
-# 2. Tests Unitaires Android (JUnit avec JDK 17 - 106 tests)
+# 2. Tests Unitaires Android (JUnit avec JDK 17 - 139 tests)
 cd android
 JAVA_HOME=/usr/lib/jvm/java-1.17.0-openjdk-amd64 ./gradlew testDebugUnitTest
 
@@ -675,6 +691,10 @@ En cas de dysfonctionnement signalé lors de modifications, consulter cet arbre 
     - **`BatteryState`** capture une génération par appareil avant chaque requête bloquante : un résultat qui arrive après le retrait de la manette est ignoré (Android réattribue les ids d'appareil), et une requête qui ne renvoie pas de capacité conserve la dernière valeur connue au lieu de l'effacer.
     - **`BatteryRefreshQueue`** met en file les demandes d'interrogation : une demande arrivée pendant qu'une requête tourne (manette branchée en pleine partie) était auparavant jetée, et la manette restait sans pourcentage. Le worker draine la file en boucle ; ne jamais remplacer cela par un simple `AtomicBoolean`.
     - **Clés de bouton normalisées** : `ButtonProcessor.canonicalGamepadKey()` (trim, casse, parties vides supprimées) puis `parseCombo()` décident seules de ce qui est un combo valide (deux parties distinctes, non vides). Une clé importée malformée devient un appui simple au lieu d'un combo mort. En cas de doublons sur un même déclencheur, `findCombo()` tranche par ordre des boutons du profil, et l'éditeur HUD refuse d'en créer un nouveau.
+15. **Journalisation & profil actif** :
+    - `AppLog` est un anneau **borné** : ne **jamais** l'appeler depuis la boucle d'input (contrat zéro-allocation de `GamepadEngineLoop`), uniquement sur transitions d'état (start/stop, connexion manette, statut Shizuku, chargement de profil, erreurs d'injection, crashs).
+    - Éditer et activer un profil sont deux gestes distincts depuis la refonte des écrans : toute sauvegarde qui republie vers le moteur live doit passer par `LiveProfileSync.shouldPushLiveProfileUpdate()` (seul le profil **actif** bascule), sinon l'UI afficherait un profil actif pendant que le moteur en mappe un autre.
+    - Le rapport de bug est construit sur une **liste blanche** de champs (voir §7.2) : ne jamais y ajouter le device token, `APP_SECRET` ou le contenu des profils.
 
 ---
 

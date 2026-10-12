@@ -106,6 +106,7 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
   - **1-Click Community Hub**: Search, download, and vote on community-made game presets backed by Cloudflare D1 edge database.
   - **Hardware Diagnostic Suite**: Real-time analog stick visualizer, 3-second automated drift test, circularity error check, and polling rate (Hz) monitor.
   - **In-App Auto-Updater**: Direct background detection and 1-tap installation of new GitHub releases directly within the app.
+  - **In-App Bug Report**: One-tap report with app version, device/ROM, Shizuku status, connected controllers, active profile and a bounded log — built from a strict whitelist, so no device token or signing secret can leak.
 
 ---
 

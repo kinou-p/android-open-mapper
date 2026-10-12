@@ -168,8 +168,11 @@ android/
     │   │   │   └── IInputManager.aidl          # Interface Binder système pour injection
     │   │   ├── java/com/kinou/gameassist/
     │   │   │   ├── MainActivity.kt             # Interface principale Jetpack Compose
+    │   │   │   ├── OpenMapperApp.kt            # Application : journal borné + gestionnaire de crash
+    │   │   │   ├── util/                       # AppLog (anneau borné), LiveProfileSync
     │   │   │   ├── data/
     │   │   │   │   ├── model/                  # Modèles (GameProfile, ButtonConfig, GamepadDetector, cache batterie)
+    │   │   │   │   ├── diagnostics/            # Rapport de bug (liste blanche) & collecte appareil
     │   │   │   │   └── repository/             # Stockage & Export/Import JSON des profils
     │   │   │   ├── injector/
     │   │   │   │   ├── ShizukuManager.kt       # Gestionnaire du service Shizuku
@@ -187,7 +190,7 @@ android/
     │   │   │   ├── service/
     │   │   │   │   └── OverlayService.kt       # Foreground Service avec WindowManager
     │   │   │   └── ui/
-    │   │   │       ├── screens/                # Écrans Compose (Home, Diagnostic Test, Profils)
+    │   │   │       ├── screens/                # Écrans Compose (Home, liste & édition de profil, test manette, communauté, rapport de bug)
     │   │   │       ├── overlay/                # Vues overlay (Volet latéral, Éditeur HUD, Curseur virtuel)
     │   │   │       └── theme/                  # Thème Cyberpunk / Neon & typographie
     │   │   └── res/                            # Ressources XML, icônes et styles
