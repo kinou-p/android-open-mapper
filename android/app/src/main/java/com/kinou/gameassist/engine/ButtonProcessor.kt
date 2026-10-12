@@ -76,6 +76,11 @@ class ButtonProcessor(
 
     @Volatile private var buttons: List<ButtonConfig> = emptyList()
     @Volatile private var buttonsByGamepadKey: Map<String, List<ButtonConfig>> = emptyMap()
+
+    // Index des combos "MODIFICATEUR+DÉCLENCHEUR" par déclencheur, précalculé dans updateButtons()
+    // pour que findCombo() ne fasse aucune allocation sur le thread d'input.
+    private class ComboIndex(val modifiers: Array<String>, val comboKeys: Array<String>)
+    @Volatile private var combosByTrigger: Map<String, ComboIndex> = emptyMap()
     @Volatile private var settings: GameSettings = GameSettings()
     private val activePointers = ConcurrentHashMap<String, Int>()
     private val freePointers = (POINTER_BUTTON_START until MAX_POINTERS).toMutableSet()
@@ -129,6 +134,12 @@ class ButtonProcessor(
 
             buttons = snapshot
             buttonsByGamepadKey = snapshot.groupBy { it.gamepadButton.trim().uppercase() }
+            combosByTrigger = buttonsByGamepadKey.keys
+                .filter { '+' in it }
+                .groupBy { it.substringAfterLast('+') }
+                .mapValues { (_, keys) ->
+                    ComboIndex(keys.map { it.substringBeforeLast('+') }.toTypedArray(), keys.toTypedArray())
+                }
             fireButtonIds = snapshot.filter { isFireButtonStatic(it) }.map { it.id }.toSet()
             adsButtonIds = snapshot.filter { isAdsButtonStatic(it) }.map { it.id }.toSet()
             reloadButtonIds = snapshot.filter { isReloadButtonStatic(it) }.map { it.id }.toSet()
@@ -151,6 +162,18 @@ class ButtonProcessor(
     var onSwitchProfile: (() -> Unit)? = null
 
     private val activeRapidFireJobs = ConcurrentHashMap<String, kotlinx.coroutines.Job>()
+
+    /**
+     * Returns the combo key (e.g. "BUTTON_R1+BUTTON_X") bound to [trigger] whose modifier is in
+     * [heldButtons], or null. Allocation-free.
+     */
+    fun findCombo(trigger: String, heldButtons: Set<String>): String? {
+        val index = combosByTrigger[trigger] ?: return null
+        for (i in index.modifiers.indices) {
+            if (index.modifiers[i] in heldButtons) return index.comboKeys[i]
+        }
+        return null
+    }
 
     fun updateSettings(newSettings: GameSettings) {
         synchronized(lock) {
