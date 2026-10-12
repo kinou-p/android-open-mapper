@@ -303,4 +303,6 @@
     <string name="community_import_error">Erreur lors du décodage du profil</string>
     <string name="community_download_error">Erreur téléchargement: %1$s</string>
     <string name="community_vote_error">Erreur de vote: %1$s</string>
+    <string name="cursor_speed">🖱️ Speed %1$sx</string>
+    <string name="cursor_mode_on">🖱️ Cursor ON · Speed %1$sx · D-pad: speed · B: exit</string>
 </resources>

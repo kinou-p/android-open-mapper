@@ -24,7 +24,11 @@ data class GameSettings(
     var hapticReload: Boolean = true,
 
     @SerialName("haptic_intensity")
-    var hapticIntensity: Float = 0.8f
+    var hapticIntensity: Float = 0.8f,
+
+    // Vitesse du curseur virtuel (L3+R3), réglable en jeu avec le D-pad
+    @SerialName("cursor_speed")
+    var cursorSpeed: Float = 1.0f
 )
 
 @Serializable

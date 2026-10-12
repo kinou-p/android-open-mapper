@@ -294,4 +294,6 @@
     <string name="gamepad_rumble_detected">Vibración física detectada (%1$d motores)</string>
     <string name="gamepad_rumble_not_supported">Vibración no soportada por este mando</string>
     <string name="gamepad_none_connected">Ningún mando conectado</string>
+    <string name="cursor_speed">🖱️ Velocidad %1$sx</string>
+    <string name="cursor_mode_on">🖱️ Cursor ACTIVO · Velocidad %1$sx · D-pad: velocidad · B: salir</string>
 </resources>
