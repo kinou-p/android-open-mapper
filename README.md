@@ -96,6 +96,8 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
 
 ### 🪟 In-Game HUD & Key Customization
   - **In-Game Floating HUD Editor**: Retractable side-drawer to drag, scale, and test button mappings live without leaving your match.
+  - **Two-Button Combos**: Bind a HUD action to a chord such as `R1+X` right from the editor — more on-screen actions than the controller has buttons.
+  - **Virtual Cursor Mode (`L3+R3`)**: Drive an on-screen pointer with either stick and tap with `A` to use menus, shops and dialogs without placing a HUD button on every item. Speed is adjustable in-game with the D-pad (0.25x – 5x) and saved per profile.
   - **Special Button Roles**: One-tap assignment for *Primary Fire*, *Reload Magazine*, and *ADS Scope* with dedicated sensitivities.
   - **Multi-Profile Management**: Create, duplicate, rename, backup, and export custom mappings for any game.
 
@@ -119,7 +121,7 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
 
 ## 🗺️ Roadmap & Planned Features
 
-Check out our [**TODO.md**](TODO.md) roadmap for upcoming features and technical improvements (Virtual Mouse mode, e-Sport Macros, Radial Menus, Per-App Auto-Switching, Advanced Community Filters, Adaptive Polling, and more).
+Check out our [**TODO.md**](TODO.md) roadmap for upcoming features and technical improvements (e-Sport Macros, Radial Menus, Per-App Auto-Switching, Advanced Community Filters, Adaptive Polling, and more).
 
 
 ---

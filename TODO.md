@@ -6,10 +6,12 @@ This document tracks planned features, technical enhancements, and upcoming mile
 
 ## 🎮 Gameplay & Core Mapping Engine
 
-- [ ] **🖱️ Virtual Mouse / Pointer Mode**
-  - **Description**: Hold a customizable shortcut button (e.g. `L3/R3` or `Select + R3`) to temporarily convert the right analog stick into an on-screen mouse pointer.
-  - **Benefit**: Enables fast in-game menu navigation, inventory management, looting, and popup closing without touching the screen.
-  - **Target Components**: `engine/CameraProcessor.kt`, `engine/GamepadEngine.kt`, `injector/ShizukuTouchInjector.kt`.
+- [x] **🖱️ Virtual Mouse / Pointer Mode** — ✅ **Shipped** (`L3+R3` toggles, either stick moves a quadratic-curve pointer, `A` taps/holds, `B` exits, D-pad sets the speed 0.25x–5x in game, saved as `cursor_speed`).
+  - Remaining polish: D-pad auto-repeat, in-app speed slider, overlay opacity check on Android 12+.
+  - Target Components: `ui/overlay/CursorOverlayView.kt`, `engine/GamepadEngine.kt`, `service/OverlayService.kt`.
+
+- [x] **🧩 Two-Button Combos** (`R1+X`) — ✅ **Shipped**, assignable from the HUD editor (hold the modifier, press the trigger, release).
+  - Target Components: `engine/ButtonProcessor.kt`, `ui/overlay/HudEditorOverlayView.kt`.
 
 - [ ] **⚡ e-Sport Macros & Combos**
   - **Description**: Record or configure multi-action button sequences with customizable millisecond delays and execution order.

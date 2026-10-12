@@ -555,14 +555,14 @@ Lors de toute intervention future sur ce codebase, **chaque agent ou développeu
 - 📁 **Validation Anti-Path Traversal** : Tout accès fichier basé sur un identifiant externe (profil, image) doit valider l'ID avec `SAFE_ID_REGEX` (`^[a-zA-Z0-9_-]{1,64}$`) et vérifier canoniquement que le chemin résolu se situe dans le répertoire autorisé (`target.canonicalPath.startsWith(allowedDir)`).
 - 🔑 **Secrets & Signature** : Ne jamais hardcoder de secret dans le code source. Toute communication d'écriture avec l'API backend doit être signée par `CommunityApiClient` avec l'en-tête `X-Timestamp` et `X-Signature` calculé via HMAC-SHA256.
 
-### 🧪 3. Validation & Commandes de Test (128 Tests Automatisés)
+### 🧪 3. Validation & Commandes de Test (144 Tests Automatisés)
 Avant de soumettre des modifications, exécuter obligatoirement les suites de tests automatisés :
 
 ```bash
 # 1. Tests Unitaires Backend (Vitest - 38 tests)
 npm --prefix backend test
 
-# 2. Tests Unitaires Android (JUnit avec JDK 17 - 90 tests)
+# 2. Tests Unitaires Android (JUnit avec JDK 17 - 106 tests)
 cd android
 JAVA_HOME=/usr/lib/jvm/java-1.17.0-openjdk-amd64 ./gradlew testDebugUnitTest
 
@@ -640,6 +640,8 @@ En cas de dysfonctionnement signalé lors de modifications, consulter cet arbre 
     - **Pointeur partagé du curseur** : le curseur réutilise `POINTER_JOYSTICK` (0), qui n'est libéré que par le thread moteur (`processCursorFrame` → `cursorPointerFree`). Ne jamais injecter un `touchDown` curseur depuis le thread d'input avant cette libération : il serait aussitôt annulé par le `touchUp` du relâchement du joystick et le clic serait perdu. Le clic est différé (`cursorDownSent`) et rattrapé par la première frame du mode curseur.
     - **`ComboRouter`** (déclencheur → combo actif) doit être vidé à *chaque* remise à zéro du moteur : `resetAllInputs()` (déconnexion manette, reset Shizuku), `setInjectionSuspended()` (éditeur HUD ouvert) et `setCursorMode()` (mode curseur). Une entrée périmée détourne le relâchement suivant du même déclencheur vers un combo inactif : `buttonProcessor.onButtonUp()` n'est alors jamais appelé et le bouton du profil reste enfoncé à l'écran (touche fantôme).
     - **`BatteryState`** capture une génération par appareil avant chaque requête bloquante : un résultat qui arrive après le retrait de la manette est ignoré (Android réattribue les ids d'appareil), et une requête qui ne renvoie pas de capacité conserve la dernière valeur connue au lieu de l'effacer.
+    - **`BatteryRefreshQueue`** met en file les demandes d'interrogation : une demande arrivée pendant qu'une requête tourne (manette branchée en pleine partie) était auparavant jetée, et la manette restait sans pourcentage. Le worker draine la file en boucle ; ne jamais remplacer cela par un simple `AtomicBoolean`.
+    - **Clés de bouton normalisées** : `ButtonProcessor.canonicalGamepadKey()` (trim, casse, parties vides supprimées) puis `parseCombo()` décident seules de ce qui est un combo valide (deux parties distinctes, non vides). Une clé importée malformée devient un appui simple au lieu d'un combo mort. En cas de doublons sur un même déclencheur, `findCombo()` tranche par ordre des boutons du profil, et l'éditeur HUD refuse d'en créer un nouveau.
 
 ---
 
