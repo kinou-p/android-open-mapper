@@ -1101,23 +1101,11 @@ app.post('/api/device/register', verifySignature, async (c) => {
     }
 
     const rawToken = generateDeviceToken();
-    const tokenHash = await normalizeDeviceToken(rawToken);
-    if (!tokenHash) {
-      return c.json({ success: false, error: 'Erreur interne de génération d\'identité.' }, 500);
-    }
-    const now = Date.now();
-    const version = typeof body.appVersion === 'string' ? body.appVersion.slice(0, 20) : '1.0.0';
-    const rawModel = typeof body.deviceModel === 'string' ? body.deviceModel.trim().slice(0, 64) : null;
-    const rawOs = typeof body.osVersion === 'string' ? body.osVersion.trim().slice(0, 32) : null;
-    const model = rawModel && rawModel.length > 0 ? rawModel : null;
-    const os = rawOs && rawOs.length > 0 ? rawOs : null;
 
-    await c.env.DB.prepare(`
-      INSERT INTO devices (device_hash, first_seen, last_seen, app_version, device_model, os_version, launch_count)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
-      ON CONFLICT(device_hash) DO NOTHING
-    `).bind(tokenHash, now, now, version, model, os).run();
-
+    // Aucune écriture ici : l'enregistrement n'alloue qu'une identité, il ne constate aucun
+    // lancement. La ligne `devices` est créée par le premier ping (launch_count = 1).
+    // Avant, l'INSERT ci-dessous semait launch_count = 1, puis le premier ping l'incrémentait :
+    // tout appareil neuf démarrait à 2, ce qui gonflait le « taux de retour » à ~99 %.
     return c.json({ success: true, deviceToken: rawToken });
   } catch (err: any) {
     console.error('[API Error] POST /api/device/register:', err);
@@ -1367,6 +1355,22 @@ app.get('/api/stats', async (c) => {
     const retentionD7 = totalDevs > 0 ? Math.round((returnedD7 / totalDevs) * 1000) / 10 : 0;
     const avgLifespanHours = Math.round((retentionData?.avg_active_span_hours || 0) * 10) / 10;
 
+    // Rétention « jours distincts » : appareils revenus au moins un autre jour calendaire.
+    // Métrique robuste au comptage des lancements (l'ancien `repeat_users`, basé sur
+    // launch_count >= 2, comptait deux fois le premier lancement et affichait ~99 %) et plus proche
+    // de ce qu'un utilisateur appelle « revenir ». Fenêtrée par la rétention de daily_activity.
+    const returningData: any = await c.env.DB.prepare(`
+      SELECT COUNT(*) as returning_users
+      FROM (
+        SELECT device_hash
+        FROM daily_activity
+        GROUP BY device_hash
+        HAVING COUNT(DISTINCT date) >= 2
+      )
+    `).first();
+    const returningUsers = returningData?.returning_users || 0;
+    const returningRate = totalDevs > 0 ? Math.round((returningUsers / totalDevs) * 1000) / 10 : 0;
+
     // Per-device activity breakdown (Top 100 devices by launch_count)
     const { results: deviceActivityResults } = await c.env.DB.prepare(`
       SELECT 
@@ -1404,7 +1408,10 @@ app.get('/api/stats', async (c) => {
         retention_d1: retentionD1,
         returned_d7: returnedD7,
         retention_d7: retentionD7,
-        avg_active_span_hours: avgLifespanHours
+        avg_active_span_hours: avgLifespanHours,
+        // Rétention pondérée par jours calendaires distincts (voir le commentaire plus haut).
+        returning_users: returningUsers,
+        returning_rate: returningRate
       },
       community: {
         total_profiles: profileStats?.total_profiles || 0,
