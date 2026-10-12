@@ -140,7 +140,7 @@ jobs:
           TAG_NAME="${{ github.ref_name }}"
           TAG_MESSAGE=$(git tag -l --format='%(contents)' "$TAG_NAME" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
-          # Calcul du checksum SHA-256 de l'APK de release
+          # Compute the SHA-256 checksum of the release APK
           TARGET_APK="dist/OpenMapper-${TAG_NAME}.apk"
           if [ ! -f "$TARGET_APK" ]; then
             TARGET_APK="dist/OpenMapper-latest.apk"
@@ -153,12 +153,12 @@ jobs:
           cat << 'EOF' > release_body.md
           ## 🎮 OpenMapper ${{ github.ref_name }}
 
-          Bienvenue sur la version **${{ github.ref_name }}** d'OpenMapper !
+          Welcome to OpenMapper **${{ github.ref_name }}**!
 
-          ### 📱 Installation & Démarrage
-          1. Téléchargez l'APK **`OpenMapper-${{ github.ref_name }}.apk`** ci-dessous.
-          2. Installez l'APK sur votre appareil Android.
-          3. Assurez-vous que **[Shizuku](https://shizuku.rikka.app/)** est actif sur votre téléphone pour profiter du mapping et de l'injection tactile à ultra-faible latence (< 0.5 ms).
+          ### 📱 Install & get started
+          1. Download the APK **`OpenMapper-${{ github.ref_name }}.apk`** below.
+          2. Install it on your Android device.
+          3. Make sure **[Shizuku](https://shizuku.rikka.app/)** is running on your phone to get key mapping and touch injection at ultra-low latency (< 0.5 ms).
 
           EOF
 
@@ -168,13 +168,13 @@ jobs:
           fi
 
           if [ -n "$TAG_MESSAGE" ] && [ "$TAG_MESSAGE" != "$TAG_NAME" ]; then
-            echo "### 📝 Notes de cette version" >> release_body.md
+            echo "### 📝 Release notes" >> release_body.md
             echo "$TAG_MESSAGE" >> release_body.md
             echo "" >> release_body.md
           fi
 
           echo "---" >> release_body.md
-          echo "### 📋 Changelog détaillé des commits" >> release_body.md
+          echo "### 📋 Detailed commit changelog" >> release_body.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
