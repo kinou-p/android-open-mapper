@@ -1234,8 +1234,11 @@ app.get('/api/stats', verifySignature, async (c) => {
       return c.json({ success: false, error: 'Trop de requêtes sur les statistiques. Veuillez patienter.' }, 429);
     }
 
-    // Cloudflare Edge Cache headers (60s browser, 120s edge, 60s stale-while-revalidate)
-    c.header('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=60');
+    // Cloudflare Edge Cache headers. Le TTL du bord (s-maxage) conditionne le budget D1 : un
+    // dashboard qui tourne 24 h/24 ne doit pas dépasser ~440 recalculs/jour (5 M lignes lues ÷
+    // ~11 300 par calcul), soit un recalcul toutes les ~3,3 min minimum. 300 s laisse ~35 % de marge
+    // (288 recalculs/jour ≈ 3,3 M lignes), là où 120 s repasserait au-dessus du quota (8,1 M).
+    c.header('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=120');
 
     const now = Date.now();
     const dayAgo = now - 24 * 60 * 60 * 1000;
