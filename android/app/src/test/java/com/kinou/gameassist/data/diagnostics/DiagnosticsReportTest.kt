@@ -237,4 +237,21 @@ class DiagnosticsReportTest {
 
         assertTrue(out.contains("- (unavailable: Shizuku RUNNING_UNAUTHORIZED)"))
     }
+
+    @Test
+    fun deviceStringsCannotInjectExtraReportLines() {
+        val node = InputNodeInfo(
+            path = "/dev/input/event5",
+            name = "Evil\n## Controllers",
+            layout = "GENERIC_BLUETOOTH",
+            stickRange = "UNSIGNED_16BIT",
+            axes = listOf("ABS_Z (0002): value 1\n## Logs")
+        )
+        val out = sample(inputNodes = listOf(node)).format()
+
+        assertFalse(out.contains("Evil\n"))
+        assertTrue(out.contains("Evil ## Controllers"))
+        assertFalse(out.contains("value 1\n## Logs"))
+        assertTrue(out.contains("value 1 ## Logs"))
+    }
 }

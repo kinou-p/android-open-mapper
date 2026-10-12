@@ -93,7 +93,7 @@ data class DiagnosticsReport(
         } else {
             gamepads.forEach { gamepad ->
                 val battery = gamepad.batteryPercent?.let { "battery $it%" } ?: "battery unknown"
-                appendLine("- ${gamepad.name} - ${gamepad.connection} - $battery")
+                appendLine("- ${sanitize(gamepad.name)} - ${gamepad.connection} - $battery")
                 appendLine("  axes: " + renderAxes(gamepad.axes))
             }
         }
@@ -104,11 +104,11 @@ data class DiagnosticsReport(
             inputNodesUnavailableReason != null -> appendLine("- (unavailable: $inputNodesUnavailableReason)")
             inputNodes.isEmpty() -> appendLine("- (none detected)")
             else -> inputNodes.forEach { node ->
-                appendLine("- ${node.path} \"${node.name}\" [${node.layout}, ${node.stickRange}]")
+                appendLine("- ${node.path} \"${sanitize(node.name)}\" [${node.layout}, ${node.stickRange}]")
                 if (node.axes.isEmpty()) {
                     appendLine("  - (no ABS axes reported)")
                 } else {
-                    node.axes.forEach { appendLine("  - $it") }
+                    node.axes.forEach { appendLine("  - ${sanitize(it)}") }
                 }
             }
         }
@@ -144,6 +144,12 @@ private fun formatAxisValue(value: Float): String {
     val rounded = kotlin.math.round(value * 100f) / 100f
     return if (rounded == rounded.toLong().toFloat()) rounded.toLong().toString() else rounded.toString()
 }
+
+/**
+ * Collapses line breaks and trims a device-controlled string (a HID name, an axis line), so it
+ * cannot inject a new Markdown line or section into the report.
+ */
+private fun sanitize(value: String): String = value.replace('\n', ' ').replace('\r', ' ').trim()
 
 /**
  * Combines the count of persisted crash entries (previous process) with the current session's log

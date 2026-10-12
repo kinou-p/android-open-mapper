@@ -72,6 +72,91 @@ class LinuxInputReader(
                 .toList()
         }
 
+        /**
+         * What a raw `ABS_*` code drives for a given detected layout. Pure so the routing (the heart
+         * of the right-stick mapping) is unit-testable without a live engine — see LinuxInputReaderTest.
+         */
+        internal fun axisTarget(layoutType: ControllerLayoutType, code: Int): AxisTarget =
+            when (layoutType) {
+                ControllerLayoutType.PLAYSTATION -> when (code) {
+                    0x0000 -> AxisTarget.LEFT_X
+                    0x0001 -> AxisTarget.LEFT_Y
+                    0x0002 -> AxisTarget.RIGHT_X
+                    0x0005 -> AxisTarget.RIGHT_Y
+                    0x0003, 0x000a -> AxisTarget.TRIGGER_L2
+                    0x0004, 0x0009 -> AxisTarget.TRIGGER_R2
+                    0x0010 -> AxisTarget.HAT_X
+                    0x0011 -> AxisTarget.HAT_Y
+                    else -> AxisTarget.NONE
+                }
+                ControllerLayoutType.PLAYSTATION_HID_DRIVER -> when (code) {
+                    0x0000 -> AxisTarget.LEFT_X
+                    0x0001 -> AxisTarget.LEFT_Y
+                    0x0003 -> AxisTarget.RIGHT_X
+                    0x0004 -> AxisTarget.RIGHT_Y
+                    0x0002 -> AxisTarget.TRIGGER_L2
+                    0x0005 -> AxisTarget.TRIGGER_R2
+                    0x0010 -> AxisTarget.HAT_X
+                    0x0011 -> AxisTarget.HAT_Y
+                    else -> AxisTarget.NONE
+                }
+                ControllerLayoutType.XBOX_BLUETOOTH -> when (code) {
+                    0x0000 -> AxisTarget.LEFT_X
+                    0x0001 -> AxisTarget.LEFT_Y
+                    0x0002 -> AxisTarget.RIGHT_X
+                    0x0005 -> AxisTarget.RIGHT_Y
+                    0x000a, 0x0006 -> AxisTarget.TRIGGER_L2
+                    0x0009, 0x0007 -> AxisTarget.TRIGGER_R2
+                    0x0010 -> AxisTarget.HAT_X
+                    0x0011 -> AxisTarget.HAT_Y
+                    else -> AxisTarget.NONE
+                }
+                ControllerLayoutType.XBOX_WIRED_USB -> when (code) {
+                    0x0000 -> AxisTarget.LEFT_X
+                    0x0001 -> AxisTarget.LEFT_Y
+                    0x0003 -> AxisTarget.RIGHT_X
+                    0x0004 -> AxisTarget.RIGHT_Y
+                    0x0002, 0x000a -> AxisTarget.TRIGGER_L2
+                    0x0005, 0x0009 -> AxisTarget.TRIGGER_R2
+                    0x0010 -> AxisTarget.HAT_X
+                    0x0011 -> AxisTarget.HAT_Y
+                    else -> AxisTarget.NONE
+                }
+                ControllerLayoutType.NINTENDO_SWITCH -> when (code) {
+                    0x0000 -> AxisTarget.LEFT_X
+                    0x0001 -> AxisTarget.LEFT_Y
+                    0x0002, 0x0003 -> AxisTarget.RIGHT_X
+                    0x0005, 0x0004 -> AxisTarget.RIGHT_Y
+                    0x000a -> AxisTarget.TRIGGER_L2
+                    0x0009 -> AxisTarget.TRIGGER_R2
+                    0x0010 -> AxisTarget.HAT_X
+                    0x0011 -> AxisTarget.HAT_Y
+                    else -> AxisTarget.NONE
+                }
+                ControllerLayoutType.GENERIC_BLUETOOTH -> when (code) {
+                    0x0000 -> AxisTarget.LEFT_X
+                    0x0001 -> AxisTarget.LEFT_Y
+                    0x0002 -> AxisTarget.RIGHT_X
+                    0x0005 -> AxisTarget.RIGHT_Y
+                    0x000a, 0x0003 -> AxisTarget.TRIGGER_L2
+                    0x0009, 0x0004 -> AxisTarget.TRIGGER_R2
+                    0x0010 -> AxisTarget.HAT_X
+                    0x0011 -> AxisTarget.HAT_Y
+                    else -> AxisTarget.NONE
+                }
+                ControllerLayoutType.GENERIC_USB -> when (code) {
+                    0x0000 -> AxisTarget.LEFT_X
+                    0x0001 -> AxisTarget.LEFT_Y
+                    0x0003 -> AxisTarget.RIGHT_X
+                    0x0004 -> AxisTarget.RIGHT_Y
+                    0x0002, 0x000a -> AxisTarget.TRIGGER_L2
+                    0x0005, 0x0009 -> AxisTarget.TRIGGER_R2
+                    0x0010 -> AxisTarget.HAT_X
+                    0x0011 -> AxisTarget.HAT_Y
+                    else -> AxisTarget.NONE
+                }
+            }
+
         private val shizukuNewProcessMethod by lazy {
             try {
                 val m = Shizuku::class.java.getDeclaredMethod(
@@ -111,6 +196,31 @@ class LinuxInputReader(
             } catch (_: Exception) {}
         }
 
+        /** Upper bound for reading a one-shot Shizuku command's output, so a stuck child can't hang us. */
+        private const val PROCESS_READ_TIMEOUT_MS = 2000L
+
+        /**
+         * Reads a process' whole stdout with a timeout. On timeout the process is destroyed (which
+         * unblocks the reader) and null is returned, so the caller can fall back instead of hanging.
+         */
+        private fun readProcessWithTimeout(proc: Process, timeoutMs: Long = PROCESS_READ_TIMEOUT_MS): String? {
+            val out = StringBuilder()
+            val reader = Thread({
+                try {
+                    proc.inputStream.bufferedReader().use { out.append(it.readText()) }
+                } catch (_: Exception) {
+                }
+            }, "InputNodeRead")
+            reader.isDaemon = true
+            reader.start()
+            reader.join(timeoutMs)
+            if (reader.isAlive) {
+                closeProcessQuietly(proc)
+                return null
+            }
+            return out.toString()
+        }
+
         /**
          * Enumerates the controller event nodes exactly as [LinuxInputReader] reads them at start:
          * `getevent -p` (primary), `/proc/bus/input/devices` (fallback) or a direct read. Used by the
@@ -129,7 +239,7 @@ class LinuxInputReader(
                     val proc = spawnShizukuProcess(arrayOf("getevent", "-p"))
                     if (proc != null) {
                         try {
-                            content = proc.inputStream.bufferedReader().use { it.readText() }
+                            content = readProcessWithTimeout(proc)
                         } finally {
                             closeProcessQuietly(proc)
                         }
@@ -142,7 +252,7 @@ class LinuxInputReader(
                         val proc = spawnShizukuProcess(arrayOf("cat", "/proc/bus/input/devices"))
                         if (proc != null) {
                             try {
-                                content = proc.inputStream.bufferedReader().use { it.readText() }
+                                content = readProcessWithTimeout(proc)
                             } finally {
                                 closeProcessQuietly(proc)
                             }
@@ -282,6 +392,12 @@ class LinuxInputReader(
             // The kernel's hid-sony (>= 4.10) and hid-playstation drivers report the right stick on
             // ABS_RX / ABS_RY and the triggers on ABS_Z / ABS_RZ, unlike a DualShock read as a plain HID
             // device (right stick on ABS_Z / ABS_RZ). DualShock 4 clones take the same driver.
+            //
+            // KNOWN LIMITATION: `getevent -p` prints neither the bus nor the driver, and BOTH layouts
+            // expose ABS_RX / ABS_RY, so this cannot actually tell a hid-sony pad from a plain-HID one.
+            // It deliberately assumes hid-sony >= 4.10 (the common, current case); a DS4 on a pre-4.10
+            // kernel (right stick on ABS_Z / ABS_RZ, triggers on ABS_RX / ABS_RY) would be misrouted.
+            // Accepted tradeoff, pinned by testParseGamepadNodeInfo_DualShock4OnHidSonyDriver.
             val hasRightStickOnRxRy = ABS_RX in absCodes && ABS_RY in absCodes
 
             val layoutType: ControllerLayoutType = when {
@@ -660,97 +776,16 @@ class LinuxInputReader(
             }
         }
 
-        when (nodeInfo.layoutType) {
-            ControllerLayoutType.PLAYSTATION -> {
-                when (code) {
-                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0002 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0005 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0003, 0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
-                    0x0004, 0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
-                    0x0010 -> handleHatX(rawValue)
-                    0x0011 -> handleHatY(rawValue)
-                }
-            }
-
-            ControllerLayoutType.PLAYSTATION_HID_DRIVER -> {
-                when (code) {
-                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0003 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0004 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0002 -> handleTriggerL2(rawValue, nodeInfo.layoutType)
-                    0x0005 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
-                    0x0010 -> handleHatX(rawValue)
-                    0x0011 -> handleHatY(rawValue)
-                }
-            }
-
-            ControllerLayoutType.XBOX_BLUETOOTH -> {
-                when (code) {
-                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0002 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0005 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x000a, 0x0006 -> handleTriggerL2(rawValue, nodeInfo.layoutType)
-                    0x0009, 0x0007 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
-                    0x0010 -> handleHatX(rawValue)
-                    0x0011 -> handleHatY(rawValue)
-                }
-            }
-
-            ControllerLayoutType.XBOX_WIRED_USB -> {
-                when (code) {
-                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0003 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0004 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0002, 0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
-                    0x0005, 0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
-                    0x0010 -> handleHatX(rawValue)
-                    0x0011 -> handleHatY(rawValue)
-                }
-            }
-
-            ControllerLayoutType.NINTENDO_SWITCH -> {
-                when (code) {
-                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0002, 0x0003 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0005, 0x0004 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
-                    0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
-                    0x0010 -> handleHatX(rawValue)
-                    0x0011 -> handleHatY(rawValue)
-                }
-            }
-
-            ControllerLayoutType.GENERIC_BLUETOOTH -> {
-                when (code) {
-                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0002 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0005 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x000a, 0x0003 -> handleTriggerL2(rawValue, nodeInfo.layoutType)
-                    0x0009, 0x0004 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
-                    0x0010 -> handleHatX(rawValue)
-                    0x0011 -> handleHatY(rawValue)
-                }
-            }
-
-            ControllerLayoutType.GENERIC_USB -> {
-                when (code) {
-                    0x0000 -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0001 -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0003 -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0004 -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-                    0x0002, 0x000a -> handleTriggerL2(rawValue, nodeInfo.layoutType)
-                    0x0005, 0x0009 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
-                    0x0010 -> handleHatX(rawValue)
-                    0x0011 -> handleHatY(rawValue)
-                }
-            }
+        when (LinuxInputReader.axisTarget(nodeInfo.layoutType, code)) {
+            AxisTarget.LEFT_X -> engine.lx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+            AxisTarget.LEFT_Y -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+            AxisTarget.RIGHT_X -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+            AxisTarget.RIGHT_Y -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
+            AxisTarget.TRIGGER_L2 -> handleTriggerL2(rawValue, nodeInfo.layoutType)
+            AxisTarget.TRIGGER_R2 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+            AxisTarget.HAT_X -> handleHatX(rawValue)
+            AxisTarget.HAT_Y -> handleHatY(rawValue)
+            AxisTarget.NONE -> {}
         }
     }
 
@@ -812,6 +847,11 @@ class LinuxInputReader(
             true
         }
     }
+}
+
+/** The logical destination of one raw `ABS_*` code under a given [ControllerLayoutType]. */
+internal enum class AxisTarget {
+    LEFT_X, LEFT_Y, RIGHT_X, RIGHT_Y, TRIGGER_L2, TRIGGER_R2, HAT_X, HAT_Y, NONE
 }
 
 data class GamepadNodeInfo(

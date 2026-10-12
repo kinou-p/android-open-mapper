@@ -425,4 +425,53 @@ class LinuxInputReaderTest {
             info!!.absAxes
         )
     }
+
+    @Test
+    fun testAxisRouting_PlayStationHidDriverPutsRightStickOnRxRy() {
+        val hid = ControllerLayoutType.PLAYSTATION_HID_DRIVER
+        assertEquals(AxisTarget.RIGHT_X, LinuxInputReader.axisTarget(hid, 0x0003))
+        assertEquals(AxisTarget.RIGHT_Y, LinuxInputReader.axisTarget(hid, 0x0004))
+        assertEquals(AxisTarget.TRIGGER_L2, LinuxInputReader.axisTarget(hid, 0x0002))
+        assertEquals(AxisTarget.TRIGGER_R2, LinuxInputReader.axisTarget(hid, 0x0005))
+    }
+
+    @Test
+    fun testAxisRouting_PlainPlayStationKeepsRightStickOnZRz() {
+        val ps = ControllerLayoutType.PLAYSTATION
+        assertEquals(AxisTarget.RIGHT_X, LinuxInputReader.axisTarget(ps, 0x0002))
+        assertEquals(AxisTarget.RIGHT_Y, LinuxInputReader.axisTarget(ps, 0x0005))
+        assertEquals(AxisTarget.TRIGGER_L2, LinuxInputReader.axisTarget(ps, 0x0003))
+        assertEquals(AxisTarget.TRIGGER_R2, LinuxInputReader.axisTarget(ps, 0x0004))
+    }
+
+    @Test
+    fun testAxisRouting_GenericBluetoothReadsZRzAsRightStick() {
+        // Issue #3: a HID pad whose right stick sits on ABS_Z / ABS_RZ (triggers on GAS / BRAKE).
+        val bt = ControllerLayoutType.GENERIC_BLUETOOTH
+        assertEquals(AxisTarget.RIGHT_X, LinuxInputReader.axisTarget(bt, 0x0002))
+        assertEquals(AxisTarget.RIGHT_Y, LinuxInputReader.axisTarget(bt, 0x0005))
+        assertEquals(AxisTarget.TRIGGER_L2, LinuxInputReader.axisTarget(bt, 0x000a))
+        assertEquals(AxisTarget.TRIGGER_R2, LinuxInputReader.axisTarget(bt, 0x0009))
+    }
+
+    @Test
+    fun testAxisRouting_GenericUsbReadsZRzAsTriggers() {
+        // The other side of the coin: an Xbox-style pad where ABS_Z / ABS_RZ ARE the triggers.
+        val usb = ControllerLayoutType.GENERIC_USB
+        assertEquals(AxisTarget.RIGHT_X, LinuxInputReader.axisTarget(usb, 0x0003))
+        assertEquals(AxisTarget.RIGHT_Y, LinuxInputReader.axisTarget(usb, 0x0004))
+        assertEquals(AxisTarget.TRIGGER_L2, LinuxInputReader.axisTarget(usb, 0x0002))
+        assertEquals(AxisTarget.TRIGGER_R2, LinuxInputReader.axisTarget(usb, 0x0005))
+    }
+
+    @Test
+    fun testAxisRouting_EveryLayoutRoutesLeftStickHatAndUnknownCode() {
+        ControllerLayoutType.values().forEach { layout ->
+            assertEquals("LX for $layout", AxisTarget.LEFT_X, LinuxInputReader.axisTarget(layout, 0x0000))
+            assertEquals("LY for $layout", AxisTarget.LEFT_Y, LinuxInputReader.axisTarget(layout, 0x0001))
+            assertEquals("HAT_X for $layout", AxisTarget.HAT_X, LinuxInputReader.axisTarget(layout, 0x0010))
+            assertEquals("HAT_Y for $layout", AxisTarget.HAT_Y, LinuxInputReader.axisTarget(layout, 0x0011))
+            assertEquals("unmapped for $layout", AxisTarget.NONE, LinuxInputReader.axisTarget(layout, 0x9999))
+        }
+    }
 }

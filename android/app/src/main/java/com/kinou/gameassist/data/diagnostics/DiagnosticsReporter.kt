@@ -101,7 +101,9 @@ object DiagnosticsReporter {
                     axes = node.absAxes
                 )
             }
-            nodes to if (nodes.isEmpty()) "no controller node found" else null
+            // No reason on success, even when empty: "empty" means no controller node matched, which
+            // the report already renders as "(none detected)" — distinct from Shizuku being unavailable.
+            nodes to null
         } catch (e: Throwable) {
             emptyList<InputNodeInfo>() to (e.message ?: "inspection failed")
         }
