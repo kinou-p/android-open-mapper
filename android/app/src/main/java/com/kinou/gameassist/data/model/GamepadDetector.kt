@@ -12,7 +12,6 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 
 data class GamepadDevice(
     val id: Int,
@@ -75,7 +74,7 @@ object GamepadDetector {
      * The query now only ever runs on [batteryExecutor]; [getConnectedGamepads] reads this cache.
      */
     private val batteryState = BatteryState()
-    private val batteryRefreshRunning = AtomicBoolean(false)
+    private val batteryRefreshQueue = BatteryRefreshQueue()
     private val batteryExecutor = Executors.newSingleThreadExecutor { r ->
         Thread(r, "GamepadBatteryQuery").apply { isDaemon = true }
     }
@@ -83,34 +82,47 @@ object GamepadDetector {
     /**
      * Queries the battery level of [deviceIds] off the calling thread and invokes [onUpdated]
      * (on the worker thread) if any cached value changed. At most one query runs at a time, so a
-     * stalled controller can never pile up blocked threads.
+     * stalled controller can never pile up blocked threads — les demandes arrivées pendant une
+     * requête sont mises en file au lieu d'être jetées (voir [BatteryRefreshQueue]).
      */
     private fun refreshBatteryAsync(deviceIds: List<Int>, onUpdated: () -> Unit) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || deviceIds.isEmpty()) return
-        if (!batteryRefreshRunning.compareAndSet(false, true)) return
+        if (!batteryRefreshQueue.request(deviceIds, onUpdated)) return
+        scheduleBatteryDrain()
+    }
+
+    private fun scheduleBatteryDrain() {
         try {
-            batteryExecutor.execute {
-                try {
-                    var changed = false
-                    for (id in deviceIds) {
-                        // Génération capturée avant la requête bloquante : si la manette est
-                        // retirée (et remplacée) entre-temps, le résultat est ignoré.
-                        val generation = batteryState.generationOf(id)
-                        val percent = try {
-                            val cap = InputDevice.getDevice(id)?.batteryState?.capacity
-                            if (cap != null && cap in 0.0f..1.0f) (cap * 100).toInt() else null
-                        } catch (_: Throwable) {
-                            null
-                        }
-                        if (batteryState.onQueryResult(id, percent, generation)) changed = true
-                    }
-                    if (changed) onUpdated()
-                } finally {
-                    batteryRefreshRunning.set(false)
-                }
-            }
+            batteryExecutor.execute { drainBatteryQueue() }
         } catch (_: Throwable) {
-            batteryRefreshRunning.set(false)
+            // Tâche refusée : libère le créneau, la file sera reprise à la prochaine demande.
+            batteryRefreshQueue.abandonWorker()
+        }
+    }
+
+    private fun drainBatteryQueue() {
+        try {
+            while (true) {
+                val batch = batteryRefreshQueue.nextBatch() ?: return
+                var changed = false
+                for (id in batch.deviceIds) {
+                    // Génération capturée avant la requête bloquante : si la manette est retirée
+                    // (et remplacée) entre-temps, le résultat est ignoré.
+                    val generation = batteryState.generationOf(id)
+                    val percent = try {
+                        val cap = InputDevice.getDevice(id)?.batteryState?.capacity
+                        if (cap != null && cap in 0.0f..1.0f) (cap * 100).toInt() else null
+                    } catch (_: Throwable) {
+                        null
+                    }
+                    if (batteryState.onQueryResult(id, percent, generation)) changed = true
+                }
+                if (changed) batch.onUpdated.forEach { it() }
+            }
+        } finally {
+            // Des demandes arrivées depuis le dernier lot (ou pendant la sortie de boucle) ne
+            // doivent pas être perdues : on relance un worker.
+            if (batteryRefreshQueue.onWorkerStopped()) scheduleBatteryDrain()
         }
     }
 
