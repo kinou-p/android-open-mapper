@@ -347,6 +347,7 @@ class ProfileRepository private constructor(context: Context) {
             "fr" -> "$name (Importé)"
             "es" -> "$name (Importado)"
             "pt" -> "$name (Importado)"
+            "he" -> "$name (יובא)"
             else -> "$name (Imported)"
         }
 
@@ -355,6 +356,7 @@ class ProfileRepository private constructor(context: Context) {
             "fr" -> "$name (Copie)"
             "es" -> "$name (Copia)"
             "pt" -> "$name (Cópia)"
+            "he" -> "$name (עותק)"
             else -> "$name (Copy)"
         }
 
@@ -363,6 +365,7 @@ class ProfileRepository private constructor(context: Context) {
             "fr" -> "Profil personnalisé"
             "es" -> "Perfil personalizado"
             "pt" -> "Perfil personalizado"
+            "he" -> "פרופיל מותאם אישית"
             else -> "Custom Profile"
         }
 
@@ -371,6 +374,7 @@ class ProfileRepository private constructor(context: Context) {
             "fr" -> "Nouveau profil"
             "es" -> "Nuevo perfil"
             "pt" -> "Novo perfil"
+            "he" -> "פרופיל חדש"
             else -> "New profile"
         }
 
@@ -380,27 +384,29 @@ class ProfileRepository private constructor(context: Context) {
             "fr" -> "CoD Mobile - Multijoueur"
             "es" -> "CoD Mobile - Multijugador"
             "pt" -> "CoD Mobile - Multijogador"
+            "he" -> "CoD Mobile - רב משתתפים"
             else -> "CoD Mobile - Multiplayer"
         }
         val desc = when (lang) {
             "fr" -> "Configuration officielle Multijoueur avec visée réactive et sprint lock."
             "es" -> "Configuración oficial Multijugador con apuntado reactivo y bloqueo de sprint."
             "pt" -> "Configuração oficial Multijogador com mira responsiva e sprint lock."
+            "he" -> "תצורה רשמית למרובה משתתפים עם כוונת מגיבה ונעילת ספרינט."
             else -> "Official Multiplayer configuration with responsive aim and sprint lock."
         }
-        val btnFire = when (lang) { "fr" -> "Tir Principal"; "es" -> "Disparo Principal"; "pt" -> "Tiro Principal"; else -> "Primary Fire" }
-        val btnAds = when (lang) { "fr" -> "Visée Précise (ADS)"; "es" -> "Apuntado con Mira (ADS)"; "pt" -> "Mirar (ADS)"; else -> "ADS Scope Aim" }
-        val btnJump = when (lang) { "fr" -> "Sauter / Franchir"; "es" -> "Saltar / Trepar"; "pt" -> "Pular / Escalar"; else -> "Jump / Vault" }
-        val btnSlide = when (lang) { "fr" -> "Glissade / S'accroupir"; "es" -> "Deslizarse / Agacharse"; "pt" -> "Deslizar / Agachar"; else -> "Slide / Crouch" }
-        val btnReload = when (lang) { "fr" -> "Recharger"; "es" -> "Recargar"; "pt" -> "Recarregar"; else -> "Reload" }
-        val btnSwitch = when (lang) { "fr" -> "Changer d'arme"; "es" -> "Cambiar de Arma"; "pt" -> "Trocar de Arma"; else -> "Switch Weapon" }
-        val btnFrag = when (lang) { "fr" -> "Grenade Frag"; "es" -> "Granada Letal"; "pt" -> "Granada Letal"; else -> "Lethal Grenade" }
-        val btnFlash = when (lang) { "fr" -> "Flash / Fumi"; "es" -> "Granada Táctica"; "pt" -> "Granada Tática"; else -> "Tactical / Flash" }
-        val btnOperator = when (lang) { "fr" -> "Opérateur"; "es" -> "Habilidad de Operador"; "pt" -> "Habilidade de Operador"; else -> "Operator Skill" }
-        val btnProne = when (lang) { "fr" -> "Couché (Prone)"; "es" -> "Cuerpo a Tierra"; "pt" -> "Deitar (Prone)"; else -> "Prone" }
-        val btnSprint = when (lang) { "fr" -> "Sprint Forcé (L3)"; "es" -> "Sprint Forzado (L3)"; "pt" -> "Sprint Forçado (L3)"; else -> "Sprint Click (L3)" }
-        val btnMelee = when (lang) { "fr" -> "Attaque Couteau (R3)"; "es" -> "Ataque Cuerpo a Cuerpo (R3)"; "pt" -> "Ataque Corpo a Corpo (R3)"; else -> "Melee Attack (R3)" }
-        val btnMap = when (lang) { "fr" -> "Carte"; "es" -> "Mapa"; "pt" -> "Mapa"; else -> "Map" }
+        val btnFire = when (lang) { "fr" -> "Tir Principal"; "es" -> "Disparo Principal"; "pt" -> "Tiro Principal"; "he" -> "ירי ראשי"; else -> "Primary Fire" }
+        val btnAds = when (lang) { "fr" -> "Visée Précise (ADS)"; "es" -> "Apuntado con Mira (ADS)"; "pt" -> "Mirar (ADS)"; "he" -> "כוונת מדויקת (ADS)"; else -> "ADS Scope Aim" }
+        val btnJump = when (lang) { "fr" -> "Sauter / Franchir"; "es" -> "Saltar / Trepar"; "pt" -> "Pular / Escalar"; "he" -> "קפיצה / טיפוס"; else -> "Jump / Vault" }
+        val btnSlide = when (lang) { "fr" -> "Glissade / S'accroupir"; "es" -> "Deslizarse / Agacharse"; "pt" -> "Deslizar / Agachar"; "he" -> "החלקה / התכופפות"; else -> "Slide / Crouch" }
+        val btnReload = when (lang) { "fr" -> "Recharger"; "es" -> "Recargar"; "pt" -> "Recarregar"; "he" -> "טעינה מחדש"; else -> "Reload" }
+        val btnSwitch = when (lang) { "fr" -> "Changer d'arme"; "es" -> "Cambiar de Arma"; "pt" -> "Trocar de Arma"; "he" -> "החלפת נשק"; else -> "Switch Weapon" }
+        val btnFrag = when (lang) { "fr" -> "Grenade Frag"; "es" -> "Granada Letal"; "pt" -> "Granada Letal"; "he" -> "רימון קטלני"; else -> "Lethal Grenade" }
+        val btnFlash = when (lang) { "fr" -> "Flash / Fumi"; "es" -> "Granada Táctica"; "pt" -> "Granada Tática"; "he" -> "רימון טקטי / הבהב"; else -> "Tactical / Flash" }
+        val btnOperator = when (lang) { "fr" -> "Opérateur"; "es" -> "Habilidad de Operador"; "pt" -> "Habilidade de Operador"; "he" -> "יכולת Operator"; else -> "Operator Skill" }
+        val btnProne = when (lang) { "fr" -> "Couché (Prone)"; "es" -> "Cuerpo a Tierra"; "pt" -> "Deitar (Prone)"; "he" -> "שכיבה (Prone)"; else -> "Prone" }
+        val btnSprint = when (lang) { "fr" -> "Sprint Forcé (L3)"; "es" -> "Sprint Forzado (L3)"; "pt" -> "Sprint Forçado (L3)"; "he" -> "ספרינט נעול (L3)"; else -> "Sprint Click (L3)" }
+        val btnMelee = when (lang) { "fr" -> "Attaque Couteau (R3)"; "es" -> "Ataque Cuerpo a Cuerpo (R3)"; "pt" -> "Ataque Corpo a Corpo (R3)"; "he" -> "תקיפת תגרה (R3)"; else -> "Melee Attack (R3)" }
+        val btnMap = when (lang) { "fr" -> "Carte"; "es" -> "Mapa"; "pt" -> "Mapa"; "he" -> "מפה"; else -> "Map" }
 
         return GameProfile(
             id = "codm_multiplayer_default",
@@ -455,12 +461,14 @@ class ProfileRepository private constructor(context: Context) {
             "fr" -> "Profil Battle Royale avec soins rapides et plaques d'armure sur le D-Pad."
             "es" -> "Perfil Battle Royale con curaciones rápidas y placas de blindaje en la cruceta."
             "pt" -> "Perfil Battle Royale com cura rápida e placas de blindagem no direcional."
+            "he" -> "פרופיל באטל רויאל עם ריפוי מהיר ולוחות שריון על ה-D-Pad."
             else -> "Battle Royale profile with quick heal and armor plates on D-Pad."
         }
         val btnArmor = when (lang) {
             "fr" -> "Plaque / Soin BR"
             "es" -> "Blindaje / Curación BR"
             "pt" -> "Placa / Cura BR"
+            "he" -> "לוח שריון / ריפוי BR"
             else -> "Armor Plate / Heal"
         }
         p.buttons.add(

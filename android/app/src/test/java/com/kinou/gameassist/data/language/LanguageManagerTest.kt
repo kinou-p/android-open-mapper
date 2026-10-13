@@ -13,7 +13,8 @@ class LanguageManagerTest {
         assertEquals("en", LanguageManager.LANG_EN)
         assertEquals("es", LanguageManager.LANG_ES)
         assertEquals("pt", LanguageManager.LANG_PT)
-        assertEquals(4, LanguageManager.AVAILABLE_LANGUAGES.size)
+        assertEquals("he", LanguageManager.LANG_HE)
+        assertEquals(5, LanguageManager.AVAILABLE_LANGUAGES.size)
     }
 
     @Test
@@ -56,5 +57,27 @@ class LanguageManagerTest {
     @Test
     fun androidAppLanguageIsMatchedIgnoringCase() {
         assertEquals("en", LanguageManager.resolveStartupLanguage(saved = "fr", appLocaleLanguage = "EN"))
+    }
+
+    @Test
+    fun hebrewIsInThePickerWithItsNativeName() {
+        val hebrew = LanguageManager.AVAILABLE_LANGUAGES.single { it.code == LanguageManager.LANG_HE }
+        assertEquals("עברית", hebrew.displayName)
+        assertEquals("HE", hebrew.tag)
+    }
+
+    @Test
+    fun hebrewPickedInAndroidSettingsIsRecognisedUnderBothOfItsCodes() {
+        assertEquals("he", LanguageManager.resolveStartupLanguage(saved = "en", appLocaleLanguage = "he"))
+        // Java and older Android report Hebrew with the legacy code "iw"
+        assertEquals("he", LanguageManager.resolveStartupLanguage(saved = "en", appLocaleLanguage = "iw"))
+    }
+
+    @Test
+    fun everyPickerLanguageHasADistinctTagAndFlag() {
+        val languages = LanguageManager.AVAILABLE_LANGUAGES
+        assertEquals(languages.size, languages.map { it.tag }.toSet().size)
+        assertEquals(languages.size, languages.map { it.flag }.toSet().size)
+        assertEquals(languages.size, languages.map { it.code }.toSet().size)
     }
 }
