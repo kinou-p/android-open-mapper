@@ -60,26 +60,30 @@ fun ProfileEditorScreen(
     // Import from one or several exported .json files (instead of pasting the text)
     val importFilesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        val texts = uris.mapNotNull { uri ->
-            runCatching {
-                context.contentResolver.openInputStream(uri)?.use { ProfileFileReader.readText(it) }
-            }.getOrNull()
-        }
-        if (texts.isEmpty()) {
-            Toast.makeText(context, context.getString(R.string.import_file_read_error), Toast.LENGTH_LONG).show()
-            return@rememberLauncherForActivityResult
-        }
+        // One file at a time: only the file being imported is held in memory, and imports never overlap
         var imported = 0
+        var readable = 0
         fun importNext(index: Int) {
-            if (index < texts.size) {
-                onImportProfile(texts[index]) { ok ->
+            if (index < uris.size) {
+                val text = runCatching {
+                    context.contentResolver.openInputStream(uris[index])?.use { ProfileFileReader.readText(it) }
+                }.getOrNull()
+                if (text == null) {
+                    importNext(index + 1)
+                    return
+                }
+                readable++
+                onImportProfile(text) { ok ->
                     if (ok) imported++
                     importNext(index + 1)
                 }
                 return
             }
-            val message = if (imported == uris.size && imported == 1) context.getString(R.string.profile_imported_toast)
-            else context.getString(R.string.import_files_result, imported, uris.size)
+            val message = when {
+                readable == 0 -> context.getString(R.string.import_file_read_error)
+                imported == uris.size && imported == 1 -> context.getString(R.string.profile_imported_toast)
+                else -> context.getString(R.string.import_files_result, imported, uris.size)
+            }
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
             if (imported == uris.size) showImportDialog = false
         }

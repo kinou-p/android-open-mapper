@@ -2,6 +2,9 @@ package com.kinou.gameassist.data.repository
 
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 
 /** Reads an exported profile (.json) picked with the system file picker. */
 object ProfileFileReader {
@@ -11,7 +14,7 @@ object ProfileFileReader {
 
     /**
      * UTF-8 text of [input], trimmed and without a byte order mark, or null when the file is blank
-     * or larger than [maxBytes]. Reads at most [maxBytes] + 1 bytes.
+     * or larger than [maxBytes], or not valid UTF-8. Reads at most [maxBytes] + 1 bytes.
      */
     fun readText(input: InputStream, maxBytes: Int = MAX_BYTES): String? {
         // Not readNBytes: it needs API 33 and the app supports API 26+
@@ -23,6 +26,16 @@ object ProfileFileReader {
             out.write(buffer, 0, read)
         }
         if (out.size() > maxBytes) return null
-        return out.toString(Charsets.UTF_8.name()).removePrefix("\uFEFF").trim().ifEmpty { null }
+        // Strict decoding: a malformed byte must reject the file, not become a silent U+FFFD
+        val text = try {
+            Charsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(out.toByteArray()))
+                .toString()
+        } catch (_: CharacterCodingException) {
+            return null
+        }
+        return text.removePrefix("\uFEFF").trim().ifEmpty { null }
     }
 }

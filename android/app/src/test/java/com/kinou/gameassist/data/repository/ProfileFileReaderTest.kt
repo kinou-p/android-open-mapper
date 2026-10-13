@@ -41,4 +41,16 @@ class ProfileFileReaderTest {
     fun surroundingWhitespaceIsTrimmed() {
         assertEquals("{}", read("\n  {}  \n".toByteArray()))
     }
+
+    @Test
+    fun invalidUtf8IsRejectedInsteadOfBeingSilentlyCorrupted() {
+        // 0xC3 0x28 is a malformed UTF-8 sequence
+        val bad = "{\"name\":\"".toByteArray() + byteArrayOf(0xC3.toByte(), 0x28) + "\"}".toByteArray()
+        assertNull(read(bad))
+    }
+
+    @Test
+    fun validMultiByteUtf8IsStillAccepted() {
+        assertEquals("{\"name\":\"שלום\"}", read("{\"name\":\"שלום\"}".toByteArray(Charsets.UTF_8)))
+    }
 }
