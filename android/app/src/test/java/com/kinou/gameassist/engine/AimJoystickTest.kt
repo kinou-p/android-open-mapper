@@ -324,4 +324,55 @@ class AimJoystickTest {
         assertEquals(20, touches.count { it.kind == "down" })
         assertEquals(20, touches.count { it.kind == "up" })
     }
+
+    @Test
+    fun roleChangedWhileHeldLiftsTheAimFingerAtItsLastAimedPosition() {
+        processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f)))
+        processor.onButtonDown("BUTTON_R1")
+        processor.processAimJoystick(0f, 1f)
+
+        processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f, ButtonRole.NORMAL)))
+
+        val up = touches.last()
+        assertEquals("up", up.kind)
+        assertEquals(0.7f * h + 0.2f * h, up.y, 0.01f)
+        assertFalse(processor.isAimActive())
+        // The physical release no longer finds a stale aim finger
+        val before = touches.size
+        processor.onButtonUp("BUTTON_R1")
+        assertEquals(before, touches.size)
+    }
+
+    @Test
+    fun removedButtonIsLiftedAtItsLastAimedPositionNotAtItsCenter() {
+        processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f)))
+        processor.onButtonDown("BUTTON_R1")
+        processor.processAimJoystick(-1f, 0f)
+
+        processor.updateButtons(emptyList())
+
+        val up = touches.last()
+        assertEquals("up", up.kind)
+        assertEquals(0.8f * w - 0.2f * h, up.x, 0.01f)
+    }
+
+    @Test
+    fun aimStateAndTouchesStayInOrderUnderConcurrentPresses() {
+        processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f)))
+        val workers = (0 until 4).map {
+            Thread {
+                repeat(50) {
+                    processor.onButtonDown("BUTTON_R1")
+                    processor.processAimJoystick(1f, 0f)
+                    processor.onButtonUp("BUTTON_R1")
+                }
+            }
+        }
+        workers.forEach { it.start() }
+        workers.forEach { it.join() }
+
+        // Every finger that went down was lifted, and nothing is left active
+        assertEquals(touches.count { it.kind == "down" }, touches.count { it.kind == "up" })
+        assertFalse(processor.isAimActive())
+    }
 }
