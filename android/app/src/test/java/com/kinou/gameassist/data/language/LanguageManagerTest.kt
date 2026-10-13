@@ -35,4 +35,26 @@ class LanguageManagerTest {
         assertFalse(germanLocale.language.startsWith("es", ignoreCase = true))
         assertFalse(germanLocale.language.startsWith("pt", ignoreCase = true))
     }
+
+    @Test
+    fun languagePickedInAndroidSettingsWinsOverTheSavedOne() {
+        assertEquals("es", LanguageManager.resolveStartupLanguage(saved = "fr", appLocaleLanguage = "es"))
+        assertEquals("pt", LanguageManager.resolveStartupLanguage(saved = LanguageManager.LANG_SYSTEM, appLocaleLanguage = "pt"))
+    }
+
+    @Test
+    fun savedLanguageIsKeptWhenAndroidHasNoAppLanguage() {
+        assertEquals("fr", LanguageManager.resolveStartupLanguage(saved = "fr", appLocaleLanguage = null))
+        assertEquals(LanguageManager.LANG_SYSTEM, LanguageManager.resolveStartupLanguage(saved = LanguageManager.LANG_SYSTEM, appLocaleLanguage = null))
+    }
+
+    @Test
+    fun androidAppLanguageWeDoNotShipIsIgnored() {
+        assertEquals("fr", LanguageManager.resolveStartupLanguage(saved = "fr", appLocaleLanguage = "de"))
+    }
+
+    @Test
+    fun androidAppLanguageIsMatchedIgnoringCase() {
+        assertEquals("en", LanguageManager.resolveStartupLanguage(saved = "fr", appLocaleLanguage = "EN"))
+    }
 }
