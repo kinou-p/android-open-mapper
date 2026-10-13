@@ -145,6 +145,16 @@ class ButtonProcessor(
             val snapshot = list.map { it.copy() }
             val newIds = snapshot.map { it.id }.toSet()
 
+            // Held aim fingers whose button was removed, or is no longer an aim button, are lifted
+            // first at their last aimed position (not at the button center).
+            val newAimIds = snapshot.filter { it.role == ButtonRole.AIM_JOYSTICK }.map { it.id }.toSet()
+            for (entry in aimStack.filter { it.btnId !in newAimIds }) {
+                aimStack.remove(entry)
+                if (activePointers.remove(entry.btnId) != null) freePointers.add(entry.pointerId)
+                injector.touchUp(entry.pointerId, entry.x, entry.y)
+            }
+            aimActive = aimStack.isNotEmpty()
+
             // Réconciliation : libération et touchUp des pointeurs orphelins après un hot-switch
             val orphaned = activePointers.keys.filter { it !in newIds }
             for (id in orphaned) {
@@ -157,8 +167,6 @@ class ButtonProcessor(
                     injector.touchUp(pid, tx, ty)
                 }
             }
-            aimStack.removeAll { it.btnId !in newIds }
-            aimActive = aimStack.isNotEmpty()
 
             // Nettoie également les taps asynchrones et rapid fire en cours pour les boutons supprimés
             for (slot in pendingTapSlots) {
@@ -172,6 +180,9 @@ class ButtonProcessor(
                 activeRapidFireJobs.remove(id)?.cancel()
             }
 
+            // Published before the button map so a press never sees the new map with the old flag
+            // (that would run the camera for a frame on a profile switch).
+            aimButtonIds = newAimIds
             buttons = snapshot
             buttonsByGamepadKey = snapshot.groupBy { canonicalGamepadKey(it.gamepadButton) }
             // Combos : seules les clés bien formées ("MODIFICATEUR+DÉCLENCHEUR") sont indexées, dans
@@ -187,7 +198,6 @@ class ButtonProcessor(
             fireButtonIds = snapshot.filter { isFireButtonStatic(it) }.map { it.id }.toSet()
             adsButtonIds = snapshot.filter { isAdsButtonStatic(it) }.map { it.id }.toSet()
             reloadButtonIds = snapshot.filter { isReloadButtonStatic(it) }.map { it.id }.toSet()
-            aimButtonIds = snapshot.filter { it.role == ButtonRole.AIM_JOYSTICK }.map { it.id }.toSet()
 
             // Recompute active counts in case buttons changed
             var fireCount = 0
@@ -550,35 +560,33 @@ class ButtonProcessor(
         }
     }
 
+    // The touch is injected while holding the lock: state change and injection are one step, so a
+    // move, a pointer reuse or releaseAll can never observe a down that is not injected yet.
     private fun aimDown(btn: ButtonConfig) {
         val cx = btn.x * injector.screenWidth
         val cy = btn.y * injector.screenHeight
-        var pid = -1
         synchronized(lock) {
             if (activePointers.containsKey(btn.id)) return
-            val allocated = freePointers.minOrNull() ?: return
-            freePointers.remove(allocated)
-            activePointers[btn.id] = allocated
-            aimStack.add(AimEntry(btn.id, allocated, cx, cy))
+            val pointerId = freePointers.minOrNull() ?: return
+            freePointers.remove(pointerId)
+            activePointers[btn.id] = pointerId
+            aimStack.add(AimEntry(btn.id, pointerId, cx, cy))
             aimActive = true
-            pid = allocated
+            injector.touchDown(pointerId, cx, cy)
         }
-        injector.touchDown(pid, cx, cy)
     }
 
     /** Releasing the button lifts the finger at the last aimed position: that is what fires the shot. */
     private fun aimUp(btn: ButtonConfig) {
-        var entry: AimEntry? = null
         synchronized(lock) {
             val i = aimStack.indexOfFirst { it.btnId == btn.id }
             if (i < 0) return
-            val removed = aimStack.removeAt(i)
-            entry = removed
+            val entry = aimStack.removeAt(i)
             aimActive = aimStack.isNotEmpty()
             activePointers.remove(btn.id)
-            freePointers.add(removed.pointerId)
+            freePointers.add(entry.pointerId)
+            injector.touchUp(entry.pointerId, entry.x, entry.y)
         }
-        entry?.let { injector.touchUp(it.pointerId, it.x, it.y) }
     }
 
     fun isButtonActive(predicate: (ButtonConfig) -> Boolean): Boolean {
