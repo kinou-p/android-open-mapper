@@ -93,6 +93,12 @@ class FpsGameView(context: Context) : GameView(context) {
         Unit
     }
 
+    override fun onCancelAll() = synchronized(lock) {
+        roles.clear()
+        moveX = 0f
+        moveY = 0f
+    }
+
     fun snapshotState(): FpsState = synchronized(lock) {
         FpsState(
             moveX, moveY, roles.containsValue(Role.FIRE), fireCount, jumpCount,

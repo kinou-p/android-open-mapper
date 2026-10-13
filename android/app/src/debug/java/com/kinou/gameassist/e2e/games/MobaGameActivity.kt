@@ -111,6 +111,13 @@ class MobaGameView(context: Context) : GameView(context) {
         }
     }
 
+    override fun onCancelAll() = synchronized(lock) {
+        owner.clear()
+        aim.clear()
+        moveX = 0f
+        moveY = 0f
+    }
+
     fun snapshotState(): MobaState = synchronized(lock) {
         MobaState(moveX, moveY, aim.keys.toSet(), shots.toList(), gadgetTaps, strayTouches)
     }

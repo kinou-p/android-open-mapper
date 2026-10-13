@@ -13,7 +13,7 @@ import android.view.View
  * of on raw touches.
  *
  * To add a game: extend this class, implement the pointer callbacks and [snapshotState], wrap it
- * in a [SimulatedGameActivity] and declare the activity in the androidTest manifest.
+ * in a [SimulatedGameActivity] and declare the activity in the debug manifest (src/debug).
  */
 abstract class GameView(context: Context) : View(context) {
 
@@ -33,6 +33,9 @@ abstract class GameView(context: Context) : View(context) {
     abstract fun onPointerMove(id: Int, x: Float, y: Float)
     abstract fun onPointerUp(id: Int, x: Float, y: Float)
 
+    /** The system cancelled the gesture: drop every touch without counting it as a game action. */
+    abstract fun onCancelAll()
+
     /** Normalized (0..1) coordinates, the same space as a profile button position. */
     protected fun nx(x: Float) = x / width
     protected fun ny(y: Float) = y / height
@@ -48,10 +51,7 @@ abstract class GameView(context: Context) : View(context) {
                 }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP ->
                 onPointerUp(event.getPointerId(index), event.getX(index), event.getY(index))
-            MotionEvent.ACTION_CANCEL ->
-                for (i in 0 until event.pointerCount) {
-                    onPointerUp(event.getPointerId(i), event.getX(i), event.getY(i))
-                }
+            MotionEvent.ACTION_CANCEL -> onCancelAll()
         }
         postInvalidateOnAnimation()
         return true

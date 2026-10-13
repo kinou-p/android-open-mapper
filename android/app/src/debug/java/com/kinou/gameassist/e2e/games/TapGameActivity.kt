@@ -46,6 +46,8 @@ class TapGameView(context: Context) : GameView(context) {
         }
     }
 
+    override fun onCancelAll() = synchronized(lock) { down.clear() }
+
     fun snapshotState(): TapState = synchronized(lock) { TapState(taps.toList(), missed, down.size) }
 
     override fun onDraw(canvas: Canvas) {
