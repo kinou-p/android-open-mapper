@@ -78,5 +78,6 @@ class HomeScreenScrollTest {
         val window = rule.onNodeWithTag(WINDOW_TAG).getUnclippedBoundsInRoot()
         val bottom = rule.onNodeWithText(reportBugText, substring = true).getUnclippedBoundsInRoot().bottom
         assertTrue("the last action should sit at the bottom of the window: ${window.bottom} vs $bottom", bottom > window.bottom - 40.dp)
+        assertTrue("the last action must stay inside the window: ${window.bottom} vs $bottom", bottom <= window.bottom)
     }
 }
