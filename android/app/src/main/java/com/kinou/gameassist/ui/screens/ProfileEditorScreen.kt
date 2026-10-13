@@ -174,19 +174,21 @@ fun ProfileEditorScreen(
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(stringResource(R.string.import_profile_desc), color = TextSecondary, fontSize = 13.sp)
-                        OutlinedTextField(
-                            value = importJsonText,
-                            onValueChange = { importJsonText = it },
-                            placeholder = { Text("{\n  \"name\": \"...\",\n  ...\n}") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp),
-                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = NeonCyan,
-                                unfocusedBorderColor = DarkCardBorder
+                        LtrContent {
+                            OutlinedTextField(
+                                value = importJsonText,
+                                onValueChange = { importJsonText = it },
+                                placeholder = { Text("{\n  \"name\": \"...\",\n  ...\n}") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp),
+                                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = DarkCardBorder
+                                )
                             )
-                        )
+                        }
                     }
                 },
                 confirmButton = {
@@ -829,17 +831,19 @@ fun SelectGamePackageDialog(
                         color = TextSecondary,
                         fontSize = 11.sp
                     )
-                    OutlinedTextField(
-                        value = customPackageText,
-                        onValueChange = { customPackageText = it },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = NeonCyan,
-                            unfocusedBorderColor = DarkCardBorder
-                        ),
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary)
-                    )
+                    LtrContent {
+                        OutlinedTextField(
+                            value = customPackageText,
+                            onValueChange = { customPackageText = it },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = DarkCardBorder
+                            ),
+                            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary)
+                        )
+                    }
                 }
             }
         },

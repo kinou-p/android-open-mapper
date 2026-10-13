@@ -162,16 +162,18 @@ fun BugReportScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                SelectionContainer {
-                    Text(
-                        text = reportText.ifEmpty { "…" },
-                        color = TextSecondary,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        modifier = Modifier
-                            .verticalScroll(rememberScrollState())
-                            .padding(12.dp)
-                    )
+                LtrContent {
+                    SelectionContainer {
+                        Text(
+                            text = reportText.ifEmpty { "…" },
+                            color = TextSecondary,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                                .padding(12.dp)
+                        )
+                    }
                 }
             }
 
