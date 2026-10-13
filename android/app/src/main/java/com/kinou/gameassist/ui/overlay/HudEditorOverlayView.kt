@@ -533,8 +533,8 @@ class HudEditorOverlayView(
 
             // Mode badge (HOLD, TAP, or RAPID)
             val modeBadge = when (b.mode) {
-                ButtonMode.HOLD -> "HOLD"
-                ButtonMode.TAP -> "TAP"
+                ButtonMode.HOLD -> context.getString(R.string.overlay_mode_hold_badge)
+                ButtonMode.TAP -> context.getString(R.string.overlay_mode_tap_badge)
                 ButtonMode.RAPID_FIRE -> context.getString(R.string.overlay_mode_rapid_badge)
             }
             badgeBgPaint.color = when (b.mode) {
@@ -825,7 +825,7 @@ class HudEditorOverlayView(
                 ButtonRole.TOGGLE_RECOIL -> context.getString(R.string.overlay_role_recoil_label)
                 ButtonRole.TOGGLE_STRAFE -> context.getString(R.string.overlay_role_strafe_label)
                 ButtonRole.SWITCH_PROFILE -> context.getString(R.string.overlay_role_profile_label)
-                ButtonRole.NORMAL -> "Normal"
+                ButtonRole.NORMAL -> context.getString(R.string.btn_tag_normal)
             }
             buttons += spec(
                 context.getString(R.string.overlay_role_label, roleLabel),
@@ -847,8 +847,8 @@ class HudEditorOverlayView(
             )
 
             val modeLabel = when (btn.mode) {
-                ButtonMode.HOLD -> "HOLD"
-                ButtonMode.TAP -> "TAP"
+                ButtonMode.HOLD -> context.getString(R.string.overlay_mode_hold_badge)
+                ButtonMode.TAP -> context.getString(R.string.overlay_mode_tap_badge)
                 ButtonMode.RAPID_FIRE -> context.getString(R.string.overlay_mode_rapid_badge)
             }
             buttons += spec(
