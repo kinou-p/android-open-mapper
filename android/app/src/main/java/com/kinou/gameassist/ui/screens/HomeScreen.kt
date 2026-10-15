@@ -114,360 +114,368 @@ fun HomeScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(DarkBackground)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        // App Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    // The page scrolls when the content is taller than the screen (landscape, small phones).
+    // When it is shorter, the launch actions stay pinned to the bottom: the column is at least as
+    // tall as the screen and SpaceBetween pushes the two groups apart.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(DarkBackground)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = maxHeight)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Le bloc titre est flexible : il cède la place au groupe de boutons, sinon le header
-            // déborde à droite dès qu'un contrôle est ajouté (le sous-titre est large).
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "OpenMapper",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = NeonCyan,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = stringResource(R.string.subtitle_native_mapper, currentVersion),
-                    fontSize = 12.sp,
-                    color = TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Language Dropdown Selector (FR, EN, ES, PT)
-                var showLanguageMenu by remember { mutableStateOf(false) }
-                val currentTag = LanguageManager.getCurrentDisplayTag(context)
-                val currentFlag = LanguageManager.getCurrentFlag(context)
-                val currentLangCode = LanguageManager.getCurrentLanguage(context)
-
-                Box {
-                    Surface(
-                        onClick = { showLanguageMenu = true },
-                        shape = RoundedCornerShape(12.dp),
-                        color = DarkCard,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
-                        modifier = Modifier.height(40.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(currentFlag, fontSize = 14.sp)
-                            Text(
-                                text = currentTag,
-                                color = NeonCyan,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = showLanguageMenu,
-                        onDismissRequest = { showLanguageMenu = false },
-                        modifier = Modifier.background(DarkCard)
-                    ) {
-                        LanguageManager.AVAILABLE_LANGUAGES.forEach { lang ->
-                            val isSelected = lang.code == currentLangCode
-                            DropdownMenuItem(
-                                text = {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(lang.flag, fontSize = 16.sp)
-                                        Text(
-                                            text = lang.displayName,
-                                            color = if (isSelected) NeonCyan else TextPrimary,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 13.sp
-                                        )
-                                    }
-                                },
-                                trailingIcon = {
-                                    if (isSelected) {
-                                        Icon(Icons.Default.Check, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
-                                    }
-                                },
-                                onClick = {
-                                    showLanguageMenu = false
-                                    LanguageManager.setLanguage(context, lang.code)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Update Notification Banner (if update available)
-        AnimatedVisibility(visible = updateInfo?.isNewer == true && !showUpdateDialog) {
-            updateInfo?.let { release ->
-                Surface(
-                    color = NeonCyan.copy(alpha = 0.12f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showUpdateDialog = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.NewReleases, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(24.dp))
-                            Column {
-                                Text(stringResource(R.string.update_available_title, release.tagName), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                Text(stringResource(R.string.update_available_desc), color = TextSecondary, fontSize = 11.sp)
-                            }
-                        }
-                        Icon(Icons.Default.Download, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
-                    }
-                }
-            }
-        }
-
-        // ==========================================
-        // WIDGET MANETTE CONNECTÉE & BATTERIE
-        // ==========================================
-        ConnectedGamepadWidget(
-            gamepads = connectedGamepads,
-            onTestClick = onNavigateToTest,
-            onOpenBluetooth = {
-                try {
-                    val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
-                    context.startActivity(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(context, context.getString(R.string.bluetooth_open_error), Toast.LENGTH_SHORT).show()
-                }
-            }
-        )
-
-        // 1. Shizuku Status Card
-        StatusCard(
-            title = stringResource(R.string.shizuku_title),
-            subtitle = when (shizukuStatus) {
-                ShizukuStatus.RUNNING_AUTHORIZED -> stringResource(R.string.shizuku_authorized)
-                ShizukuStatus.RUNNING_UNAUTHORIZED -> stringResource(R.string.shizuku_unauthorized)
-                ShizukuStatus.DEAD -> stringResource(R.string.shizuku_dead)
-            },
-            statusColor = when (shizukuStatus) {
-                ShizukuStatus.RUNNING_AUTHORIZED -> NeonGreen
-                ShizukuStatus.RUNNING_UNAUTHORIZED -> NeonOrange
-                ShizukuStatus.DEAD -> NeonPink
-            },
-            icon = Icons.Default.Security,
-            actionButtonText = if (shizukuStatus == ShizukuStatus.RUNNING_UNAUTHORIZED) stringResource(R.string.btn_authorize) else if (shizukuStatus == ShizukuStatus.DEAD) stringResource(R.string.btn_shizuku_help) else null,
-            onActionClick = {
-                if (shizukuStatus == ShizukuStatus.RUNNING_UNAUTHORIZED) {
-                    ShizukuManager.requestPermission()
-                } else if (shizukuStatus == ShizukuStatus.DEAD) {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/guide/setup/"))
-                    context.startActivity(intent)
-                }
-            }
-        )
-
-        // 2. Overlay Permission Card
-        if (!hasOverlayPermission) {
-            StatusCard(
-                title = stringResource(R.string.overlay_perm_title),
-                subtitle = stringResource(R.string.overlay_perm_desc),
-                statusColor = NeonOrange,
-                icon = Icons.Default.Layers,
-                actionButtonText = stringResource(R.string.btn_enable),
-                onActionClick = {
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:${context.packageName}")
-                    )
-                    context.startActivity(intent)
-                }
-            )
-        }
-
-        // 3. Profile Selection Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkCard),
-            shape = RoundedCornerShape(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // App Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(stringResource(R.string.active_profile_label), fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                    Text(
-                        stringResource(R.string.edit_profile_action),
-                        color = NeonCyan,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { onNavigateToProfiles() }
+                    // Le bloc titre est flexible : il cède la place au groupe de boutons, sinon le header
+                    // déborde à droite dès qu'un contrôle est ajouté (le sous-titre est large).
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "OpenMapper",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NeonCyan,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = stringResource(R.string.subtitle_native_mapper, currentVersion),
+                            fontSize = 12.sp,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        // Language Dropdown Selector (FR, EN, ES, PT)
+                        var showLanguageMenu by remember { mutableStateOf(false) }
+                        val currentTag = LanguageManager.getCurrentDisplayTag(context)
+                        val currentFlag = LanguageManager.getCurrentFlag(context)
+                        val currentLangCode = LanguageManager.getCurrentLanguage(context)
+
+                        Box {
+                            Surface(
+                                onClick = { showLanguageMenu = true },
+                                shape = RoundedCornerShape(12.dp),
+                                color = DarkCard,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                                modifier = Modifier.height(40.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(currentFlag, fontSize = 14.sp)
+                                    Text(
+                                        text = currentTag,
+                                        color = NeonCyan,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showLanguageMenu,
+                                onDismissRequest = { showLanguageMenu = false },
+                                modifier = Modifier.background(DarkCard)
+                            ) {
+                                LanguageManager.AVAILABLE_LANGUAGES.forEach { lang ->
+                                    val isSelected = lang.code == currentLangCode
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(lang.flag, fontSize = 16.sp)
+                                                Text(
+                                                    text = lang.displayName,
+                                                    color = if (isSelected) NeonCyan else TextPrimary,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        },
+                                        trailingIcon = {
+                                            if (isSelected) {
+                                                Icon(Icons.Default.Check, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                                            }
+                                        },
+                                        onClick = {
+                                            showLanguageMenu = false
+                                            LanguageManager.setLanguage(context, lang.code)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Update Notification Banner (if update available)
+                AnimatedVisibility(visible = updateInfo?.isNewer == true && !showUpdateDialog) {
+                    updateInfo?.let { release ->
+                        Surface(
+                            color = NeonCyan.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(14.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showUpdateDialog = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.NewReleases, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(24.dp))
+                                    Column {
+                                        Text(stringResource(R.string.update_available_title, release.tagName), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                        Text(stringResource(R.string.update_available_desc), color = TextSecondary, fontSize = 11.sp)
+                                    }
+                                }
+                                Icon(Icons.Default.Download, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // WIDGET MANETTE CONNECTÉE & BATTERIE
+                // ==========================================
+                ConnectedGamepadWidget(
+                    gamepads = connectedGamepads,
+                    onTestClick = onNavigateToTest,
+                    onOpenBluetooth = {
+                        try {
+                            val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, context.getString(R.string.bluetooth_open_error), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                )
+
+                // 1. Shizuku Status Card
+                StatusCard(
+                    title = stringResource(R.string.shizuku_title),
+                    subtitle = when (shizukuStatus) {
+                        ShizukuStatus.RUNNING_AUTHORIZED -> stringResource(R.string.shizuku_authorized)
+                        ShizukuStatus.RUNNING_UNAUTHORIZED -> stringResource(R.string.shizuku_unauthorized)
+                        ShizukuStatus.DEAD -> stringResource(R.string.shizuku_dead)
+                    },
+                    statusColor = when (shizukuStatus) {
+                        ShizukuStatus.RUNNING_AUTHORIZED -> NeonGreen
+                        ShizukuStatus.RUNNING_UNAUTHORIZED -> NeonOrange
+                        ShizukuStatus.DEAD -> NeonPink
+                    },
+                    icon = Icons.Default.Security,
+                    actionButtonText = if (shizukuStatus == ShizukuStatus.RUNNING_UNAUTHORIZED) stringResource(R.string.btn_authorize) else if (shizukuStatus == ShizukuStatus.DEAD) stringResource(R.string.btn_shizuku_help) else null,
+                    onActionClick = {
+                        if (shizukuStatus == ShizukuStatus.RUNNING_UNAUTHORIZED) {
+                            ShizukuManager.requestPermission()
+                        } else if (shizukuStatus == ShizukuStatus.DEAD) {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/guide/setup/"))
+                            context.startActivity(intent)
+                        }
+                    }
+                )
+
+                // 2. Overlay Permission Card
+                if (!hasOverlayPermission) {
+                    StatusCard(
+                        title = stringResource(R.string.overlay_perm_title),
+                        subtitle = stringResource(R.string.overlay_perm_desc),
+                        statusColor = NeonOrange,
+                        icon = Icons.Default.Layers,
+                        actionButtonText = stringResource(R.string.btn_enable),
+                        onActionClick = {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            context.startActivity(intent)
+                        }
                     )
                 }
 
-                selectedProfile?.let { prof ->
-                    Surface(
-                        color = DarkSurface,
+                // 3. Profile Selection Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = DarkCard),
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(stringResource(R.string.active_profile_label), fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            Text(
+                                stringResource(R.string.edit_profile_action),
+                                color = NeonCyan,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clickable { onNavigateToProfiles() }
+                            )
+                        }
+
+                        selectedProfile?.let { prof ->
+                            Surface(
+                                color = DarkSurface,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Gamepad, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(32.dp))
+                                    Column {
+                                        Text(prof.name, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                                        Text(prof.packageName, color = TextSecondary, fontSize = 12.sp, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Quick Game Launcher (when service is running)
+                if (isServiceRunning && selectedProfile != null) {
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val launchIntent = context.packageManager.getLaunchIntentForPackage(selectedProfile.packageName)
+                                if (launchIntent != null) {
+                                    context.startActivity(launchIntent)
+                                } else {
+                                    Toast.makeText(context, context.getString(R.string.app_not_installed_toast, selectedProfile.packageName), Toast.LENGTH_SHORT).show()
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(context, context.getString(R.string.cannot_launch_app_toast), Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.Gamepad, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(32.dp))
-                            Column {
-                                Text(prof.name, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
-                                Text(prof.packageName, color = TextSecondary, fontSize = 12.sp, maxLines = 1)
+                        Icon(Icons.Default.PlayCircle, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("${selectedProfile.name}", color = NeonGreen, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                // Big Launch Action Button
+                val canStart = shizukuStatus == ShizukuStatus.RUNNING_AUTHORIZED && hasOverlayPermission && selectedProfile != null
+
+                Button(
+                    onClick = {
+                        if (isServiceRunning) {
+                            onStopService()
+                        } else if (selectedProfile != null) {
+                            onStartService(selectedProfile)
+                        }
+                    },
+                    enabled = isServiceRunning || canStart,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isServiceRunning) NeonPink else NeonCyan,
+                        disabledContainerColor = DarkCardBorder
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            if (isServiceRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = if (isServiceRunning) Color.White else Color.Black
+                        )
+                        Text(
+                            text = if (isServiceRunning) stringResource(R.string.btn_stop_overlay) else stringResource(R.string.btn_launch_overlay),
+                            color = if (isServiceRunning) Color.White else Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                }
+
+                // Actions secondaires : mises à jour + signaler un bug
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                isCheckingUpdate = true
+                                val release = AppUpdateManager.checkForUpdate(context, currentVersion)
+                                isCheckingUpdate = false
+                                if (release != null) {
+                                    updateInfo = release
+                                    if (release.isNewer) {
+                                        AppUpdateManager.cleanupOldApks(context, release.apkFileName)
+                                        downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
+                                        showUpdateDialog = true
+                                    } else {
+                                        Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
+                                    }
+                                } else {
+                                    Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
+                                }
                             }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Quick Game Launcher (when service is running)
-        if (isServiceRunning && selectedProfile != null) {
-            OutlinedButton(
-                onClick = {
-                    try {
-                        val launchIntent = context.packageManager.getLaunchIntentForPackage(selectedProfile.packageName)
-                        if (launchIntent != null) {
-                            context.startActivity(launchIntent)
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(color = NeonCyan, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                         } else {
-                            Toast.makeText(context, context.getString(R.string.app_not_installed_toast, selectedProfile.packageName), Toast.LENGTH_SHORT).show()
+                            Icon(Icons.Default.CloudSync, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
                         }
-                    } catch (e: Exception) {
-                        Toast.makeText(context, context.getString(R.string.cannot_launch_app_toast), Toast.LENGTH_SHORT).show()
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(stringResource(R.string.home_check_update), color = NeonCyan, fontSize = 12.sp, maxLines = 1)
                     }
-                },
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.PlayCircle, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("${selectedProfile.name}", color = NeonGreen, fontWeight = FontWeight.Bold)
-            }
-        }
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Big Launch Action Button
-        val canStart = shizukuStatus == ShizukuStatus.RUNNING_AUTHORIZED && hasOverlayPermission && selectedProfile != null
-
-        Button(
-            onClick = {
-                if (isServiceRunning) {
-                    onStopService()
-                } else if (selectedProfile != null) {
-                    onStartService(selectedProfile)
-                }
-            },
-            enabled = isServiceRunning || canStart,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isServiceRunning) NeonPink else NeonCyan,
-                disabledContainerColor = DarkCardBorder
-            ),
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(
-                    if (isServiceRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = if (isServiceRunning) Color.White else Color.Black
-                )
-                Text(
-                    text = if (isServiceRunning) stringResource(R.string.btn_stop_overlay) else stringResource(R.string.btn_launch_overlay),
-                    color = if (isServiceRunning) Color.White else Color.Black,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            }
-        }
-
-        // Actions secondaires : mises à jour + signaler un bug
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = {
-                    coroutineScope.launch {
-                        isCheckingUpdate = true
-                        val release = AppUpdateManager.checkForUpdate(context, currentVersion)
-                        isCheckingUpdate = false
-                        if (release != null) {
-                            updateInfo = release
-                            if (release.isNewer) {
-                                AppUpdateManager.cleanupOldApks(context, release.apkFileName)
-                                downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
-                                showUpdateDialog = true
-                            } else {
-                                Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
-                            }
-                        } else {
-                            Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
-                        }
+                    OutlinedButton(
+                        onClick = onNavigateToBugReport,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Icon(Icons.Default.BugReport, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(stringResource(R.string.home_report_bug), color = NeonCyan, fontSize = 12.sp, maxLines = 1)
                     }
-                },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) {
-                if (isCheckingUpdate) {
-                    CircularProgressIndicator(color = NeonCyan, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                } else {
-                    Icon(Icons.Default.CloudSync, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
                 }
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(stringResource(R.string.home_check_update), color = NeonCyan, fontSize = 12.sp, maxLines = 1)
-            }
-
-            OutlinedButton(
-                onClick = onNavigateToBugReport,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(44.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp)
-            ) {
-                Icon(Icons.Default.BugReport, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(stringResource(R.string.home_report_bug), color = NeonCyan, fontSize = 12.sp, maxLines = 1)
             }
         }
     }
