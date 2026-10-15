@@ -120,6 +120,16 @@ class ButtonProcessor(
     @Volatile private var fireButtonIds: Set<String> = emptySet()
     @Volatile private var adsButtonIds: Set<String> = emptySet()
     @Volatile private var reloadButtonIds: Set<String> = emptySet()
+    @Volatile private var aimButtonIds: Set<String> = emptySet()
+
+    // Held MOBA buttons in press order: the last one follows the right stick.
+    // Mutated under lock only; aimActive is read lock-free by the engine loop.
+    private class AimEntry(val btnId: String, val pointerId: Int, val cx: Float, val cy: Float) {
+        var x = cx
+        var y = cy
+    }
+    private val aimStack = ArrayList<AimEntry>()
+    @Volatile private var aimActive = false
 
     // Lock-free atomic counters for ultra-fast 240Hz engine queries
     private val activeFireCount = AtomicInteger(0)
@@ -134,6 +144,16 @@ class ButtonProcessor(
             val oldButtonsById = buttons.associateBy { it.id }
             val snapshot = list.map { it.copy() }
             val newIds = snapshot.map { it.id }.toSet()
+
+            // Held aim fingers whose button was removed, or is no longer an aim button, are lifted
+            // first at their last aimed position (not at the button center).
+            val newAimIds = snapshot.filter { it.role == ButtonRole.AIM_JOYSTICK }.map { it.id }.toSet()
+            for (entry in aimStack.filter { it.btnId !in newAimIds }) {
+                aimStack.remove(entry)
+                if (activePointers.remove(entry.btnId) != null) freePointers.add(entry.pointerId)
+                injector.touchUp(entry.pointerId, entry.x, entry.y)
+            }
+            aimActive = aimStack.isNotEmpty()
 
             // Réconciliation : libération et touchUp des pointeurs orphelins après un hot-switch
             val orphaned = activePointers.keys.filter { it !in newIds }
@@ -160,6 +180,9 @@ class ButtonProcessor(
                 activeRapidFireJobs.remove(id)?.cancel()
             }
 
+            // Published before the button map so a press never sees the new map with the old flag
+            // (that would run the camera for a frame on a profile switch).
+            aimButtonIds = newAimIds
             buttons = snapshot
             buttonsByGamepadKey = snapshot.groupBy { canonicalGamepadKey(it.gamepadButton) }
             // Combos : seules les clés bien formées ("MODIFICATEUR+DÉCLENCHEUR") sont indexées, dans
@@ -247,6 +270,11 @@ class ButtonProcessor(
                     continue
                 }
                 else -> {}
+            }
+
+            if (btn.role == ButtonRole.AIM_JOYSTICK) {
+                aimDown(btn)
+                continue
             }
 
             // Trigger haptic feedback for Fire and Reload actions
@@ -422,6 +450,10 @@ class ButtonProcessor(
         if (matchedButtons.isEmpty()) return
 
         for (btn in matchedButtons) {
+            if (btn.role == ButtonRole.AIM_JOYSTICK) {
+                aimUp(btn)
+                continue
+            }
             val mode = (btn.mode as ButtonMode?) ?: ButtonMode.HOLD
             if (mode == ButtonMode.RAPID_FIRE) {
                 activeRapidFireJobs.remove(btn.id)?.cancel()
@@ -523,6 +555,37 @@ class ButtonProcessor(
             freePointers.addAll(POINTER_BUTTON_START until MAX_POINTERS)
             activeFireCount.set(0)
             activeAdsCount.set(0)
+            aimStack.clear()
+            aimActive = false
+        }
+    }
+
+    // The touch is injected while holding the lock: state change and injection are one step, so a
+    // move, a pointer reuse or releaseAll can never observe a down that is not injected yet.
+    private fun aimDown(btn: ButtonConfig) {
+        val cx = btn.x * injector.screenWidth
+        val cy = btn.y * injector.screenHeight
+        synchronized(lock) {
+            if (activePointers.containsKey(btn.id)) return
+            val pointerId = freePointers.minOrNull() ?: return
+            freePointers.remove(pointerId)
+            activePointers[btn.id] = pointerId
+            aimStack.add(AimEntry(btn.id, pointerId, cx, cy))
+            aimActive = true
+            injector.touchDown(pointerId, cx, cy)
+        }
+    }
+
+    /** Releasing the button lifts the finger at the last aimed position: that is what fires the shot. */
+    private fun aimUp(btn: ButtonConfig) {
+        synchronized(lock) {
+            val i = aimStack.indexOfFirst { it.btnId == btn.id }
+            if (i < 0) return
+            val entry = aimStack.removeAt(i)
+            aimActive = aimStack.isNotEmpty()
+            activePointers.remove(btn.id)
+            freePointers.add(entry.pointerId)
+            injector.touchUp(entry.pointerId, entry.x, entry.y)
         }
     }
 
@@ -539,4 +602,36 @@ class ButtonProcessor(
     // Ultra fast O(1) Zero-Allocation and Lock-Free queries on the 120-240Hz hot path
     fun isFireActive(): Boolean = activeFireCount.get() > 0
     fun isAdsActive(): Boolean = activeAdsCount.get() > 0
+    fun isAimActive(): Boolean = aimActive
+
+    /** True if the profile has at least one MOBA button: the right-stick camera is then disabled. */
+    fun hasAimButtons(): Boolean = aimButtonIds.isNotEmpty()
+
+    /**
+     * Engine thread: moves the finger of the most recently pressed MOBA button with the right stick.
+     * Stick inside the deadzone = back to the center. Allocation-free.
+     */
+    fun processAimJoystick(rx: Float, ry: Float) {
+        if (!aimActive) return
+        val cfg = settings
+        val deadzone = AimSettings.coerceDeadzone(cfg.aimDeadzone)
+        val radius = AimSettings.coerceRadius(cfg.aimRadius)
+        synchronized(lock) {
+            val entry = aimStack.lastOrNull() ?: return
+            var tx = entry.cx
+            var ty = entry.cy
+            val mag = kotlin.math.hypot(rx, ry)
+            if (mag >= deadzone) {
+                val norm = ((mag - deadzone) / (1f - deadzone)).coerceIn(0f, 1f)
+                val dist = norm * radius * injector.screenHeight
+                tx += rx / mag * dist
+                ty += ry / mag * dist
+            }
+            if (tx != entry.x || ty != entry.y) {
+                entry.x = tx
+                entry.y = ty
+                injector.touchMove(entry.pointerId, tx, ty)
+            }
+        }
+    }
 }

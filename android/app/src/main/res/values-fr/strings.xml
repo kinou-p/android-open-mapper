@@ -365,6 +365,7 @@
     <string name="overlay_role_recoil_badge">🎯 RECUL</string>
     <string name="overlay_role_strafe_badge">⚡ STRAFE</string>
     <string name="overlay_role_profile_badge">🎮 PROFIL</string>
+    <string name="overlay_role_aim_badge">🕹️ VISER</string>
     <string name="overlay_mode_rapid_badge">RAPID ⚡</string>
     <string name="overlay_mode_hold_badge">MAINT</string>
     <string name="overlay_mode_tap_badge">APPUI</string>
@@ -377,6 +378,7 @@
     <string name="overlay_role_recoil_label">🎯 Recul</string>
     <string name="overlay_role_strafe_label">⚡ Strafe</string>
     <string name="overlay_role_profile_label">🎮 Profil</string>
+    <string name="overlay_role_aim_label">🕹️ Viser</string>
     <string name="overlay_assign">🎮 Assigner</string>
     <string name="overlay_assign_learning">⏳ Touche...</string>
     <string name="overlay_joystick_ls">🕹️ Joystick LS</string>
@@ -440,4 +442,8 @@
     <string name="visual_stick_output">Sortie : %1$d%%</string>
     <string name="err_apk_package_mismatch">Le package cible de l\'APK (%1$s) ne correspond pas à l\'application courante (%2$s).</string>
     <string name="cursor_speed_setting_title">🖱️ Vitesse du curseur virtuel (L3+R3)</string>
+    <string name="moba_section_title">Boutons de visée MOBA</string>
+    <string name="moba_section_desc">Boutons au rôle Viser (défini dans léditeur HUD) : maintenir pour appuyer sur le joystick de visée du jeu, bouger le stick droit pour viser, relâcher pour tirer.</string>
+    <string name="moba_aim_radius_label">Portée de visée (distance de glissement)</string>
+    <string name="moba_aim_deadzone_label">Zone morte du stick droit</string>
 </resources>
