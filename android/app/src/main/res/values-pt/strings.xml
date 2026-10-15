@@ -99,6 +99,9 @@
     <string name="delete_profile_confirm">Tem certeza de que deseja excluir o perfil « %1$s »?\nEsta ação não pode ser desfeita.</string>
     <string name="import_profile_title">Importar Perfil JSON</string>
     <string name="import_profile_desc">Cole abaixo o código JSON de um perfil exportado:</string>
+    <string name="btn_import_from_file">📁 Importar de arquivo</string>
+    <string name="import_files_result">Importados %1$d de %2$d perfis</string>
+    <string name="import_file_read_error">Não foi possível ler o arquivo. Escolha um perfil do OpenMapper exportado (.json).</string>
     <string name="buttons_count_configured">%1$d botões configurados</string>
     <string name="camera_section_title">Configurações de Câmera</string>
     <string name="camera_section_desc">Sensibilidade, curva e assistência de mira</string>

@@ -99,6 +99,9 @@
     <string name="delete_profile_confirm">Voulez-vous vraiment supprimer le profil « %1$s » ?\nCette action est irréversible.</string>
     <string name="import_profile_title">Importer un Profil JSON</string>
     <string name="import_profile_desc">Collez ci-dessous le code JSON d\'un profil exporté :</string>
+    <string name="btn_import_from_file">📁 Importer depuis un fichier</string>
+    <string name="import_files_result">%1$d profil(s) importé(s) sur %2$d</string>
+    <string name="import_file_read_error">Impossible de lire le fichier. Choisissez un profil OpenMapper exporté (.json).</string>
     <string name="buttons_count_configured">%1$d boutons configurés</string>
     <string name="camera_section_title">Réglages de Caméra</string>
     <string name="camera_section_desc">Sensibilité, courbe et assistance de visée</string>

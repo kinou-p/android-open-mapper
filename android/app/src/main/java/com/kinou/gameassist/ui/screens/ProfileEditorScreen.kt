@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.ResponseCurve
+import com.kinou.gameassist.data.repository.ProfileFileReader
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +56,39 @@ fun ProfileEditorScreen(
     var showImportDialog by remember { mutableStateOf(false) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var importJsonText by remember { mutableStateOf("") }
+
+    // Import from one or several exported .json files (instead of pasting the text)
+    val importFilesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        // One file at a time: only the file being imported is held in memory, and imports never overlap
+        var imported = 0
+        var readable = 0
+        fun importNext(index: Int) {
+            if (index < uris.size) {
+                val text = runCatching {
+                    context.contentResolver.openInputStream(uris[index])?.use { ProfileFileReader.readText(it) }
+                }.getOrNull()
+                if (text == null) {
+                    importNext(index + 1)
+                    return
+                }
+                readable++
+                onImportProfile(text) { ok ->
+                    if (ok) imported++
+                    importNext(index + 1)
+                }
+                return
+            }
+            val message = when {
+                readable == 0 -> context.getString(R.string.import_file_read_error)
+                imported == uris.size && imported == 1 -> context.getString(R.string.profile_imported_toast)
+                else -> context.getString(R.string.import_files_result, imported, uris.size)
+            }
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            if (imported == uris.size) showImportDialog = false
+        }
+        importNext(0)
+    }
 
     Scaffold(
         topBar = {
@@ -173,6 +209,12 @@ fun ProfileEditorScreen(
                 title = { Text(stringResource(R.string.import_profile_title), fontWeight = FontWeight.Bold, color = TextPrimary) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(
+                            onClick = { importFilesLauncher.launch(arrayOf("*/*")) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.btn_import_from_file), color = NeonCyan, fontWeight = FontWeight.Bold)
+                        }
                         Text(stringResource(R.string.import_profile_desc), color = TextSecondary, fontSize = 13.sp)
                         LtrContent {
                             OutlinedTextField(
