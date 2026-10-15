@@ -1164,6 +1164,9 @@ class HudEditorOverlayView(
                                 ButtonRole.SWITCH_PROFILE -> ButtonRole.AIM_JOYSTICK
                                 ButtonRole.AIM_JOYSTICK -> ButtonRole.NORMAL
                             }
+                            // Aim is hold-only: a role that no longer allows the current mode
+                            // falls back to a valid one instead of keeping a lying badge.
+                            btn.mode = ButtonConfig.coerceModeForRole(btn.role, btn.mode)
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
                             return true
@@ -1171,11 +1174,7 @@ class HudEditorOverlayView(
 
                         // Mode Toggle
                         if (btnModeRect.contains(tx, ty)) {
-                            btn.mode = when (btn.mode) {
-                                ButtonMode.HOLD -> ButtonMode.TAP
-                                ButtonMode.TAP -> ButtonMode.RAPID_FIRE
-                                ButtonMode.RAPID_FIRE -> ButtonMode.HOLD
-                            }
+                            btn.mode = ButtonConfig.nextMode(btn.role, btn.mode)
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
                             return true

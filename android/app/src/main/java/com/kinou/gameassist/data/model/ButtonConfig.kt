@@ -63,4 +63,29 @@ data class ButtonConfig(
 
     @SerialName("rapid_fire_rate_hz")
     var rapidFireRateHz: Int = 14
-)
+) {
+    companion object {
+        val STANDARD_MODES: List<ButtonMode> =
+            listOf(ButtonMode.HOLD, ButtonMode.TAP, ButtonMode.RAPID_FIRE)
+
+        private val AIM_MODES: List<ButtonMode> = listOf(ButtonMode.HOLD)
+
+        /**
+         * Modes a button may use for a role. Aim is inherently a hold gesture (press to drop the
+         * finger on the game aim joystick, release to fire), so TAP and RAPID_FIRE do not apply.
+         */
+        fun modesForRole(role: ButtonRole): List<ButtonMode> =
+            if (role == ButtonRole.AIM_JOYSTICK) AIM_MODES else STANDARD_MODES
+
+        /** Next mode when the editor's Mode control is tapped, honouring the role's allowed modes. */
+        fun nextMode(role: ButtonRole, current: ButtonMode): ButtonMode {
+            val modes = modesForRole(role)
+            val i = modes.indexOf(current)
+            return if (i < 0 || i == modes.lastIndex) modes.first() else modes[i + 1]
+        }
+
+        /** Forces a mode that is incompatible with the role back to a valid one (HOLD for aim). */
+        fun coerceModeForRole(role: ButtonRole, mode: ButtonMode): ButtonMode =
+            if (role == ButtonRole.AIM_JOYSTICK) ButtonMode.HOLD else mode
+    }
+}
