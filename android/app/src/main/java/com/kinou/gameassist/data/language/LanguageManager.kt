@@ -24,12 +24,14 @@ object LanguageManager {
     const val LANG_EN = "en"
     const val LANG_ES = "es"
     const val LANG_PT = "pt"
+    const val LANG_HE = "he"
 
     val AVAILABLE_LANGUAGES = listOf(
         LanguageOption(LANG_FR, "Français", "🇫🇷", "FR"),
         LanguageOption(LANG_EN, "English", "🇬🇧", "EN"),
         LanguageOption(LANG_ES, "Español", "🇪🇸", "ES"),
-        LanguageOption(LANG_PT, "Português", "🇧🇷", "PT")
+        LanguageOption(LANG_PT, "Português", "🇧🇷", "PT"),
+        LanguageOption(LANG_HE, "עברית", "🇮🇱", "HE")
     )
 
     private val _currentLanguageFlow = MutableStateFlow(LANG_SYSTEM)
@@ -51,7 +53,8 @@ object LanguageManager {
      * picker; otherwise the saved choice is kept. A locale the app does not ship is ignored.
      */
     internal fun resolveStartupLanguage(saved: String, appLocaleLanguage: String?): String {
-        val fromSettings = appLocaleLanguage?.lowercase()
+        // Java and older Android still report Hebrew as the legacy code "iw"
+        val fromSettings = appLocaleLanguage?.lowercase()?.let { if (it == "iw") LANG_HE else it }
         return if (fromSettings != null && AVAILABLE_LANGUAGES.any { it.code == fromSettings }) fromSettings else saved
     }
 
@@ -64,13 +67,14 @@ object LanguageManager {
 
     fun getCurrentLanguage(context: Context): String {
         return when (val current = _currentLanguageFlow.value) {
-            LANG_FR, LANG_EN, LANG_ES, LANG_PT -> current
+            LANG_FR, LANG_EN, LANG_ES, LANG_PT, LANG_HE -> current
             else -> {
                 val sysLang = Locale.getDefault().language.lowercase()
                 when {
                     sysLang.startsWith("fr") -> LANG_FR
                     sysLang.startsWith("es") -> LANG_ES
                     sysLang.startsWith("pt") -> LANG_PT
+                    sysLang.startsWith("he") || sysLang.startsWith("iw") -> LANG_HE
                     else -> LANG_EN
                 }
             }
@@ -86,6 +90,7 @@ object LanguageManager {
             LANG_FR -> "FR"
             LANG_ES -> "ES"
             LANG_PT -> "PT"
+            LANG_HE -> "HE"
             else -> "EN"
         }
     }
@@ -95,6 +100,7 @@ object LanguageManager {
             LANG_FR -> "🇫🇷"
             LANG_ES -> "🇪🇸"
             LANG_PT -> "🇧🇷"
+            LANG_HE -> "🇮🇱"
             else -> "🇬🇧"
         }
     }
@@ -105,6 +111,7 @@ object LanguageManager {
             LANG_EN -> LocaleListCompat.forLanguageTags("en")
             LANG_ES -> LocaleListCompat.forLanguageTags("es")
             LANG_PT -> LocaleListCompat.forLanguageTags("pt")
+            LANG_HE -> LocaleListCompat.forLanguageTags("he")
             else -> LocaleListCompat.getEmptyLocaleList()
         }
         AppCompatDelegate.setApplicationLocales(appLocale)

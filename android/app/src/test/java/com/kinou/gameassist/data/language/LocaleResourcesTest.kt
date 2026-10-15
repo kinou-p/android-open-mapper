@@ -86,4 +86,35 @@ class LocaleResourcesTest {
         val manifest = File("src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("android:localeConfig=\"@xml/locales_config\""))
     }
+
+    /** Android keeps the legacy resource qualifier "iw" for Hebrew. */
+    private fun resourceDir(code: String) = "values-" + if (code == "he") "iw" else code
+
+    @Test
+    fun everyPickerLanguageHasItsResources() {
+        for (language in LanguageManager.AVAILABLE_LANGUAGES) {
+            val dir = if (language.code == LanguageManager.LANG_EN) "values-en" else resourceDir(language.code)
+            assertTrue("missing $dir for ${language.code}", File(resDir, "$dir/strings.xml").exists())
+        }
+    }
+
+    @Test
+    fun noStringContainsAnInvisibleZeroWidthSpace() {
+        for (dir in listOf("values") + localeDirs()) {
+            for ((key, text) in strings(dir)) {
+                assertTrue("$dir/$key contains U+200B", !text.contains(0x200B.toChar()))
+            }
+        }
+    }
+
+    @Test
+    fun hebrewStringsAreWrittenInHebrew() {
+        val hebrewLetters = Regex("[א-ת]")
+        // Names and abbreviations that are the same in every language
+        val allowed = setOf("app_name", "gamepad_btn_bluetooth", "overlay_role_ads_badge", "language_fr", "language_en", "language_es", "language_pt")
+        for ((key, text) in strings("values-iw")) {
+            if (key in allowed) continue
+            assertTrue("values-iw/$key has no Hebrew letter: $text", hebrewLetters.containsMatchIn(text))
+        }
+    }
 }
