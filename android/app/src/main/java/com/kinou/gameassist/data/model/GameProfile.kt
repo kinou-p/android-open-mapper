@@ -43,7 +43,7 @@ data class GameProfile(
     var packageName: String = "com.activision.callofduty.shooter",
 
     @SerialName("description")
-    var description: String = "Profil optimisé pour Call of Duty: Mobile",
+    var description: String = "",
 
     @SerialName("joystick")
     var joystick: JoystickConfig = JoystickConfig(),

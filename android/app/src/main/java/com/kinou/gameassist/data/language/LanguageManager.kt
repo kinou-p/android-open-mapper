@@ -37,9 +37,22 @@ object LanguageManager {
 
     fun init(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val savedLang = prefs.getString(KEY_LANGUAGE, LANG_SYSTEM) ?: LANG_SYSTEM
-        _currentLanguageFlow.value = savedLang
-        applyLanguage(savedLang)
+        val saved = prefs.getString(KEY_LANGUAGE, LANG_SYSTEM) ?: LANG_SYSTEM
+        val appLocales = AppCompatDelegate.getApplicationLocales()
+        val language = resolveStartupLanguage(saved, if (appLocales.isEmpty) null else appLocales[0]?.language)
+        if (language != saved) prefs.edit().putString(KEY_LANGUAGE, language).apply()
+        _currentLanguageFlow.value = language
+        applyLanguage(language)
+    }
+
+    /**
+     * Language to apply at startup. A language picked in Android Settings > Apps > OpenMapper >
+     * Language (Android 13+) is the more recent choice, so it wins over the one saved by the in-app
+     * picker; otherwise the saved choice is kept. A locale the app does not ship is ignored.
+     */
+    internal fun resolveStartupLanguage(saved: String, appLocaleLanguage: String?): String {
+        val fromSettings = appLocaleLanguage?.lowercase()
+        return if (fromSettings != null && AVAILABLE_LANGUAGES.any { it.code == fromSettings }) fromSettings else saved
     }
 
     fun setLanguage(context: Context, langCode: String) {

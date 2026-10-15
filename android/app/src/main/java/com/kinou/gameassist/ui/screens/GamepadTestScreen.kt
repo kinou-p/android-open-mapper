@@ -1571,6 +1571,7 @@ fun GamepadRumbleDiagnosticView(
     val effectSingle = stringResource(R.string.rumble_effect_single)
     val effectBurst = stringResource(R.string.rumble_effect_burst)
     val effectLong = stringResource(R.string.rumble_effect_long)
+    val effectReload = stringResource(R.string.rumble_effect_reload)
     var intensity by remember { mutableFloatStateOf(0.8f) }
     var isContinuousRumbling by remember { mutableStateOf(false) }
     var lastTriggeredEffect by remember { mutableStateOf<String?>(null) }
@@ -1735,7 +1736,7 @@ fun GamepadRumbleDiagnosticView(
 
                     Button(
                         onClick = {
-                            lastTriggeredEffect = "Rechargement"
+                            lastTriggeredEffect = effectReload
                             hapticManager.playReloadHaptic(intensity)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = NeonPink),

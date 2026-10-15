@@ -401,6 +401,7 @@
     <string name="rumble_effect_single">Disparo simple</string>
     <string name="rumble_effect_burst">Ráfaga continua</string>
     <string name="rumble_effect_long">Pulso de 500 ms</string>
+    <string name="rumble_effect_reload">Recarga (doble)</string>
     <string name="rumble_stop_burst">⏹ Detener ráfaga</string>
     <string name="community_offline">No se puede acceder a la comunidad</string>
     <string name="community_gamepad_placeholder">Xbox / PS5 / Genérico</string>

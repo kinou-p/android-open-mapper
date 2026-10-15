@@ -401,6 +401,7 @@
     <string name="rumble_effect_single">Single shot</string>
     <string name="rumble_effect_burst">Continuous burst</string>
     <string name="rumble_effect_long">500ms pulse</string>
+    <string name="rumble_effect_reload">Reload (double)</string>
     <string name="rumble_stop_burst">⏹ Stop burst</string>
     <string name="community_offline">Cannot reach the community</string>
     <string name="community_gamepad_placeholder">Xbox / PS5 / Generic</string>

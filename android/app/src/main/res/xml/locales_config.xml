@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Languages shown in Android 13+ Settings > Apps > OpenMapper > Language.
+     Keep in sync with LanguageManager.AVAILABLE_LANGUAGES. -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="fr" />
+    <locale android:name="es" />
+    <locale android:name="pt" />
+</locale-config>
