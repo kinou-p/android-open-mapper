@@ -55,6 +55,9 @@
     <string name="profiles_title">מנהל פרופילים</string>
     <string name="btn_back">חזרה</string>
     <string name="btn_import">ייבוא</string>
+    <string name="btn_import_from_file">📁 ייבוא מקובץ</string>
+    <string name="import_files_result">יובאו %1$d מתוך %2$d פרופילים</string>
+    <string name="import_file_read_error">לא ניתן לקרוא את הקובץ. בחר פרופיל OpenMapper מיוצא (.json).</string>
     <string name="btn_export">ייצוא</string>
     <string name="btn_duplicate">שכפול</string>
     <string name="btn_delete">מחיקה</string>
@@ -336,7 +339,10 @@
     <string name="overlay_role_recoil_badge">🎯 רתע</string>
     <string name="overlay_role_strafe_badge">⚡ תנועה</string>
     <string name="overlay_role_profile_badge">🎮 פרופיל</string>
+    <string name="overlay_role_aim_badge">🕹️ כיוון</string>
     <string name="overlay_mode_rapid_badge">מהיר ⚡</string>
+    <string name="overlay_mode_hold_badge">החזק</string>
+    <string name="overlay_mode_tap_badge">הקשה</string>
     <string name="overlay_strafe_on">⚡ תנועה לצדדים: פעיל</string>
     <string name="overlay_strafe_off">⚡ תנועה לצדדים: כבוי</string>
     <string name="overlay_recoil_on">🎯 רתע: פעיל</string>
@@ -346,6 +352,7 @@
     <string name="overlay_role_recoil_label">🎯 רתע</string>
     <string name="overlay_role_strafe_label">⚡ תנועה לצדדים</string>
     <string name="overlay_role_profile_label">🎮 פרופיל</string>
+    <string name="overlay_role_aim_label">🕹️ כיוון</string>
     <string name="overlay_assign">🎮 הקצאה</string>
     <string name="overlay_assign_learning">⏳ לחץ על מקש...</string>
     <string name="overlay_joystick_ls">🕹️ ג\'ויסטיק שמאלי (LS)</string>
@@ -408,4 +415,8 @@
     <string name="visual_stick_output">פלט: %1$d%%</string>
     <string name="err_apk_package_mismatch">חבילת היעד של ה-APK‏ (%1$s) אינה תואמת לאפליקציה הנוכחית (%2$s).</string>
     <string name="cursor_speed_setting_title">🖱️ מהירות סמן וירטואלי (L3+R3)</string>
+    <string name="moba_section_title">כפתורי כיוון MOBA</string>
+    <string name="moba_section_desc">כפתורים עם תפקיד כיוון (מוגדר בעורך ה-HUD): החזק כדי ללחוץ על ג\'ויסטיק הכיוון במשחק, הזז את המקל הימני כדי לכוון, ושחרר כדי לירות.</string>
+    <string name="moba_aim_radius_label">טווח כיוון (מרחק גרירה)</string>
+    <string name="moba_aim_deadzone_label">אזור מת של המקל הימני</string>
 </resources>
