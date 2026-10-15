@@ -27,6 +27,21 @@ are signed with different keys), and export your profiles beforehand: uninstalli
 The tests use their own in-memory profiles and never touch yours. Disconnect a real gamepad while
 the tests run, so it does not feed the engine.
 
+## Run on an emulator
+
+Any x86_64 emulator image works. The suite is tested on API 34 (`google_apis`, Pixel 6 profile), where it
+passes 26/26 several times in a row:
+
+```
+sdkmanager "emulator" "system-images;android-34;google_apis;x86_64"
+avdmanager create avd -n openmapper_test -k "system-images;android-34;google_apis;x86_64" -d pixel_6
+emulator -avd openmapper_test -no-window -no-audio -gpu swiftshader_indirect
+ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest
+```
+
+A headless emulator is slower than a phone, so `waitFor` defaults to 10 s. The tests mark Android's
+"viewing full screen" popup as already seen, because on a fresh emulator it swallows the first touch.
+
 ## Simulated games
 
 | Game | Mimics | Controls | Scenarios |
