@@ -62,6 +62,13 @@ class HudEditorOverlayView(
     private var dragOffsetY = 0f
     var isLearning = false
 
+    // HUD editor selection menus (Role / Mode). Popup lists drawn over the canvas, so the user
+    // picks a value instead of tapping through a cycle.
+    private enum class EditorMenu { NONE, ROLE, MODE }
+    private var openMenu = EditorMenu.NONE
+    private val menuPanelRect = RectF()
+    private val menuRowRects = ArrayList<RectF>(8)
+
     // Opacity & Details Bar
     private val opacitySteps = floatArrayOf(0.40f, 0.65f, 0.15f, 0.0f)
     private var opacityIndex = 0
@@ -290,6 +297,28 @@ class HudEditorOverlayView(
         textAlign = Paint.Align.LEFT
         textSize = 14f * density
         color = 0xFF00F0FF.toInt()
+        isFakeBoldText = true
+    }
+
+    // Selection menu (Role / Mode popup) paints
+    private val menuPanelBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xF21A2330.toInt()
+        style = Paint.Style.FILL
+    }
+    private val menuPanelStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF00F0FF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * density
+    }
+    private val menuRowSelectedPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x33FFFFFF
+        style = Paint.Style.FILL
+    }
+    private val menuRowBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+    }
+    private val menuTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.LEFT
         isFakeBoldText = true
     }
 
@@ -574,6 +603,11 @@ class HudEditorOverlayView(
         if (selectedItem != null && showDetails) {
             drawBottomContextBar(canvas, w, h)
         }
+
+        // 8. Role / Mode selection menu (popup list, drawn on top of everything)
+        if (openMenu != EditorMenu.NONE) {
+            drawSelectionMenu(canvas, w, h)
+        }
     }
 
     private fun drawTopBar(canvas: Canvas, w: Float) {
@@ -819,50 +853,22 @@ class HudEditorOverlayView(
         if (selectedButton != null) {
             val btn = selectedButton!!
 
-            val roleLabel = when (btn.role) {
-                ButtonRole.FIRE -> context.getString(R.string.overlay_role_fire_label)
-                ButtonRole.RELOAD -> context.getString(R.string.overlay_role_reload_label)
-                ButtonRole.ADS -> context.getString(R.string.overlay_role_ads_badge)
-                ButtonRole.TOGGLE_RECOIL -> context.getString(R.string.overlay_role_recoil_label)
-                ButtonRole.TOGGLE_STRAFE -> context.getString(R.string.overlay_role_strafe_label)
-                ButtonRole.SWITCH_PROFILE -> context.getString(R.string.overlay_role_profile_label)
-                ButtonRole.AIM_JOYSTICK -> context.getString(R.string.overlay_role_aim_label)
-                ButtonRole.NORMAL -> context.getString(R.string.btn_tag_normal)
-            }
+            val roleLabel = roleLabelFor(btn.role)
             buttons += spec(
                 context.getString(R.string.overlay_role_label, roleLabel),
                 96f * density, 12f * density,
-                when (btn.role) {
-                    ButtonRole.FIRE -> 0xFFFF0055.toInt()
-                    ButtonRole.RELOAD -> 0xFFFFAA00.toInt()
-                    ButtonRole.ADS -> 0xFF00FF66.toInt()
-                    ButtonRole.TOGGLE_RECOIL -> 0xFF00F0FF.toInt()
-                    ButtonRole.TOGGLE_STRAFE -> 0xFF00FF66.toInt()
-                    ButtonRole.SWITCH_PROFILE -> 0xFF9C27B0.toInt()
-                    ButtonRole.AIM_JOYSTICK -> 0xFFFFD600.toInt()
-                    ButtonRole.NORMAL -> 0xFF243040.toInt()
-                },
-                if (btn.role == ButtonRole.NORMAL) 0xFF00F0FF.toInt()
-                else if (btn.role == ButtonRole.SWITCH_PROFILE) Color.WHITE
-                else Color.BLACK,
+                roleColorFor(btn.role),
+                roleTextColorFor(btn.role),
                 null,
                 btnRoleRect
             )
 
-            val modeLabel = when (btn.mode) {
-                ButtonMode.HOLD -> context.getString(R.string.overlay_mode_hold_badge)
-                ButtonMode.TAP -> context.getString(R.string.overlay_mode_tap_badge)
-                ButtonMode.RAPID_FIRE -> context.getString(R.string.overlay_mode_rapid_badge)
-            }
+            val modeLabel = modeLabelFor(btn.mode)
             buttons += spec(
                 context.getString(R.string.overlay_mode_label, modeLabel),
                 92f * density, 12.5f * density,
-                when (btn.mode) {
-                    ButtonMode.HOLD -> 0xFF00F0FF.toInt()
-                    ButtonMode.TAP -> 0xFFFFAA00.toInt()
-                    ButtonMode.RAPID_FIRE -> 0xFFFF0055.toInt()
-                },
-                if (btn.mode == ButtonMode.RAPID_FIRE) Color.WHITE else Color.BLACK,
+                modeColorFor(btn.mode),
+                modeTextColorFor(btn.mode),
                 null,
                 btnModeRect
             )
@@ -980,6 +986,171 @@ class HudEditorOverlayView(
         }
     }
 
+    // --- Role / Mode labels & colours, shared by the bottom bar and the selection menus ---
+
+    private fun roleLabelFor(role: ButtonRole): String = when (role) {
+        ButtonRole.FIRE -> context.getString(R.string.overlay_role_fire_label)
+        ButtonRole.RELOAD -> context.getString(R.string.overlay_role_reload_label)
+        ButtonRole.ADS -> context.getString(R.string.overlay_role_ads_badge)
+        ButtonRole.TOGGLE_RECOIL -> context.getString(R.string.overlay_role_recoil_label)
+        ButtonRole.TOGGLE_STRAFE -> context.getString(R.string.overlay_role_strafe_label)
+        ButtonRole.SWITCH_PROFILE -> context.getString(R.string.overlay_role_profile_label)
+        ButtonRole.AIM_JOYSTICK -> context.getString(R.string.overlay_role_aim_label)
+        ButtonRole.NORMAL -> context.getString(R.string.btn_tag_normal)
+    }
+
+    private fun roleColorFor(role: ButtonRole): Int = when (role) {
+        ButtonRole.FIRE -> 0xFFFF0055.toInt()
+        ButtonRole.RELOAD -> 0xFFFFAA00.toInt()
+        ButtonRole.ADS -> 0xFF00FF66.toInt()
+        ButtonRole.TOGGLE_RECOIL -> 0xFF00F0FF.toInt()
+        ButtonRole.TOGGLE_STRAFE -> 0xFF00FF66.toInt()
+        ButtonRole.SWITCH_PROFILE -> 0xFF9C27B0.toInt()
+        ButtonRole.AIM_JOYSTICK -> 0xFFFFD600.toInt()
+        ButtonRole.NORMAL -> 0xFF243040.toInt()
+    }
+
+    private fun roleTextColorFor(role: ButtonRole): Int = when (role) {
+        ButtonRole.NORMAL -> 0xFF00F0FF.toInt()
+        ButtonRole.SWITCH_PROFILE -> Color.WHITE
+        else -> Color.BLACK
+    }
+
+    private fun modeLabelFor(mode: ButtonMode): String = when (mode) {
+        ButtonMode.HOLD -> context.getString(R.string.overlay_mode_hold_badge)
+        ButtonMode.TAP -> context.getString(R.string.overlay_mode_tap_badge)
+        ButtonMode.RAPID_FIRE -> context.getString(R.string.overlay_mode_rapid_badge)
+    }
+
+    private fun modeColorFor(mode: ButtonMode): Int = when (mode) {
+        ButtonMode.HOLD -> 0xFF00F0FF.toInt()
+        ButtonMode.TAP -> 0xFFFFAA00.toInt()
+        ButtonMode.RAPID_FIRE -> 0xFFFF0055.toInt()
+    }
+
+    private fun modeTextColorFor(mode: ButtonMode): Int =
+        if (mode == ButtonMode.RAPID_FIRE) Color.WHITE else Color.BLACK
+
+    /**
+     * Handles a tap while a Role/Mode menu is open. Returns true when the tap was consumed by the
+     * menu (a row was picked, or the menu was dismissed), so the tap never reaches the HUD below.
+     */
+    private fun handleMenuTouch(tx: Float, ty: Float): Boolean {
+        if (openMenu == EditorMenu.NONE) return false
+        val btn = selectedButton
+        if (btn == null) {
+            openMenu = EditorMenu.NONE
+            invalidate()
+            return true
+        }
+        if (menuPanelRect.contains(tx, ty)) {
+            val index = menuRowRects.indexOfFirst { it.contains(tx, ty) }
+            if (index >= 0) {
+                when (openMenu) {
+                    EditorMenu.ROLE -> {
+                        val role = ButtonRole.entries[index]
+                        btn.role = role
+                        // Aim is hold-only: a role that no longer allows the current mode falls
+                        // back to a valid one instead of keeping a lying badge.
+                        btn.mode = ButtonConfig.coerceModeForRole(role, btn.mode)
+                    }
+                    EditorMenu.MODE -> {
+                        val modes = ButtonConfig.modesForRole(btn.role)
+                        if (index < modes.size) btn.mode = modes[index]
+                    }
+                    EditorMenu.NONE -> {}
+                }
+                performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            }
+            openMenu = EditorMenu.NONE
+            invalidate()
+            return true
+        }
+        // Tap outside the panel: dismiss without acting on whatever sits underneath.
+        openMenu = EditorMenu.NONE
+        invalidate()
+        return true
+    }
+
+    /** Draws the Role/Mode popup list above the bottom bar, and records the row hit boxes. */
+    private fun drawSelectionMenu(canvas: Canvas, w: Float, h: Float) {
+        val btn = selectedButton
+        if (btn == null) {
+            openMenu = EditorMenu.NONE
+            return
+        }
+        val entries: List<Triple<String, Int, Int>> = when (openMenu) {
+            EditorMenu.ROLE -> ButtonRole.entries.map {
+                Triple(roleLabelFor(it), roleColorFor(it), roleTextColorFor(it))
+            }
+            EditorMenu.MODE -> ButtonConfig.modesForRole(btn.role).map {
+                Triple(modeLabelFor(it), modeColorFor(it), modeTextColorFor(it))
+            }
+            EditorMenu.NONE -> return
+        }
+        if (entries.isEmpty()) {
+            openMenu = EditorMenu.NONE
+            return
+        }
+
+        val sideMargin = 16f * density
+        val panelWidth = (300f * density).coerceAtMost(w - 2f * sideMargin)
+        val gap = 4f * density
+        val padding = 10f * density
+        val barTop = h - bottomBarHeight - 12f * density
+        val minTop = topBarHeight + 8f * density
+        val available = (barTop - 10f * density - minTop).coerceAtLeast(120f * density)
+
+        var rowHeight = 46f * density
+        var total = entries.size * rowHeight + (entries.size - 1) * gap + 2f * padding
+        if (total > available) {
+            val needed = (available - 2f * padding - (entries.size - 1) * gap) / entries.size
+            rowHeight = needed.coerceIn(30f * density, rowHeight)
+            total = entries.size * rowHeight + (entries.size - 1) * gap + 2f * padding
+        }
+
+        val anchorRect = if (openMenu == EditorMenu.ROLE) btnRoleRect else btnModeRect
+        val panelLeft = (anchorRect.centerX() - panelWidth / 2f)
+            .coerceIn(sideMargin, (w - panelWidth - sideMargin).coerceAtLeast(sideMargin))
+        val panelTop = (barTop - 10f * density - total).coerceAtLeast(minTop)
+        menuPanelRect.set(panelLeft, panelTop, panelLeft + panelWidth, panelTop + total)
+
+        canvas.drawRoundRect(menuPanelRect, 12f * density, 12f * density, menuPanelBgPaint)
+        canvas.drawRoundRect(menuPanelRect, 12f * density, 12f * density, menuPanelStrokePaint)
+
+        menuRowRects.clear()
+        val currentRole = btn.role
+        val currentModes = ButtonConfig.modesForRole(btn.role)
+        menuTextPaint.textSize = (rowHeight * 0.42f).coerceIn(12f * density, 17f * density)
+        var rowTop = panelTop + padding
+        entries.forEachIndexed { index, entry ->
+            val row = RectF(panelLeft + padding, rowTop, panelLeft + panelWidth - padding, rowTop + rowHeight)
+            menuRowRects.add(row)
+
+            val isCurrent = if (openMenu == EditorMenu.ROLE) {
+                ButtonRole.entries[index] == currentRole
+            } else {
+                currentModes.getOrNull(index) == btn.mode
+            }
+
+            menuRowBgPaint.color = entry.second
+            menuRowBgPaint.alpha = if (isCurrent) 255 else 190
+            canvas.drawRoundRect(row, 8f * density, 8f * density, menuRowBgPaint)
+            if (isCurrent) {
+                canvas.drawRoundRect(row, 8f * density, 8f * density, menuPanelStrokePaint)
+            }
+
+            menuTextPaint.color = entry.third
+            canvas.drawText(
+                entry.first,
+                row.left + 12f * density,
+                row.centerY() + menuTextPaint.textSize * 0.35f,
+                menuTextPaint
+            )
+            rowTop += rowHeight + gap
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         scaleDetector.onTouchEvent(event)
@@ -996,6 +1167,11 @@ class HudEditorOverlayView(
 
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // 0. An open Role/Mode menu takes the tap first (select a row, or dismiss).
+                if (handleMenuTouch(tx, ty)) {
+                    return true
+                }
+
                 // 1. Check Top Bar clicks
                 if (isTopBarHidden) {
                     if (btnShowRect.contains(tx, ty)) {
@@ -1152,29 +1328,17 @@ class HudEditorOverlayView(
                     if (selectedButton != null) {
                         val btn = selectedButton!!
 
-                        // Role Toggle
+                        // Role menu: pick a role from the popup list instead of cycling.
                         if (btnRoleRect.contains(tx, ty)) {
-                            btn.role = when (btn.role) {
-                                ButtonRole.NORMAL -> ButtonRole.FIRE
-                                ButtonRole.FIRE -> ButtonRole.RELOAD
-                                ButtonRole.RELOAD -> ButtonRole.ADS
-                                ButtonRole.ADS -> ButtonRole.TOGGLE_RECOIL
-                                ButtonRole.TOGGLE_RECOIL -> ButtonRole.TOGGLE_STRAFE
-                                ButtonRole.TOGGLE_STRAFE -> ButtonRole.SWITCH_PROFILE
-                                ButtonRole.SWITCH_PROFILE -> ButtonRole.AIM_JOYSTICK
-                                ButtonRole.AIM_JOYSTICK -> ButtonRole.NORMAL
-                            }
-                            // Aim is hold-only: a role that no longer allows the current mode
-                            // falls back to a valid one instead of keeping a lying badge.
-                            btn.mode = ButtonConfig.coerceModeForRole(btn.role, btn.mode)
+                            openMenu = if (openMenu == EditorMenu.ROLE) EditorMenu.NONE else EditorMenu.ROLE
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
                             return true
                         }
 
-                        // Mode Toggle
+                        // Mode menu: pick a mode (aim is hold-only, so its list has a single entry).
                         if (btnModeRect.contains(tx, ty)) {
-                            btn.mode = ButtonConfig.nextMode(btn.role, btn.mode)
+                            openMenu = if (openMenu == EditorMenu.MODE) EditorMenu.NONE else EditorMenu.MODE
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
                             return true

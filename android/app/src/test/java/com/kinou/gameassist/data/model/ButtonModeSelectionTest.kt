@@ -14,26 +14,22 @@ class ButtonModeSelectionTest {
     }
 
     @Test
-    fun cyclingTheModeOfAnAimButtonKeepsItOnHold() {
-        assertEquals(ButtonMode.HOLD, ButtonConfig.nextMode(ButtonRole.AIM_JOYSTICK, ButtonMode.HOLD))
-    }
-
-    @Test
-    fun aLegacyAimButtonSavedWithTapNormalisesToHoldWhenCycled() {
-        assertEquals(ButtonMode.HOLD, ButtonConfig.nextMode(ButtonRole.AIM_JOYSTICK, ButtonMode.TAP))
-        assertEquals(ButtonMode.HOLD, ButtonConfig.nextMode(ButtonRole.AIM_JOYSTICK, ButtonMode.RAPID_FIRE))
-    }
-
-    @Test
-    fun normalRolesStillCycleHoldTapRapidAndBack() {
-        assertEquals(ButtonMode.TAP, ButtonConfig.nextMode(ButtonRole.NORMAL, ButtonMode.HOLD))
-        assertEquals(ButtonMode.RAPID_FIRE, ButtonConfig.nextMode(ButtonRole.NORMAL, ButtonMode.TAP))
-        assertEquals(ButtonMode.HOLD, ButtonConfig.nextMode(ButtonRole.NORMAL, ButtonMode.RAPID_FIRE))
+    fun normalRolesOfferTheThreeModesInOrder() {
+        assertEquals(
+            listOf(ButtonMode.HOLD, ButtonMode.TAP, ButtonMode.RAPID_FIRE),
+            ButtonConfig.modesForRole(ButtonRole.NORMAL)
+        )
     }
 
     @Test
     fun becomingAnAimButtonForcesTheModeBackToHold() {
         assertEquals(ButtonMode.HOLD, ButtonConfig.coerceModeForRole(ButtonRole.AIM_JOYSTICK, ButtonMode.TAP))
+        assertEquals(ButtonMode.HOLD, ButtonConfig.coerceModeForRole(ButtonRole.AIM_JOYSTICK, ButtonMode.RAPID_FIRE))
+    }
+
+    @Test
+    fun otherRolesKeepTheirMode() {
         assertEquals(ButtonMode.RAPID_FIRE, ButtonConfig.coerceModeForRole(ButtonRole.FIRE, ButtonMode.RAPID_FIRE))
+        assertEquals(ButtonMode.TAP, ButtonConfig.coerceModeForRole(ButtonRole.NORMAL, ButtonMode.TAP))
     }
 }
