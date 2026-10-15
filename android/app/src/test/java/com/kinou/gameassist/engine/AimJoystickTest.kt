@@ -34,6 +34,9 @@ class AimJoystickTest {
             override fun touchUp(pointerId: Int, x: Float?, y: Float?) {
                 touches += Touch("up", pointerId, x ?: 0f, y ?: 0f)
             }
+            override fun cancelTouch(pointerId: Int, x: Float?, y: Float?) {
+                touches += Touch("cancel", pointerId, x ?: 0f, y ?: 0f)
+            }
         }
         processor = ButtonProcessor(injector, CoroutineScope(Dispatchers.Unconfined), hapticManager = null)
         processor.updateSettings(GameSettings(aimRadius = 0.2f, aimDeadzone = 0.1f))
@@ -173,24 +176,28 @@ class AimJoystickTest {
     }
 
     @Test
-    fun releaseAllLiftsAimFingers() {
+    fun releaseAllCancelsAimFingersWithoutFiring() {
         processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f)))
         processor.onButtonDown("BUTTON_R1")
+        processor.processAimJoystick(0f, 1f)
 
         processor.releaseAll()
 
-        assertEquals("up", touches.last().kind)
+        val last = touches.last()
+        assertEquals("cancel", last.kind)
+        // Cancelled at the last aimed position, not at the button center
+        assertEquals(0.7f * h + 0.2f * h, last.y, 0.01f)
         assertFalse(processor.isAimActive())
     }
 
     @Test
-    fun removingTheAimButtonLiftsItsFinger() {
+    fun removingTheAimButtonCancelsItsFinger() {
         processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f)))
         processor.onButtonDown("BUTTON_R1")
 
         processor.updateButtons(emptyList())
 
-        assertEquals("up", touches.last().kind)
+        assertEquals("cancel", touches.last().kind)
         assertFalse(processor.isAimActive())
     }
 
@@ -326,16 +333,16 @@ class AimJoystickTest {
     }
 
     @Test
-    fun roleChangedWhileHeldLiftsTheAimFingerAtItsLastAimedPosition() {
+    fun roleChangedWhileHeldCancelsTheAimFingerAtItsLastAimedPosition() {
         processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f)))
         processor.onButtonDown("BUTTON_R1")
         processor.processAimJoystick(0f, 1f)
 
         processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f, ButtonRole.NORMAL)))
 
-        val up = touches.last()
-        assertEquals("up", up.kind)
-        assertEquals(0.7f * h + 0.2f * h, up.y, 0.01f)
+        val cancel = touches.last()
+        assertEquals("cancel", cancel.kind)
+        assertEquals(0.7f * h + 0.2f * h, cancel.y, 0.01f)
         assertFalse(processor.isAimActive())
         // The physical release no longer finds a stale aim finger
         val before = touches.size
@@ -344,16 +351,16 @@ class AimJoystickTest {
     }
 
     @Test
-    fun removedButtonIsLiftedAtItsLastAimedPositionNotAtItsCenter() {
+    fun removedButtonIsCancelledAtItsLastAimedPositionNotAtItsCenter() {
         processor.updateButtons(listOf(aim("atk", "BUTTON_R1", 0.8f, 0.7f)))
         processor.onButtonDown("BUTTON_R1")
         processor.processAimJoystick(-1f, 0f)
 
         processor.updateButtons(emptyList())
 
-        val up = touches.last()
-        assertEquals("up", up.kind)
-        assertEquals(0.8f * w - 0.2f * h, up.x, 0.01f)
+        val cancel = touches.last()
+        assertEquals("cancel", cancel.kind)
+        assertEquals(0.8f * w - 0.2f * h, cancel.x, 0.01f)
     }
 
     @Test

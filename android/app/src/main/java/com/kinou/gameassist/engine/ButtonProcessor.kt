@@ -145,13 +145,14 @@ class ButtonProcessor(
             val snapshot = list.map { it.copy() }
             val newIds = snapshot.map { it.id }.toSet()
 
-            // Held aim fingers whose button was removed, or is no longer an aim button, are lifted
-            // first at their last aimed position (not at the button center).
+            // Held aim fingers whose button was removed, or is no longer an aim button, are
+            // cancelled first at their last aimed position (not at the button center). A cancel,
+            // not a release, so dropping the button never fires a shot.
             val newAimIds = snapshot.filter { it.role == ButtonRole.AIM_JOYSTICK }.map { it.id }.toSet()
             for (entry in aimStack.filter { it.btnId !in newAimIds }) {
                 aimStack.remove(entry)
                 if (activePointers.remove(entry.btnId) != null) freePointers.add(entry.pointerId)
-                injector.touchUp(entry.pointerId, entry.x, entry.y)
+                injector.cancelTouch(entry.pointerId, entry.x, entry.y)
             }
             aimActive = aimStack.isNotEmpty()
 
@@ -544,6 +545,15 @@ class ButtonProcessor(
             }
             activeRapidFireJobs.clear()
 
+            // Held aim fingers are cancelled at their last aimed position (never lifted): a forced
+            // cleanup must not fire a shot. Remove them first so the loop below does not touch them.
+            for (entry in aimStack) {
+                activePointers.remove(entry.btnId)
+                injector.cancelTouch(entry.pointerId, entry.x, entry.y)
+            }
+            aimStack.clear()
+            aimActive = false
+
             for ((btnId, pid) in activePointers) {
                 val btn = buttons.find { it.id == btnId }
                 val tx = (btn?.x ?: 0.5f) * injector.screenWidth
@@ -555,8 +565,6 @@ class ButtonProcessor(
             freePointers.addAll(POINTER_BUTTON_START until MAX_POINTERS)
             activeFireCount.set(0)
             activeAdsCount.set(0)
-            aimStack.clear()
-            aimActive = false
         }
     }
 

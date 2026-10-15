@@ -144,6 +144,60 @@ open class ShizukuTouchInjector {
         }
     }
 
+    /**
+     * Cancels a single active pointer with ACTION_CANCEL instead of ACTION_UP: the target receives
+     * a cancelled gesture rather than a completed one, so a held aim finger does not fire a shot
+     * when the engine forces a cleanup (reset, suspend, profile change, HUD editor).
+     */
+    open fun cancelTouch(pointerId: Int, x: Float? = null, y: Float? = null) {
+        lock.withLock {
+            val h = helper ?: return
+            if (!pointerPool.contains(pointerId)) return
+
+            val lastState = pointerPool.get(pointerId)
+            val finalX = (x ?: lastState?.x ?: 0f).coerceIn(0f, screenWidth.toFloat())
+            val finalY = (y ?: lastState?.y ?: 0f).coerceIn(0f, screenHeight.toFloat())
+            val eventTime = SystemClock.uptimeMillis()
+
+            val prop = MotionEvent.PointerProperties().apply {
+                id = pointerId
+                toolType = MotionEvent.TOOL_TYPE_FINGER
+            }
+            val coord = MotionEvent.PointerCoords().apply {
+                this.x = finalX
+                this.y = finalY
+                pressure = 0f
+            }
+
+            pointerPool.remove(pointerId)
+
+            val event = MotionEvent.obtain(
+                downTime,
+                eventTime,
+                MotionEvent.ACTION_CANCEL,
+                1,
+                arrayOf(prop),
+                arrayOf(coord),
+                0,
+                0,
+                1.0f,
+                1.0f,
+                0,
+                0,
+                InputDevice.SOURCE_TOUCHSCREEN,
+                0
+            )
+
+            try {
+                h.injectInputEvent(event, 0)
+            } catch (e: Throwable) {
+                handleInjectionError(e)
+            } finally {
+                event.recycle()
+            }
+        }
+    }
+
     open fun touchUp(pointerId: Int, x: Float? = null, y: Float? = null) {
         lock.withLock {
             val h = helper ?: return
