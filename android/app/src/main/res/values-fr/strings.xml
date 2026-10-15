@@ -363,6 +363,8 @@
     <string name="overlay_role_strafe_badge">⚡ STRAFE</string>
     <string name="overlay_role_profile_badge">🎮 PROFIL</string>
     <string name="overlay_mode_rapid_badge">RAPID ⚡</string>
+    <string name="overlay_mode_hold_badge">MAINT</string>
+    <string name="overlay_mode_tap_badge">APPUI</string>
     <string name="overlay_strafe_on">⚡ Strafe: ON</string>
     <string name="overlay_strafe_off">⚡ Strafe: OFF</string>
     <string name="overlay_recoil_on">🎯 Recul: ON</string>
