@@ -42,6 +42,16 @@ ANDROID_SERIAL=emulator-5554 ./gradlew connectedDebugAndroidTest
 A headless emulator is slower than a phone, so `waitFor` defaults to 10 s. The tests mark Android's
 "viewing full screen" popup as already seen, because on a fresh emulator it swallows the first touch.
 
+## Smoke tests
+
+`e2e/smoke` holds the most basic flows, one assertion each (walk, look, hold a button, tap a button, MOBA aim and
+fire, combo, cursor, the app launches). If one fails the app is broken for everyone, so they are the first thing
+to run:
+
+```
+./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.kinou.gameassist.e2e.smoke
+```
+
 ## Simulated games
 
 | Game | Mimics | Controls | Scenarios |
