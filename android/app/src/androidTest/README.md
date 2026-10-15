@@ -60,6 +60,9 @@ the diagnostic tabs, the bug report and community screens. They use the app's re
 create is named `E2E ...` and removed afterwards, and the language goes back to the system one. Your own profiles
 are not touched, but as always export them before running on a phone that has the debug build installed.
 
+`HudEditorE2eTest` opens the visual HUD editor and selects and drags a button with real touch events.
+`ImportFromFileE2eTest` replaces the system file picker with a canned answer (Espresso-Intents) and imports files.
+
 ## Simulated games
 
 | Game | Mimics | Controls | Scenarios |
