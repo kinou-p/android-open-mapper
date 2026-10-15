@@ -224,4 +224,28 @@ class ProfileRepositoryTest {
         assertEquals("Export Test Name", imported!!.name)
         assertEquals(originalProfile.buttons.size, imported.buttons.size)
     }
+
+    @Test
+    fun saveProfileReturnsFalseWhenTheWriteFails() {
+        val baseDir = tempFolder.newFolder("save_failure")
+        // Make <filesDir>/profiles a regular file so the profile file cannot be written.
+        File(baseDir, "profiles").writeText("not a directory")
+        val repo = ProfileRepository(TestContext(baseDir))
+
+        val saved = repo.saveProfile(GameProfile(id = "unwritable", name = "Save Failure"))
+
+        assertFalse(saved)
+    }
+
+    @Test
+    fun importProfileFromJsonReturnsNullWhenTheProfileCannotBeSaved() {
+        val baseDir = tempFolder.newFolder("import_save_failure")
+        File(baseDir, "profiles").writeText("not a directory")
+        val repo = ProfileRepository(TestContext(baseDir))
+
+        val json = repo.exportProfileToJson(GameProfile(id = "unwritable_import", name = "Import Failure"))
+        val imported = repo.importProfileFromJson(json)
+
+        assertNull(imported)
+    }
 }

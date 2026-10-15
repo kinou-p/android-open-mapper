@@ -16,7 +16,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
-class ProfileRepository private constructor(context: Context) {
+class ProfileRepository internal constructor(context: Context) {
     private val context: Context = context.applicationContext
     private val json: Json = Json {
         ignoreUnknownKeys = true
@@ -212,8 +212,10 @@ class ProfileRepository private constructor(context: Context) {
         }
     }
 
-    suspend fun saveProfileAsync(profile: GameProfile) = withContext(Dispatchers.IO) {
-        saveProfile(profile)
+    suspend fun saveProfileAsync(profile: GameProfile) {
+        withContext(Dispatchers.IO) {
+            saveProfile(profile)
+        }
     }
 
     suspend fun deleteProfileAsync(id: String): Boolean = withContext(Dispatchers.IO) {
@@ -228,16 +230,17 @@ class ProfileRepository private constructor(context: Context) {
         importProfileFromJson(json)
     }
 
-    fun saveProfile(profile: GameProfile) {
+    fun saveProfile(profile: GameProfile): Boolean {
         synchronized(fileLock) {
-            saveProfileInternal(profile)
+            return saveProfileInternal(profile)
         }
     }
 
-    private fun saveProfileInternal(profile: GameProfile) {
+    /** Writes the profile to disk. Returns false when the write failed (storage full, unwritable…). */
+    private fun saveProfileInternal(profile: GameProfile): Boolean {
         val sanitized = profile.deepCopy()
         validateAndSanitizeProfile(sanitized, localizedDefaultProfileName())
-        val file = getProfileFile(sanitized.id) ?: return
+        val file = getProfileFile(sanitized.id) ?: return false
         val atomicFile = AtomicFile(file)
         val jsonBytes = json.encodeToString(sanitized).toByteArray(Charsets.UTF_8)
         var fos: FileOutputStream? = null
@@ -252,11 +255,13 @@ class ProfileRepository private constructor(context: Context) {
             profileCache[sanitized.id] = sanitized.deepCopy()
             isCacheLoaded = true
             updateFlowLocked()
+            return true
         } catch (e: Exception) {
             if (fos != null) {
                 atomicFile.failWrite(fos)
             }
             e.printStackTrace()
+            return false
         }
     }
 
@@ -292,7 +297,11 @@ class ProfileRepository private constructor(context: Context) {
                 imported.id = "profile_${UUID.randomUUID().toString().take(8)}"
                 imported.name = localizedImportSuffix(imported.name)
             }
-            saveProfile(imported)
+            if (!saveProfile(imported)) {
+                // The profile could not be persisted: report the import as failed instead of
+                // selecting a profile that would vanish on restart.
+                return null
+            }
             imported
         } catch (e: Exception) {
             e.printStackTrace()
