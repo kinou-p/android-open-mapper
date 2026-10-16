@@ -25,16 +25,18 @@ object Profiles {
         id: String,
         buttons: List<ButtonConfig>,
         camera: Boolean = true,
-        settings: GameSettings = GameSettings()
+        settings: GameSettings = GameSettings(),
+        joystick: JoystickConfig = JoystickConfig(enabled = true, centerX = 0.15f, centerY = 0.70f, radius = 0.12f),
+        cameraConfig: CameraConfig = CameraConfig(
+            enabled = camera,
+            rectX1 = 0.55f, rectY1 = 0.10f, rectX2 = 0.80f, rectY2 = 0.45f
+        )
     ) = GameProfile(
         id = id,
         name = id,
         packageName = "com.kinou.gameassist.test",
-        joystick = JoystickConfig(enabled = true, centerX = 0.15f, centerY = 0.70f, radius = 0.12f),
-        camera = CameraConfig(
-            enabled = camera,
-            rectX1 = 0.55f, rectY1 = 0.10f, rectX2 = 0.80f, rectY2 = 0.45f
-        ),
+        joystick = joystick,
+        camera = cameraConfig,
         buttons = buttons.toMutableList(),
         settings = settings
     )

@@ -56,9 +56,9 @@ to run:
 
 | Game | Mimics | Controls | Scenarios |
 |---|---|---|---|
-| `FpsGameActivity` | Call of Duty Mobile | floating move stick, camera drag area, fire, jump | `FpsGameE2eTest` |
+| `FpsGameActivity` | Call of Duty Mobile | floating move stick, camera drag area, fire, jump | `FpsGameE2eTest`, `FpsFeaturesE2eTest`, `SafetyE2eTest` |
 | `MobaGameActivity` | Brawl Stars | floating move stick, attack and super aim joysticks, gadget | `MobaGameE2eTest` |
-| `TapGameActivity` | menus, puzzle games | 4x3 grid of tap targets | `ComboE2eTest`, `CursorE2eTest` |
+| `TapGameActivity` | menus, puzzle games | 4x3 grid of tap targets | `ComboE2eTest`, `CursorE2eTest`, `TapFeaturesE2eTest` |
 
 The simulated games live in `src/debug` (not in `androidTest`): an activity of the test APK would run in
 the test process, and the engine and the game must share the app process. They are only in debug builds.
