@@ -24,7 +24,9 @@ data class FpsState(
     val lookDx: Float,
     val lookDy: Float,
     val cameraTouches: Int,
-    val pointersDown: Int
+    val pointersDown: Int,
+    /** Where each fire touch landed, in px, in arrival order. */
+    val fireTaps: List<Pair<Float, Float>> = emptyList()
 )
 
 /**
@@ -47,6 +49,7 @@ class FpsGameView(context: Context) : GameView(context) {
     private var lookDx = 0f
     private var lookDy = 0f
     private var cameraTouches = 0
+    private val fireTaps = ArrayList<Pair<Float, Float>>()
 
     private fun inside(x: Float, y: Float, cx: Float, cy: Float, r: Float) =
         hypot(x - cx * width, y - cy * height) <= r * height
@@ -60,7 +63,7 @@ class FpsGameView(context: Context) : GameView(context) {
         }
         roles[id] = role
         when (role) {
-            Role.FIRE -> fireCount++
+            Role.FIRE -> { fireCount++; fireTaps += Pair(x, y) }
             Role.JUMP -> jumpCount++
             Role.MOVE -> { moveOriginX = x; moveOriginY = y }
             Role.CAMERA -> { cameraTouches++; lastX = x; lastY = y }
@@ -102,7 +105,7 @@ class FpsGameView(context: Context) : GameView(context) {
     fun snapshotState(): FpsState = synchronized(lock) {
         FpsState(
             moveX, moveY, roles.containsValue(Role.FIRE), fireCount, jumpCount,
-            lookDx, lookDy, cameraTouches, roles.size
+            lookDx, lookDy, cameraTouches, roles.size, fireTaps.toList()
         )
     }
 
