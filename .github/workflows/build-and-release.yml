@@ -104,16 +104,21 @@ jobs:
       - name: Rename APK for Distribution
         run: |
           mkdir -p dist
-          cp android/${{ env.APK_PATH }} dist/OpenMapper-latest.apk
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAG_NAME=${GITHUB_REF#refs/tags/}
+            cp android/${{ env.APK_PATH }} dist/OpenMapper-latest.apk
             cp dist/OpenMapper-latest.apk dist/OpenMapper-${TAG_NAME}.apk
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+            cp android/${{ env.APK_PATH }} dist/OpenMapper-PR-${PR_NUMBER}.apk
+          else
+            cp android/${{ env.APK_PATH }} dist/OpenMapper-latest.apk
           fi
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v6
         with:
-          name: OpenMapper-APK
+          name: ${{ github.event_name == 'pull_request' && format('OpenMapper-PR-{0}', github.event.pull_request.number) || 'OpenMapper-APK' }}
           path: dist/*.apk
           retention-days: 14
 
