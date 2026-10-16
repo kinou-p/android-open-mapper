@@ -1,6 +1,8 @@
 package com.kinou.gameassist.e2e
 
+import android.os.ParcelFileDescriptor
 import androidx.test.core.app.ActivityScenario
+import androidx.test.platform.app.InstrumentationRegistry
 import com.kinou.gameassist.e2e.games.GameView
 import com.kinou.gameassist.e2e.games.SimulatedGameActivity
 import com.kinou.gameassist.data.model.GameProfile
@@ -22,6 +24,11 @@ abstract class GameE2eTest<A : SimulatedGameActivity<V>, V : GameView>(
 
     @Before
     fun launchGame() {
+        // The first time an app goes full screen, Android shows a "viewing full screen" popup that
+        // swallows the next touch. It breaks the tests on a fresh emulator, so mark it as seen.
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("settings put secure immersive_mode_confirmations confirmed")
+            .let { ParcelFileDescriptor.AutoCloseInputStream(it).use { out -> out.readBytes() } }
         scenario = ActivityScenario.launch(activityClass)
         scenario.onActivity { game = it.gameView }
         waitFor("the game to be laid out and focused") { game.width > 0 && game.height > 0 && game.hasWindowFocus() }

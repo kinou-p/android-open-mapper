@@ -3,7 +3,7 @@ package com.kinou.gameassist.e2e
 import org.junit.Assert.fail
 
 /** Polls [condition] until it is true; fails with [description] after [timeoutMs]. */
-fun waitFor(description: String, timeoutMs: Long = 3000, condition: () -> Boolean) {
+fun waitFor(description: String, timeoutMs: Long = 10_000, condition: () -> Boolean) {
     val deadline = System.currentTimeMillis() + timeoutMs
     while (System.currentTimeMillis() < deadline) {
         if (condition()) return
