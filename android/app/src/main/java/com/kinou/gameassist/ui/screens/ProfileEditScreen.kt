@@ -77,6 +77,7 @@ fun ProfileEditScreen(
     var gyroEnabled by remember(profile.id) { mutableStateOf(profile.camera.gyroEnabled) }
     var gyroActivation by remember(profile.id) { mutableStateOf(profile.camera.gyroActivation) }
     var gyroSensitivity by remember(profile.id) { mutableFloatStateOf(profile.camera.gyroSensitivity) }
+    var gyroSmoothing by remember(profile.id) { mutableFloatStateOf(profile.camera.gyroSmoothing) }
     var deadzoneJoy by remember(profile.id) { mutableFloatStateOf(profile.joystick.deadzone) }
     var raaKeepAlive by remember(profile.id) { mutableStateOf(profile.joystick.raaKeepAlive) }
     var jiggleStrafe by remember(profile.id) { mutableStateOf(profile.joystick.jiggleStrafe) }
@@ -754,11 +755,23 @@ fun ProfileEditScreen(
                                     SliderSetting(
                                         label = stringResource(R.string.gyro_sensitivity_label),
                                         value = gyroSensitivity,
-                                        range = 0.2f..3.0f,
+                                        range = 0.2f..5.0f,
                                         displayText = "%.1fx".format(gyroSensitivity),
                                         onValueChange = {
                                             gyroSensitivity = it
                                             profile.camera.gyroSensitivity = it
+                                        },
+                                        onValueChangeFinished = { onSave() }
+                                    )
+
+                                    SliderSetting(
+                                        label = stringResource(R.string.gyro_smoothing_label),
+                                        value = gyroSmoothing,
+                                        range = 0f..0.9f,
+                                        displayText = "${(gyroSmoothing * 100).toInt()}%",
+                                        onValueChange = {
+                                            gyroSmoothing = it
+                                            profile.camera.gyroSmoothing = it
                                         },
                                         onValueChangeFinished = { onSave() }
                                     )

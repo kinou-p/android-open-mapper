@@ -251,6 +251,7 @@
     <string name="gyro_activation_lt">LT לחוץ</string>
     <string name="gyro_activation_always">תמיד פעיל</string>
     <string name="gyro_sensitivity_label">רגישות ג׳ירו</string>
+    <string name="gyro_smoothing_label">החלקת ג׳ירו</string>
     <string name="hot_switch_hint">💡 קיצור דרך להחלפה מהירה: החזק את SELECT + חץ למעלה/למטה ב-D-Pad כדי להחליף פרופילים תוך כדי משחק!</string>
     <string name="tab_polling_rate">⚡ קצב דגימה והשהיה</string>
     <string name="polling_test_title">⚡ ניתוח קצב דגימה ושיהוי</string>

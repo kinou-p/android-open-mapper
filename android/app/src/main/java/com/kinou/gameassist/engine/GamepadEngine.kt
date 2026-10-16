@@ -95,6 +95,8 @@ class GamepadEngine(
     val movementProcessor = MovementProcessor(injector)
     val cameraProcessor = CameraProcessor(injector)
     private val gyroSource = GyroSource(context)
+    private var gyroSmoothX = 0f
+    private var gyroSmoothY = 0f
     val buttonProcessor = ButtonProcessor(injector, scope, hapticManager)
     val linuxReader = LinuxInputReader(this, scope)
 
@@ -506,8 +508,15 @@ class GamepadEngine(
                                     val held = camCfg.gyroActivation == GyroActivation.ALWAYS || ltPressed || "BUTTON_L2" in pressedRawButtons
                                     if (held) {
                                         val sign = { invert: Boolean -> if (invert) -1f else 1f }
-                                        gyroDx = -GyroSource.radiansToPixels(yaw, injector.screenWidth.toFloat(), camCfg.gyroSensitivity) * sign(camCfg.invertX)
-                                        gyroDy = -GyroSource.radiansToPixels(pitch, injector.screenWidth.toFloat(), camCfg.gyroSensitivity) * sign(camCfg.invertY)
+                                        val rawDx = -GyroSource.radiansToPixels(yaw, injector.screenWidth.toFloat(), camCfg.gyroSensitivity) * sign(camCfg.invertX)
+                                        val rawDy = -GyroSource.radiansToPixels(pitch, injector.screenWidth.toFloat(), camCfg.gyroSensitivity) * sign(camCfg.invertY)
+                                        gyroSmoothX = GyroSource.smooth(gyroSmoothX, rawDx, camCfg.gyroSmoothing)
+                                        gyroSmoothY = GyroSource.smooth(gyroSmoothY, rawDy, camCfg.gyroSmoothing)
+                                        gyroDx = gyroSmoothX
+                                        gyroDy = gyroSmoothY
+                                    } else {
+                                        gyroSmoothX = 0f
+                                        gyroSmoothY = 0f
                                     }
                                 } else if (gyroSource.running) {
                                     gyroSource.stop()

@@ -257,6 +257,7 @@
     <string name="gyro_activation_lt">LT segurado</string>
     <string name="gyro_activation_always">Sempre ativo</string>
     <string name="gyro_sensitivity_label">Sensibilidade do giroscópio</string>
+    <string name="gyro_smoothing_label">Suavização do giroscópio</string>
     <string name="hot_switch_hint">💡 Atalho Hot-Switch : Segure SELECT + D-Pad Cima/Baixo para trocar de perfil durante o jogo!</string>
     <string name="tab_polling_rate">⚡ Polling e Latência</string>
     <string name="polling_test_title">⚡ Analisador de Polling Rate e Latência</string>

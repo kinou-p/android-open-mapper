@@ -96,5 +96,8 @@ data class CameraConfig(
     var gyroActivation: GyroActivation = GyroActivation.LT,
 
     @SerialName("gyro_sensitivity")
-    var gyroSensitivity: Float = 1.0f
+    var gyroSensitivity: Float = 1.0f,
+
+    @SerialName("gyro_smoothing")
+    var gyroSmoothing: Float = 0.3f
 )

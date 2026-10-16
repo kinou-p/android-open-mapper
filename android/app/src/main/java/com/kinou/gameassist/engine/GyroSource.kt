@@ -30,6 +30,10 @@ class GyroSource(private val context: Context) : SensorEventListener {
         fun radiansToPixels(rad: Float, screenSize: Float, sensitivity: Float): Float =
             rad * screenSize * SCREEN_PER_RAD * sensitivity
 
+        /** Low-pass filter: 0 keeps the raw value, closer to 1 follows the input more slowly. */
+        fun smooth(previous: Float, input: Float, smoothing: Float): Float =
+            previous + (input - previous) * (1f - smoothing.coerceIn(0f, 0.95f))
+
         fun denoise(rate: Float): Float = if (abs(rate) < NOISE_RAD_PER_SEC) 0f else rate
     }
 
@@ -89,7 +93,7 @@ class GyroSource(private val context: Context) : SensorEventListener {
                 val dt = (event.timestamp - lastTimestampNs) / 1_000_000_000f
                 if (dt in 0f..0.2f) {
                     pitchRad += denoise(event.values[0]) * dt
-                    yawRad += denoise(event.values[2]) * dt
+                    yawRad += denoise(event.values[1]) * dt
                 }
             }
             lastTimestampNs = event.timestamp

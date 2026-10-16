@@ -18,6 +18,13 @@ class GyroSourceTest {
     }
 
     @Test
+    fun smoothingBlendsTowardsTheInput() {
+        assertEquals(10f, GyroSource.smooth(0f, 10f, 0f), 0.001f)
+        assertEquals(5f, GyroSource.smooth(0f, 10f, 0.5f), 0.001f)
+        assertEquals(0.5f, GyroSource.smooth(0f, 10f, 0.95f), 0.001f)
+    }
+
+    @Test
     fun pixelsScaleWithRotationScreenAndSensitivity() {
         val base = GyroSource.radiansToPixels(1f, 2000f, 1f)
         assertEquals(2000f * GyroSource.SCREEN_PER_RAD, base, 0.001f)
