@@ -251,6 +251,13 @@
     <string name="invert_y_desc">Invierte los movimientos Arriba / Abajo del stick de cámara.</string>
     <string name="invert_x_title">↔️ Invertir Eje Horizontal (X)</string>
     <string name="invert_x_desc">Invierte los movimientos Izquierda / Derecha del stick de cámara.</string>
+    <string name="gyro_title">🎮 Apuntar con giroscopio del mando</string>
+    <string name="gyro_desc">Apunta inclinando el mando (requiere un mando con giroscopio, Android 12+).</string>
+    <string name="gyro_activation_label">Activar con</string>
+    <string name="gyro_activation_lt">LT mantenido</string>
+    <string name="gyro_activation_always">Siempre activo</string>
+    <string name="gyro_sensitivity_label">Sensibilidad del giroscopio</string>
+    <string name="gyro_smoothing_label">Suavizado del giroscopio</string>
     <string name="hot_switch_hint">💡 Atajo Hot-Switch : ¡Mantén SELECT + D-Pad Arriba/Abajo para cambiar de perfil en partida!</string>
     <string name="tab_polling_rate">⚡ Polling y Latencia</string>
     <string name="polling_test_title">⚡ Analizador de Polling Rate y Latencia</string>

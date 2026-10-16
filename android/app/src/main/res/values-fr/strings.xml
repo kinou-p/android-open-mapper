@@ -262,6 +262,13 @@
     <string name="invert_y_desc">Inverse les mouvements Haut / Bas du stick caméra.</string>
     <string name="invert_x_title">↔️ Inverser l\'Axe Horizontal (X)</string>
     <string name="invert_x_desc">Inverse les mouvements Gauche / Droite du stick caméra.</string>
+    <string name="gyro_title">🎮 Visée au gyroscope de la manette</string>
+    <string name="gyro_desc">Visez en inclinant la manette (manette avec gyroscope requise, Android 12+).</string>
+    <string name="gyro_activation_label">Activer avec</string>
+    <string name="gyro_activation_lt">LT maintenu</string>
+    <string name="gyro_activation_always">Toujours actif</string>
+    <string name="gyro_sensitivity_label">Sensibilité du gyroscope</string>
+    <string name="gyro_smoothing_label">Lissage du gyroscope</string>
     <string name="hot_switch_hint">💡 Raccourci Hot-Switch : Maintenez SELECT + D-Pad Haut/Bas pour changer de profil en plein jeu !</string>
     <string name="tab_polling_rate">⚡ Polling &amp; Latence</string>
     <string name="polling_test_title">⚡ Analyseur de Polling Rate &amp; Latence</string>

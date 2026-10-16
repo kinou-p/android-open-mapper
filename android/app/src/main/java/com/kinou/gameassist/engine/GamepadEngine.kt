@@ -7,6 +7,7 @@ import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import com.kinou.gameassist.data.model.GamepadDetector
+import com.kinou.gameassist.data.model.GyroActivation
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import com.kinou.gameassist.util.InputDeviceCallbacks
@@ -93,6 +94,9 @@ class GamepadEngine(
 
     val movementProcessor = MovementProcessor(injector)
     val cameraProcessor = CameraProcessor(injector)
+    private val gyroSource = GyroSource(context)
+    private var gyroSmoothX = 0f
+    private var gyroSmoothY = 0f
     val buttonProcessor = ButtonProcessor(injector, scope, hapticManager)
     val linuxReader = LinuxInputReader(this, scope)
 
@@ -496,7 +500,28 @@ class GamepadEngine(
                                 val camCfg = cameraProcessor.config
                                 val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
                                 movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
-                                cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring)
+                                var gyroDx = 0f
+                                var gyroDy = 0f
+                                if (camCfg.gyroEnabled) {
+                                    gyroSource.ensureStarted()
+                                    val (yaw, pitch) = gyroSource.consumeDelta()
+                                    val held = camCfg.gyroActivation == GyroActivation.ALWAYS || ltPressed || "BUTTON_L2" in pressedRawButtons
+                                    if (held) {
+                                        val sign = { invert: Boolean -> if (invert) -1f else 1f }
+                                        val rawDx = -GyroSource.radiansToPixels(yaw, injector.screenWidth.toFloat(), camCfg.gyroSensitivity) * sign(camCfg.invertX)
+                                        val rawDy = -GyroSource.radiansToPixels(pitch, injector.screenWidth.toFloat(), camCfg.gyroSensitivity) * sign(camCfg.invertY)
+                                        gyroSmoothX = GyroSource.smooth(gyroSmoothX, rawDx, camCfg.gyroSmoothing)
+                                        gyroSmoothY = GyroSource.smooth(gyroSmoothY, rawDy, camCfg.gyroSmoothing)
+                                        gyroDx = gyroSmoothX
+                                        gyroDy = gyroSmoothY
+                                    } else {
+                                        gyroSmoothX = 0f
+                                        gyroSmoothY = 0f
+                                    }
+                                } else if (gyroSource.running) {
+                                    gyroSource.stop()
+                                }
+                                cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring, gyroDx = gyroDx, gyroDy = gyroDy)
                             }
                         }
 
@@ -570,6 +595,7 @@ class GamepadEngine(
                 inputManager?.unregisterInputDeviceListener(deviceHotplugListener)
             } catch (_: Exception) {}
             linuxReader.stop()
+            gyroSource.stop()
             resetAllInputs()
             hapticManager?.release()
 
