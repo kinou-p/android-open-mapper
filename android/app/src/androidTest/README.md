@@ -52,6 +52,14 @@ to run:
 ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=com.kinou.gameassist.e2e.smoke
 ```
 
+## App UI tests
+
+`e2e/app` drives the real app screens with Compose test rules: navigation, the Profile Manager (create, import,
+duplicate, select, delete), the profile editor tabs and rename, the language picker (including Hebrew right-to-left),
+the diagnostic tabs, the bug report and community screens. They use the app's real profile store: every profile they
+create is named `E2E ...` and removed afterwards, and the language goes back to the system one. Your own profiles
+are not touched, but as always export them before running on a phone that has the debug build installed.
+
 ## Simulated games
 
 | Game | Mimics | Controls | Scenarios |
