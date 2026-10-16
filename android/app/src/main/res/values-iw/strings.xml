@@ -331,6 +331,8 @@
     <string name="overlay_delete_btn">🗑️ מחק</string>
     <string name="overlay_role_label">תפקיד: %1$s</string>
     <string name="overlay_mode_label">מצב: %1$s</string>
+    <string name="overlay_jitter_label">רעידה: %1$s</string>
+    <string name="overlay_jitter_off">כבוי</string>
     <string name="profile_game_placeholder">המשחק שלי</string>
     <string name="overlay_camera_selected">🎥 מצלמה (נבחר - גרור / פינות)</string>
     <string name="overlay_role_fire_badge">🔥 ירי</string>

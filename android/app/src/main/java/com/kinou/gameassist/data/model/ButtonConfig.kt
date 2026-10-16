@@ -62,9 +62,30 @@ data class ButtonConfig(
     var role: ButtonRole = ButtonRole.NORMAL,
 
     @SerialName("rapid_fire_rate_hz")
-    var rapidFireRateHz: Int = 14
+    var rapidFireRateHz: Int = 14,
+
+    // RAPID_FIRE only: each tap lands at a random point inside this fraction (0 = off) of the
+    // button circle instead of always on the exact centre. Off by default, game-specific.
+    @SerialName("rapid_fire_jitter")
+    var rapidFireJitter: Float = 0f
 ) {
     companion object {
+        val JITTER_STEPS: List<Float> = listOf(0f, 0.25f, 0.5f, 0.75f, 1f)
+
+        /** Next jitter magnitude when the editor's Jitter control is tapped (wraps back to off). */
+        fun nextJitter(current: Float): Float =
+            JITTER_STEPS.firstOrNull { it > current + 1e-4f } ?: JITTER_STEPS.first()
+
+        /**
+         * Random offset in px, uniform inside a disc of [jitter] * [radiusPx]. [u1] and [u2] are
+         * uniform samples in [0, 1).
+         */
+        fun jitterOffset(radiusPx: Float, jitter: Float, u1: Float, u2: Float): Pair<Float, Float> {
+            val r = radiusPx * jitter.coerceIn(0f, 1f) * kotlin.math.sqrt(u1)
+            val a = (2.0 * Math.PI * u2).toFloat()
+            return Pair(r * kotlin.math.cos(a), r * kotlin.math.sin(a))
+        }
+
         private val STANDARD_MODES: List<ButtonMode> =
             listOf(ButtonMode.HOLD, ButtonMode.TAP, ButtonMode.RAPID_FIRE)
 

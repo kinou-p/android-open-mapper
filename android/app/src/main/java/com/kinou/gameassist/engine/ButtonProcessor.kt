@@ -323,8 +323,14 @@ class ButtonProcessor(
 
                     try {
                         while (isActive) {
-                            val driftX = (Random.nextFloat() * 2f - 1f) * 2.5f
-                            val driftY = (Random.nextFloat() * 2f - 1f) * 2.5f
+                            val (driftX, driftY) = if (btn.rapidFireJitter > 0f) {
+                                ButtonConfig.jitterOffset(
+                                    btn.radius * screenH, btn.rapidFireJitter,
+                                    Random.nextFloat(), Random.nextFloat()
+                                )
+                            } else {
+                                Pair((Random.nextFloat() * 2f - 1f) * 2.5f, (Random.nextFloat() * 2f - 1f) * 2.5f)
+                            }
                             val tx = btn.x * screenW + driftX
                             val ty = btn.y * screenH + driftY
 

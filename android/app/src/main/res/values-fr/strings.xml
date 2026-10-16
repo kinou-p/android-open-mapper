@@ -355,6 +355,8 @@
     <string name="overlay_delete_btn">🗑️ Suppr</string>
     <string name="overlay_role_label">Rôle: %1$s</string>
     <string name="overlay_mode_label">Mode: %1$s</string>
+    <string name="overlay_jitter_label">Variation : %1$s</string>
+    <string name="overlay_jitter_off">NON</string>
     <string name="profile_game_placeholder">Mon Jeu</string>
 
     <!-- i18n overlays / service / data -->
