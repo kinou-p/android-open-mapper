@@ -12,6 +12,12 @@ enum class ResponseCurve {
 }
 
 @Serializable
+enum class GyroActivation {
+    @SerialName("lt") LT,
+    @SerialName("always") ALWAYS
+}
+
+@Serializable
 data class CameraConfig(
     @SerialName("enabled")
     var enabled: Boolean = true,
@@ -80,5 +86,15 @@ data class CameraConfig(
     var antiRecoilAdsOnly: Boolean = false,
 
     @SerialName("max_step_pixels")
-    var maxStepPixels: Float = 55.0f
+    var maxStepPixels: Float = 55.0f,
+
+    // Aim with the gamepad's own gyroscope (DualSense, Switch Pro...), Android 12+.
+    @SerialName("gyro_enabled")
+    var gyroEnabled: Boolean = false,
+
+    @SerialName("gyro_activation")
+    var gyroActivation: GyroActivation = GyroActivation.LT,
+
+    @SerialName("gyro_sensitivity")
+    var gyroSensitivity: Float = 1.0f
 )
