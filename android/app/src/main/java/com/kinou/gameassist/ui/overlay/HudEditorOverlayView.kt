@@ -22,6 +22,7 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.min
 
 @SuppressLint("ViewConstructor")
@@ -369,6 +370,7 @@ class HudEditorOverlayView(
     private val btnSizeDecRect = RectF()
     private val btnRoleRect = RectF()
     private val btnModeRect = RectF()
+    private val btnJitterRect = RectF()
     private val btnCamRecoilSpdRect = RectF()
 
     /** Hauteur courante de la barre du bas : elle se replie aussi sur plusieurs rangées. */
@@ -867,6 +869,22 @@ class HudEditorOverlayView(
                 btnModeRect
             )
 
+            if (btn.mode == ButtonMode.RAPID_FIRE) {
+                val on = btn.rapidFireJitter > 0f
+                val jitterLabel = if (on) "${(btn.rapidFireJitter * 100).roundToInt()}%"
+                else context.getString(R.string.overlay_jitter_off)
+                buttons += spec(
+                    context.getString(R.string.overlay_jitter_label, jitterLabel),
+                    96f * density, 12.5f * density,
+                    if (on) 0xFF00FF66.toInt() else 0xFF243040.toInt(),
+                    if (on) Color.BLACK else Color.WHITE,
+                    if (on) 0xFF00FF66.toInt() else 0xFF00F0FF.toInt(),
+                    btnJitterRect
+                )
+            } else {
+                btnJitterRect.setEmpty()
+            }
+
             buttons += spec(
                 if (isLearning) context.getString(R.string.overlay_assign_learning) else context.getString(R.string.overlay_assign),
                 96f * density, 13.5f * density,
@@ -879,6 +897,7 @@ class HudEditorOverlayView(
         } else if (isJoystickSelected) {
             btnRoleRect.setEmpty()
             btnModeRect.setEmpty()
+            btnJitterRect.setEmpty()
             btnAssignRect.setEmpty()
             btnCamRecoilRect.setEmpty()
             btnCamRecoilIncRect.setEmpty()
@@ -900,6 +919,7 @@ class HudEditorOverlayView(
         } else if (isCameraSelected) {
             btnRoleRect.setEmpty()
             btnModeRect.setEmpty()
+            btnJitterRect.setEmpty()
             btnAssignRect.setEmpty()
             btnJoyStrafeRect.setEmpty()
 
@@ -933,6 +953,7 @@ class HudEditorOverlayView(
         } else {
             btnRoleRect.setEmpty()
             btnModeRect.setEmpty()
+            btnJitterRect.setEmpty()
             btnAssignRect.setEmpty()
             btnJoyStrafeRect.setEmpty()
             btnCamRecoilRect.setEmpty()
@@ -1175,6 +1196,14 @@ class HudEditorOverlayView(
                         // Mode Toggle
                         if (btnModeRect.contains(tx, ty)) {
                             btn.mode = ButtonConfig.nextMode(btn.role, btn.mode)
+                            performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            invalidate()
+                            return true
+                        }
+
+                        // Rapid-fire tap jitter
+                        if (btn.mode == ButtonMode.RAPID_FIRE && btnJitterRect.contains(tx, ty)) {
+                            btn.rapidFireJitter = ButtonConfig.nextJitter(btn.rapidFireJitter)
                             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             invalidate()
                             return true
