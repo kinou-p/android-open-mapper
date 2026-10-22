@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -96,24 +97,30 @@ fun ProfileEditorScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Tune, contentDescription = null, tint = NeonCyan)
-                        Text(stringResource(R.string.profiles_title), fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.profiles_title), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 },
                 actions = {
+                    // Narrow (portrait) screens: icon-only actions so the title is not squeezed.
+                    val compact = LocalConfiguration.current.screenWidthDp < 480
                     if (onCreateProfile != null) {
                         TextButton(onClick = { showCreateDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = NeonGreen)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(stringResource(R.string.btn_new_profile), color = NeonGreen, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.btn_new_profile), tint = NeonGreen)
+                            if (!compact) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(stringResource(R.string.btn_new_profile), color = NeonGreen, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                     TextButton(onClick = {
                         importJsonText = ""
                         showImportDialog = true
                     }) {
-                        Icon(Icons.Default.Download, contentDescription = null, tint = NeonCyan)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(stringResource(R.string.btn_import), color = NeonCyan, fontWeight = FontWeight.Bold)
+                        Icon(Icons.Default.Download, contentDescription = stringResource(R.string.btn_import), tint = NeonCyan)
+                        if (!compact) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(stringResource(R.string.btn_import), color = NeonCyan, fontWeight = FontWeight.Bold)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

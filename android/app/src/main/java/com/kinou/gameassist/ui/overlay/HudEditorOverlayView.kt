@@ -1115,19 +1115,29 @@ class HudEditorOverlayView(
         }
 
         val sideMargin = 16f * density
-        val panelWidth = (300f * density).coerceAtMost(w - 2f * sideMargin)
         val gap = 4f * density
         val padding = 10f * density
         val barTop = h - bottomBarHeight - 12f * density
         val minTop = topBarHeight + 8f * density
         val available = (barTop - 10f * density - minTop).coerceAtLeast(120f * density)
 
+        // Short (landscape) screens cannot fit every row in one column: split into two columns
+        // instead of letting the last rows (e.g. Aim) run under the bottom bar.
+        val minRow = 36f * density
+        fun heightFor(rows: Int, rowH: Float) = rows * rowH + (rows - 1) * gap + 2f * padding
+        val columns = if (heightFor(entries.size, minRow) > available) 2 else 1
+        val rowsPerColumn = (entries.size + columns - 1) / columns
+        val columnWidth = 300f * density
+        val panelWidth = (columnWidth * columns + (columns - 1) * gap)
+            .coerceAtMost(w - 2f * sideMargin)
+        val rowWidth = (panelWidth - 2f * padding - (columns - 1) * gap) / columns
+
         var rowHeight = 46f * density
-        var total = entries.size * rowHeight + (entries.size - 1) * gap + 2f * padding
+        var total = heightFor(rowsPerColumn, rowHeight)
         if (total > available) {
-            val needed = (available - 2f * padding - (entries.size - 1) * gap) / entries.size
+            val needed = (available - 2f * padding - (rowsPerColumn - 1) * gap) / rowsPerColumn
             rowHeight = needed.coerceIn(30f * density, rowHeight)
-            total = entries.size * rowHeight + (entries.size - 1) * gap + 2f * padding
+            total = heightFor(rowsPerColumn, rowHeight)
         }
 
         val anchorRect = if (openMenu == EditorMenu.ROLE) btnRoleRect else btnModeRect
@@ -1143,9 +1153,12 @@ class HudEditorOverlayView(
         val currentRole = btn.role
         val currentModes = ButtonConfig.modesForRole(btn.role)
         menuTextPaint.textSize = (rowHeight * 0.42f).coerceIn(12f * density, 17f * density)
-        var rowTop = panelTop + padding
         entries.forEachIndexed { index, entry ->
-            val row = RectF(panelLeft + padding, rowTop, panelLeft + panelWidth - padding, rowTop + rowHeight)
+            val column = index / rowsPerColumn
+            val rowInColumn = index % rowsPerColumn
+            val rowLeft = panelLeft + padding + column * (rowWidth + gap)
+            val rowTop = panelTop + padding + rowInColumn * (rowHeight + gap)
+            val row = RectF(rowLeft, rowTop, rowLeft + rowWidth, rowTop + rowHeight)
             menuRowRects.add(row)
 
             val isCurrent = if (openMenu == EditorMenu.ROLE) {
@@ -1168,7 +1181,6 @@ class HudEditorOverlayView(
                 row.centerY() + menuTextPaint.textSize * 0.35f,
                 menuTextPaint
             )
-            rowTop += rowHeight + gap
         }
     }
 
