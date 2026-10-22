@@ -68,7 +68,7 @@ class HudEditorOverlayView(
     private enum class EditorMenu { NONE, ROLE, MODE }
     private var openMenu = EditorMenu.NONE
     private val menuPanelRect = RectF()
-    private val menuRowRects = ArrayList<RectF>(8)
+    internal val menuRowRects = ArrayList<RectF>(8) // internal: read by the e2e tests
 
     // Opacity & Details Bar
     private val opacitySteps = floatArrayOf(0.40f, 0.65f, 0.15f, 0.0f)
@@ -397,7 +397,7 @@ class HudEditorOverlayView(
     private val btnNudgeLeftRect = RectF()
     private val btnSizeIncRect = RectF()
     private val btnSizeDecRect = RectF()
-    private val btnRoleRect = RectF()
+    internal val btnRoleRect = RectF() // internal: read by the e2e tests
     private val btnModeRect = RectF()
     private val btnJitterRect = RectF()
     private val btnCamRecoilSpdRect = RectF()

@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
@@ -91,18 +92,18 @@ fun ProfileEditorScreen(
         importNext(0)
     }
 
+    val compact = LocalConfiguration.current.screenWidthDp < 480
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Tune, contentDescription = null, tint = NeonCyan)
-                        Text(stringResource(R.string.profiles_title), fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(stringResource(R.string.profiles_title), fontWeight = FontWeight.Bold, fontSize = if (compact) 18.sp else TextUnit.Unspecified, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                 },
                 actions = {
                     // Narrow (portrait) screens: icon-only actions so the title is not squeezed.
-                    val compact = LocalConfiguration.current.screenWidthDp < 480
                     if (onCreateProfile != null) {
                         TextButton(onClick = { showCreateDialog = true }) {
                             Icon(Icons.Default.Add, contentDescription = stringResource(R.string.btn_new_profile), tint = NeonGreen)
