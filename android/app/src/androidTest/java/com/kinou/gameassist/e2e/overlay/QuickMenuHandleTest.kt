@@ -25,8 +25,10 @@ class QuickMenuHandleTest {
     private val context = instrumentation.targetContext
     private val prefs = context.getSharedPreferences(EdgeHandleOverlayView.PREFS, Context.MODE_PRIVATE)
     private val density = context.resources.displayMetrics.density
-    private val screenW = context.resources.displayMetrics.widthPixels
-    private val screenH = context.resources.displayMetrics.heightPixels
+    // Full screen, as the overlay windows are laid out (status and navigation bars included)
+    private val screenBounds = context.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds
+    private val screenW = screenBounds.width()
+    private val screenH = screenBounds.height()
 
     @Before
     @After
@@ -158,5 +160,79 @@ class QuickMenuHandleTest {
         val bounds = bubbleView.bubbleIcon!!.bounds
         assertTrue("icon fills most of the bubble", bounds.width() > size * 0.7f)
         assertTrue("center pixel is painted", android.graphics.Color.alpha(bmp.getPixel(size / 2, size / 2)) > 0)
+    }
+
+    private fun shell(cmd: String) {
+        instrumentation.uiAutomation.executeShellCommand(cmd)
+            .let { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).use { out -> out.readBytes() } }
+    }
+
+    @Test
+    fun aRotationKeepsTheBubbleAtTheSameRelativePlaceOnScreen() {
+        val (view, params) = handle(bubble = true)
+        val size = view.restingWidth
+        // drag it to the bottom-right corner of the current (portrait) screen
+        touch(view, listOf(20f to 20f, 20f + screenW to 20f + screenH, 20f + screenW to 20f + screenH))
+        assertEquals(screenW - size, params.x)
+        assertEquals(screenH - size, params.y)
+
+        instrumentation.runOnMainSync { view.onScreenResized(screenH, screenW) } // landscape
+
+        assertEquals("still in the right corner", screenH - size, params.x)
+        assertEquals("still at the bottom", screenW - size, params.y)
+
+        instrumentation.runOnMainSync { view.onScreenResized(screenW, screenH) } // back to portrait
+
+        assertEquals(screenW - size, params.x)
+        assertEquals(screenH - size, params.y)
+        assertEquals("remembered for the next start", params.x, prefs.getInt("bubble_x", -1))
+    }
+
+    @Test
+    fun theEdgeTabStaysOnScreenAfterARotation() {
+        val (view, params) = handle(bubble = false)
+        params.y = screenH - view.restingHeight
+
+        instrumentation.runOnMainSync { view.onScreenResized(screenH, screenW) }
+
+        assertTrue("edge tab inside the landscape screen", params.y + view.restingHeight <= screenW)
+    }
+
+    @Test
+    fun theRealScreenRotationMovesTheShownBubbleBackOnScreen() {
+        shell("appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow")
+        shell("settings put system accelerometer_rotation 0")
+        shell("settings put system user_rotation 0")
+        val (view, params) = handle(bubble = true)
+        val wm = context.getSystemService(WindowManager::class.java)
+        val scenarios = mutableListOf<androidx.test.core.app.ActivityScenario<*>>()
+        try {
+            instrumentation.runOnMainSync { wm.addView(view, params) }
+            touch(view, listOf(20f to 20f, 20f + screenW to 20f + screenH, 20f + screenW to 20f + screenH))
+            val portraitY = params.y
+            assertTrue("dragged to the bottom", portraitY > screenH / 2)
+
+            // open a landscape game, like a player does: the screen turns
+            val game = androidx.test.core.app.ActivityScenario.launch(com.kinou.gameassist.e2e.games.FpsGameActivity::class.java)
+            scenarios += game
+
+            try {
+                com.kinou.gameassist.e2e.waitFor("the bubble to follow the rotation") {
+                    val bounds = wm.currentWindowMetrics.bounds
+                    bounds.width() > bounds.height() &&
+                        params.y + view.restingHeight <= bounds.height() &&
+                        params.x + view.restingWidth <= bounds.width()
+                }
+            } catch (e: AssertionError) {
+                val b = wm.currentWindowMetrics.bounds
+                val vb = "${view.width}x${view.height} attached=${view.isAttachedToWindow}"
+                throw AssertionError("${e.message}: screen ${b.width()}x${b.height()}, bubble at ${params.x},${params.y}, view $vb, orientation=${context.resources.configuration.orientation}", e)
+            }
+            val bounds = wm.currentWindowMetrics.bounds
+            assertTrue("still in the lower half", params.y > bounds.height() / 2)
+        } finally {
+            scenarios.forEach { it.close() }
+            instrumentation.runOnMainSync { runCatching { wm.removeView(view) } }
+        }
     }
 }
