@@ -230,6 +230,9 @@
     <string name="overlay_learning_banner">👉 PRESS A BUTTON ON GAMEPAD TO ASSIGN [%1$s]</string>
     <string name="overlay_hud_editor">HUD Editor</string>
     <string name="overlay_open_app">Open App</string>
+    <string name="overlay_handle_style_title">Quick menu</string>
+    <string name="overlay_handle_style_edge">Edge tab</string>
+    <string name="overlay_handle_style_bubble">Floating bubble</string>
     <string name="overlay_stop_mapping">Stop Mapping</string>
     <string name="overlay_notif_title">OpenMapper - Mapping Active</string>
     <string name="overlay_notif_text">Profile: %1$s • Tap to configure</string>

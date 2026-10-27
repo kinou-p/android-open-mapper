@@ -31,16 +31,31 @@ class EdgeHandleOverlayView(
     private val onToggleAntiRecoil: (() -> Unit)? = null,
     private val getAntiRecoilSpeed: (() -> Float)? = null,
     private val onSetAntiRecoilSpeed: ((Float) -> Unit)? = null,
-    private val onPersistAntiRecoilSpeed: ((Float) -> Unit)? = null
+    private val onPersistAntiRecoilSpeed: ((Float) -> Unit)? = null,
+    // Floating bubble instead of the edge tab: it can sit away from the screen edges, where
+    // gesture navigation would otherwise take the swipe (issue #30).
+    private val bubble: Boolean = false
 ) : View(context) {
+
+    companion object {
+        const val PREFS = "overlay_prefs"
+        const val KEY_BUBBLE = "handle_bubble"
+
+        fun isBubble(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_BUBBLE, false)
+
+        fun setBubble(context: Context, bubble: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_BUBBLE, bubble).apply()
+        }
+    }
 
     enum class ScreenEdge { LEFT, RIGHT }
 
     private val density = resources.displayMetrics.density
 
     // Dimensions
-    val restingWidth = (16 * density).toInt()
-    val restingHeight = (90 * density).toInt()
+    val restingWidth = ((if (bubble) 46 else 16) * density).toInt()
+    val restingHeight = ((if (bubble) 46 else 90) * density).toInt()
     val menuWidth = (210 * density).toInt()
     val menuHeight = (268 * density).toInt()
 
@@ -121,6 +136,10 @@ class EdgeHandleOverlayView(
     private var initialTouchRawX = 0f
     private var initialTouchRawY = 0f
     private var initialWindowY = 0
+    private var initialWindowX = 0
+    // Bubble mode: top-left of the bubble on screen; the open menu is anchored there.
+    private var bubbleX = 0
+    private var bubbleY = 0
     private var alphaAnimator: ValueAnimator? = null
     private var menuAnimator: ValueAnimator? = null
 
@@ -128,12 +147,28 @@ class EdgeHandleOverlayView(
         val prefs = context.getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
         val isRight = prefs.getBoolean("edge_handle_is_right", false)
         currentEdge = if (isRight) ScreenEdge.RIGHT else ScreenEdge.LEFT
+        if (bubble) {
+            currentEdge = ScreenEdge.LEFT
+            val screenW = resources.displayMetrics.widthPixels
+            bubbleX = prefs.getInt("bubble_x", (screenW - restingWidth) / 2)
+            bubbleY = prefs.getInt("bubble_y", (8 * density).toInt())
+            params.gravity = Gravity.TOP or Gravity.START
+            params.width = -1 // forces ensureWindowSize to apply size and position
+            ensureWindowSize(restingWidth, restingHeight)
+        }
 
         isHapticFeedbackEnabled = true
         scheduleDimming(2500)
     }
 
     private fun saveEdgePrefs() {
+        if (bubble) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putInt("bubble_x", bubbleX)
+                .putInt("bubble_y", bubbleY)
+                .apply()
+            return
+        }
         context.getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
             .edit()
             .putBoolean("edge_handle_is_right", currentEdge == ScreenEdge.RIGHT)
@@ -169,7 +204,19 @@ class EdgeHandleOverlayView(
     }
 
     private fun ensureWindowSize(w: Int, h: Int) {
-        if (params.width != w || params.height != h) {
+        var changed = params.width != w || params.height != h
+        if (bubble) {
+            // Keep the bubble, or the menu opened from it, fully on screen
+            val dm = resources.displayMetrics
+            val x = bubbleX.coerceIn(0, max(0, dm.widthPixels - w))
+            val y = bubbleY.coerceIn(0, max(0, dm.heightPixels - h))
+            if (params.x != x || params.y != y) {
+                params.x = x
+                params.y = y
+                changed = true
+            }
+        }
+        if (changed) {
             params.width = w
             params.height = h
             safeUpdateViewLayout()
@@ -245,7 +292,11 @@ class EdgeHandleOverlayView(
         val cardRight = if (isRightEdge) w else currentDrawerW
         val rect = RectF(cardLeft, 0f, cardRight, currentDrawerH)
 
-        val radii = if (isRightEdge) {
+        val radii = if (bubble) {
+            // A circle at rest, morphing into the rounded menu card
+            val r = cornerRadius + (restingWidth / 2f - cornerRadius) * (1f - menuProgress)
+            floatArrayOf(r, r, r, r, r, r, r, r)
+        } else if (isRightEdge) {
             floatArrayOf(
                 cornerRadius, cornerRadius,           // Top-Left (rounded inside)
                 0f, 0f,                               // Top-Right (docked to right screen edge)
@@ -270,7 +321,13 @@ class EdgeHandleOverlayView(
         handleStrokePaint.alpha = alphaInt
         canvas.drawPath(path, handleStrokePaint)
 
-        if (menuProgress < 0.35f) {
+        if (bubble && menuProgress < 0.35f) {
+            textPaint.textAlign = Paint.Align.CENTER
+            textPaint.textSize = 20 * density
+            textPaint.color = Color.WHITE
+            textPaint.alpha = alphaInt
+            canvas.drawText("🎮", restingWidth / 2f, restingHeight / 2f + 7 * density, textPaint)
+        } else if (menuProgress < 0.35f) {
             // Draw resting handle grip bar
             handleBarIndicatorPaint.alpha = (alphaInt * 0.85f).toInt()
             val gripX = if (isRightEdge) w - restingWidth * 0.45f else restingWidth * 0.45f
@@ -655,6 +712,8 @@ class EdgeHandleOverlayView(
             return super.onTouchEvent(event)
         }
 
+        if (bubble) return onBubbleTouch(event)
+
         // Touch handling when menu is COLLAPSED (Slide gesture / drag & reposition / edge switch)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -754,5 +813,52 @@ class EdgeHandleOverlayView(
             }
         }
         return super.onTouchEvent(event)
+    }
+
+    /** Collapsed bubble: drag it anywhere, tap it to open the menu. */
+    private fun onBubbleTouch(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                mainHandler.removeCallbacks(dimRunnable)
+                alphaAnimator?.cancel()
+                currentAlpha = 1.0f
+                isInteracting = true
+                isDraggingHandle = false
+                initialTouchRawX = event.rawX
+                initialTouchRawY = event.rawY
+                initialWindowX = params.x
+                initialWindowY = params.y
+                invalidate()
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.rawX - initialTouchRawX
+                val dy = event.rawY - initialTouchRawY
+                if (!isDraggingHandle && (abs(dx) > 10 * density || abs(dy) > 10 * density)) {
+                    isDraggingHandle = true
+                }
+                if (isDraggingHandle) {
+                    bubbleX = (initialWindowX + dx).toInt()
+                    bubbleY = (initialWindowY + dy).toInt()
+                    ensureWindowSize(restingWidth, restingHeight)
+                    bubbleX = params.x
+                    bubbleY = params.y
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                isInteracting = false
+                if (isDraggingHandle) {
+                    isDraggingHandle = false
+                    saveEdgePrefs()
+                    scheduleDimming(2500)
+                    invalidate()
+                } else if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    openMenu()
+                } else {
+                    scheduleDimming(2500)
+                }
+            }
+        }
+        return true
     }
 }

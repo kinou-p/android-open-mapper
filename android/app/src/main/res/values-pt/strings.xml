@@ -219,6 +219,9 @@
     <string name="overlay_learning_banner">👉 PRESSIONE UM BOTÃO NO CONTROLE PARA ATRIBUIR [%1$s]</string>
     <string name="overlay_hud_editor">Editor HUD</string>
     <string name="overlay_open_app">Abrir App</string>
+    <string name="overlay_handle_style_title">Menu rápido</string>
+    <string name="overlay_handle_style_edge">Aba lateral</string>
+    <string name="overlay_handle_style_bubble">Bolha flutuante</string>
     <string name="overlay_stop_mapping">Parar Mapeamento</string>
     <string name="overlay_notif_title">OpenMapper - Mapeamento Ativo</string>
     <string name="overlay_notif_text">Perfil: %1$s • Toque para configurar</string>
