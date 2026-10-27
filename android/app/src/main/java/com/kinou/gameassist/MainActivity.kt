@@ -76,6 +76,16 @@ class MainActivity : AppCompatActivity() {
     // True while the in-app HUD editor is on screen: it learns gamepad keys itself, so the
     // activity must not consume those events.
     @Volatile private var editorOwnsGamepad = false
+        set(value) {
+            // Releases and neutral axes stop reaching this activity while the editor owns the
+            // gamepad, so drop the live state instead of leaving buttons stuck "pressed".
+            if (value && !field) {
+                pressedButtons.clear()
+                pendingLx = 0f; pendingLy = 0f; pendingRx = 0f; pendingRy = 0f
+                flushUiStates()
+            }
+            field = value
+        }
     private val recentIntervalsNs = LongArray(INTERVAL_BUFFER_CAPACITY)
     private var intervalBufferHead = 0
     private var intervalBufferCount = 0

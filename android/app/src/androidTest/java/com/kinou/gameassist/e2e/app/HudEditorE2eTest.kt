@@ -1,6 +1,8 @@
 package com.kinou.gameassist.e2e.app
 
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -127,5 +129,23 @@ class HudEditorE2eTest {
         val moved = view.selectedButton!!
         assertEquals("x after the drag", 0.3f, moved.x, 0.06f)
         assertEquals("y after the drag", 0.7f, moved.y, 0.06f)
+    }
+
+    @Test
+    fun aGamepadKeyIsLearnedInsideTheApp() {
+        val view = editor()!!
+        tap(view, view.width * 0.5f, view.height * 0.5f)
+        waitFor("the button to be selected") { view.selectedButton?.id == "hud_a" }
+        instrumentation.runOnMainSync { view.isLearning = true }
+
+        // Through the activity's window, like a real controller (issue #29: MainActivity consumed it)
+        val now = SystemClock.uptimeMillis()
+        for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+            instrumentation.sendKeySync(
+                KeyEvent(now, now, action, KeyEvent.KEYCODE_BUTTON_B, 0, 0, 0, 0, 0, InputDevice.SOURCE_GAMEPAD)
+            )
+        }
+
+        waitFor("BUTTON_B to be assigned") { view.selectedButton?.gamepadButton == "BUTTON_B" }
     }
 }
