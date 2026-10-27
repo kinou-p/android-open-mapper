@@ -73,6 +73,9 @@ class MainActivity : AppCompatActivity() {
     private val liveJitterMs = mutableFloatStateOf(0f)
     private val liveSampleCount = mutableIntStateOf(0)
     private var lastEventNano: Long = 0L
+    // True while the in-app HUD editor is on screen: it learns gamepad keys itself, so the
+    // activity must not consume those events.
+    @Volatile private var editorOwnsGamepad = false
     private val recentIntervalsNs = LongArray(INTERVAL_BUFFER_CAPACITY)
     private var intervalBufferHead = 0
     private var intervalBufferCount = 0
@@ -155,6 +158,9 @@ class MainActivity : AppCompatActivity() {
                 var editTargetProfile by remember { mutableStateOf<GameProfile?>(null) }
                 var visualEditorOrigin by remember { mutableStateOf(Screen.PROFILES) }
                 val isServiceRunning by OverlayService.isServiceRunningFlow.collectAsState()
+
+                SideEffect { editorOwnsGamepad = currentScreen == Screen.VISUAL_HUD_EDITOR }
+                DisposableEffect(Unit) { onDispose { editorOwnsGamepad = false } }
 
                 LaunchedEffect(profiles) {
                     if (selectedProfile == null && profiles.isNotEmpty()) {
@@ -429,6 +435,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (editorOwnsGamepad) return super.dispatchKeyEvent(event)
         val btnName = when (event.keyCode) {
             KeyEvent.KEYCODE_BUTTON_A -> "BUTTON_A"
             KeyEvent.KEYCODE_BUTTON_B -> "BUTTON_B"
@@ -467,6 +474,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (editorOwnsGamepad) return super.dispatchGenericMotionEvent(event)
         if ((event.source and InputDevice.SOURCE_JOYSTICK) != 0 ||
             (event.source and InputDevice.SOURCE_GAMEPAD) != 0) {
 
