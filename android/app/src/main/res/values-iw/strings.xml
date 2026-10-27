@@ -97,6 +97,11 @@
     <string name="camera_section_title">הגדרות מצלמה</string>
     <string name="camera_section_desc">רגישות, עקומת תגובה וסיוע בכוונת</string>
     <string name="response_curve_title">עקומת תגובה אנלוגית</string>
+    <string name="right_stick_mode_title">🕹️ סטיק ימני</string>
+    <string name="right_stick_mode_swipe">📷 מצלמה (החלקה)</string>
+    <string name="right_stick_mode_joystick">🕹️ ג׳ויסטיק</string>
+    <string name="right_stick_joystick_desc">זז כמו הסטיק השמאלי, למשחקי twin-stick. מקמו אותו עם אזור המצלמה בעורך ה-HUD: הג׳ויסטיק הוא מרכז האזור.</string>
+    <string name="right_stick_joystick_radius">רדיוס הג׳ויסטיק</string>
     <string name="curve_dynamic_boost">🚀 סיבוב מהיר (Flick) של 180 מעלות</string>
     <string name="curve_dynamic">⚡ דינמי</string>
     <string name="curve_standard">🌊 סטנדרטי</string>

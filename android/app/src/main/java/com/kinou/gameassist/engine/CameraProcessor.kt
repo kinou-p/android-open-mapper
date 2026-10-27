@@ -32,6 +32,10 @@ class CameraProcessor(
             if (isActive) release()
             return
         }
+        if (cfg.mode == com.kinou.gameassist.data.model.CameraMode.JOYSTICK) {
+            processJoystick(rx, ry, cfg)
+            return
+        }
 
         val screenW = injector.screenWidth
         val screenH = injector.screenHeight
@@ -158,6 +162,39 @@ class CameraProcessor(
                 release()
             }
         }
+    }
+
+    /**
+     * Right stick as a second joystick (twin-stick games): press the center of the camera zone,
+     * hold the finger at stick direction x deflection x radius, lift when the stick is centered.
+     */
+    private fun processJoystick(rx: Float, ry: Float, cfg: CameraConfig) {
+        val screenW = injector.screenWidth
+        val screenH = injector.screenHeight
+        val centerX = (cfg.rectX1 + cfg.rectX2) / 2f * screenW
+        val centerY = (cfg.rectY1 + cfg.rectY2) / 2f * screenH
+        val radiusPx = cfg.joystickRadius * screenH
+
+        val mag = hypot(rx, ry)
+        val innerDeadzone = cfg.deadzone
+        val outerDeadzone = cfg.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
+        if (mag <= innerDeadzone) {
+            if (isActive) release()
+            return
+        }
+
+        val normMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
+        val dirX = if (cfg.invertX) -rx / mag else rx / mag
+        val dirY = if (cfg.invertY) -ry / mag else ry / mag
+
+        if (!isActive) {
+            activePointerId = POINTER_CAM_A
+            injector.touchDown(activePointerId, centerX, centerY)
+            isActive = true
+        }
+        currentX = centerX + dirX * normMag * radiusPx
+        currentY = centerY + dirY * normMag * radiusPx
+        injector.touchMove(activePointerId, currentX, currentY)
     }
 
     fun release() {
