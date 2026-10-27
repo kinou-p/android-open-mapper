@@ -52,6 +52,21 @@ class ExclusiveControllerE2eTest {
         return counter
     }
 
+    private fun startCountingScript(script: String, count: (InputStream, AtomicInteger) -> Unit): AtomicInteger {
+        val pfds = automation.executeShellCommandRw("sh")
+        toClose += pfds[0]
+        toClose += pfds[1]
+        ParcelFileDescriptor.AutoCloseOutputStream(pfds[1]).let {
+            it.write((script + "\n").toByteArray())
+            it.flush()
+        }
+        val counter = AtomicInteger()
+        Thread {
+            runCatching { ParcelFileDescriptor.AutoCloseInputStream(pfds[0]).use { count(it, counter) } }
+        }.apply { isDaemon = true; start() }
+        return counter
+    }
+
     private fun press() {
         padIn.write((pressA + "\n").toByteArray())
         padIn.flush()
@@ -94,9 +109,9 @@ class ExclusiveControllerE2eTest {
         waitFor("the game to see the controller without OpenMapper") { gameSees.get() >= 4 }
 
         // OpenMapper takes it, started exactly like LinuxInputReader does through Shizuku
-        val command = LinuxInputReader.nodeReadCommand(node, apk)
-        val env = LinuxInputReader.nodeReadEnv(apk)!!.single()
-        val openMapperBytes = startCounting("env $env ${command.joinToString(" ")}") { input, n ->
+        // the exact `sh -c` script OpenMapper hands to Shizuku, fed to a shell on stdin
+        val script = LinuxInputReader.nodeReadCommand(node, apk).last()
+        val openMapperBytes = startCountingScript(script) { input, n ->
             val buf = ByteArray(1024)
             while (true) {
                 val r = input.read(buf)

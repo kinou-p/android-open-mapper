@@ -5,7 +5,6 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,17 +28,18 @@ class ExclusiveControllerTest {
     @Test
     fun offReadsTheControllerLikeTodayWithCat() {
         assertArrayEquals(arrayOf("cat", "/dev/input/event5"), LinuxInputReader.nodeReadCommand("/dev/input/event5", null))
-        assertNull(LinuxInputReader.nodeReadEnv(null))
     }
 
     @Test
     fun onRunsTheGrabbingReaderFromTheAppApk() {
         val apk = "/data/app/~~x/com.kinou.gameassist-1/base.apk"
         assertArrayEquals(
-            arrayOf("app_process", "/system/bin", "com.kinou.gameassist.engine.ExclusiveInputReader", "/dev/input/event5"),
+            arrayOf(
+                "sh", "-c",
+                "CLASSPATH='$apk' exec /system/bin/app_process /system/bin com.kinou.gameassist.engine.ExclusiveInputReader '/dev/input/event5'"
+            ),
             LinuxInputReader.nodeReadCommand("/dev/input/event5", apk)
         )
-        assertArrayEquals(arrayOf("CLASSPATH=$apk"), LinuxInputReader.nodeReadEnv(apk))
     }
 
     @Test

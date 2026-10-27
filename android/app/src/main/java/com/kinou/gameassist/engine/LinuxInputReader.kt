@@ -174,17 +174,18 @@ class LinuxInputReader(
 
         internal const val EXCLUSIVE_READER_CLASS = "com.kinou.gameassist.engine.ExclusiveInputReader"
 
-        /** How a controller node is read: `cat`, or the grabbing [ExclusiveInputReader] run from [exclusiveApkPath]. */
+        /**
+         * How a controller node is read: `cat`, or the grabbing [ExclusiveInputReader] run from
+         * [exclusiveApkPath]. CLASSPATH is set inside `sh -c` so app_process keeps the shell's
+         * environment (an env array would replace it).
+         */
         internal fun nodeReadCommand(nodePath: String, exclusiveApkPath: String?): Array<String> =
             if (exclusiveApkPath == null) arrayOf("cat", nodePath)
-            else arrayOf("app_process", "/system/bin", EXCLUSIVE_READER_CLASS, nodePath)
+            else arrayOf("sh", "-c", "CLASSPATH='$exclusiveApkPath' exec /system/bin/app_process /system/bin $EXCLUSIVE_READER_CLASS '$nodePath'")
 
-        internal fun nodeReadEnv(exclusiveApkPath: String?): Array<String>? =
-            exclusiveApkPath?.let { arrayOf("CLASSPATH=$it") }
-
-        private fun spawnShizukuProcess(cmd: Array<String>, env: Array<String>? = null): Process? {
+        private fun spawnShizukuProcess(cmd: Array<String>): Process? {
             return try {
-                shizukuNewProcessMethod?.invoke(null, cmd, env, null) as? Process
+                shizukuNewProcessMethod?.invoke(null, cmd, null, null) as? Process
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
@@ -510,7 +511,7 @@ class LinuxInputReader(
                         val child = launch(Dispatchers.IO) {
                             val myJob = coroutineContext[Job]
                             val apk = exclusiveApkPath
-                            val proc = spawnShizukuProcess(nodeReadCommand(nodeInfo.nodePath, apk), nodeReadEnv(apk)) ?: return@launch
+                            val proc = spawnShizukuProcess(nodeReadCommand(nodeInfo.nodePath, apk)) ?: return@launch
                             val inStream = proc.inputStream
                             synchronized(processLock) {
                                 if (!isRunning) {
