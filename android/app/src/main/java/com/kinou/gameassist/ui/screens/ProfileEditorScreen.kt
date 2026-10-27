@@ -106,7 +106,7 @@ fun ProfileEditorScreen(
                     // Narrow (portrait) screens: icon-only actions so the title is not squeezed.
                     if (onCreateProfile != null) {
                         TextButton(onClick = { showCreateDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.btn_new_profile), tint = NeonGreen)
+                            Icon(Icons.Default.Add, contentDescription = if (compact) stringResource(R.string.btn_new_profile) else null, tint = NeonGreen)
                             if (!compact) {
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(stringResource(R.string.btn_new_profile), color = NeonGreen, fontWeight = FontWeight.Bold)
@@ -117,7 +117,7 @@ fun ProfileEditorScreen(
                         importJsonText = ""
                         showImportDialog = true
                     }) {
-                        Icon(Icons.Default.Download, contentDescription = stringResource(R.string.btn_import), tint = NeonCyan)
+                        Icon(Icons.Default.Download, contentDescription = if (compact) stringResource(R.string.btn_import) else null, tint = NeonCyan)
                         if (!compact) {
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(stringResource(R.string.btn_import), color = NeonCyan, fontWeight = FontWeight.Bold)

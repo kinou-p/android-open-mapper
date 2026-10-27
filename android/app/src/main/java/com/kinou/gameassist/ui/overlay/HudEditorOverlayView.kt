@@ -1136,7 +1136,8 @@ class HudEditorOverlayView(
         var total = heightFor(rowsPerColumn, rowHeight)
         if (total > available) {
             val needed = (available - 2f * padding - (rowsPerColumn - 1) * gap) / rowsPerColumn
-            rowHeight = needed.coerceIn(30f * density, rowHeight)
+            // 20 dp floor: four rows always fit the 120 dp minimum area
+            rowHeight = needed.coerceIn(20f * density, rowHeight)
             total = heightFor(rowsPerColumn, rowHeight)
         }
 
