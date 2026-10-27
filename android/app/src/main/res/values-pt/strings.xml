@@ -89,6 +89,8 @@
     <string name="btn_select">Escolher</string>
     <string name="tab_aim_title">🎯 Mira</string>
     <string name="tab_movement_title">🕹️ Mover</string>
+    <string name="exclusive_controller_title">🔒 Esconder o controle do jogo</string>
+    <string name="exclusive_controller_desc">Para jogos que também leem o controle por conta própria (câmera invertida, entradas duplas). Durante o mapeamento, só o OpenMapper recebe o controle e o jogo só vê toques. Deixe desligado para outros jogos.</string>
     <string name="tab_buttons_title">🎮 Botões</string>
     <string name="tab_haptic_title">📳 Háptica</string>
     <string name="profile_copied_toast">Perfil copiado para a área de transferência!</string>

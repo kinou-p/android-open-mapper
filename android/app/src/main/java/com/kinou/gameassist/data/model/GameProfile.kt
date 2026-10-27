@@ -36,7 +36,12 @@ data class GameSettings(
     var aimRadius: Float = 0.12f,
 
     @SerialName("aim_deadzone")
-    var aimDeadzone: Float = 0.15f
+    var aimDeadzone: Float = 0.15f,
+
+    // Take the controller exclusively while mapping, so games that partly read it themselves
+    // (inverted camera, double inputs) only see the touches. Off: today's behaviour (issue #28).
+    @SerialName("exclusive_controller")
+    var exclusiveController: Boolean = false
 )
 
 @Serializable

@@ -83,6 +83,8 @@
     <string name="btn_select">בחר</string>
     <string name="tab_aim_title">🎯 כיוון (Aim)</string>
     <string name="tab_movement_title">🕹️ תנועה</string>
+    <string name="exclusive_controller_title">🔒 הסתר את הבקר מהמשחק</string>
+    <string name="exclusive_controller_desc">למשחקים שקוראים גם בעצמם את הבקר (מצלמה הפוכה, קלט כפול). בזמן המיפוי רק OpenMapper מקבל את הבקר והמשחק רואה רק נגיעות. השאירו כבוי למשחקים אחרים.</string>
     <string name="tab_buttons_title">🎮 מקשים</string>
     <string name="tab_haptic_title">📳 משוב רטט (Haptic)</string>
     <string name="profile_copied_toast">הפרופיל הועתק ללוח הגזירים!</string>

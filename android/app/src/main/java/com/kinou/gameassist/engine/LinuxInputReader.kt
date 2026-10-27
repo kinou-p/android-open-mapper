@@ -172,9 +172,19 @@ class LinuxInputReader(
             }
         }
 
-        private fun spawnShizukuProcess(cmd: Array<String>): Process? {
+        internal const val EXCLUSIVE_READER_CLASS = "com.kinou.gameassist.engine.ExclusiveInputReader"
+
+        /** How a controller node is read: `cat`, or the grabbing [ExclusiveInputReader] run from [exclusiveApkPath]. */
+        internal fun nodeReadCommand(nodePath: String, exclusiveApkPath: String?): Array<String> =
+            if (exclusiveApkPath == null) arrayOf("cat", nodePath)
+            else arrayOf("app_process", "/system/bin", EXCLUSIVE_READER_CLASS, nodePath)
+
+        internal fun nodeReadEnv(exclusiveApkPath: String?): Array<String>? =
+            exclusiveApkPath?.let { arrayOf("CLASSPATH=$it") }
+
+        private fun spawnShizukuProcess(cmd: Array<String>, env: Array<String>? = null): Process? {
             return try {
-                shizukuNewProcessMethod?.invoke(null, cmd, null, null) as? Process
+                shizukuNewProcessMethod?.invoke(null, cmd, env, null) as? Process
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
@@ -467,6 +477,9 @@ class LinuxInputReader(
      * la réouverture par une nouvelle session. Aucun nettoyage agressif n'est donc requis.
      */
 
+    /** Non-null: read the controllers exclusively (hidden from the game) with this APK's reader. */
+    @Volatile var exclusiveApkPath: String? = null
+
     fun start() {
         if (!isStartingOrRunning.compareAndSet(false, true)) return
         isRunning = true
@@ -496,7 +509,8 @@ class LinuxInputReader(
                         if (!isRunning) break
                         val child = launch(Dispatchers.IO) {
                             val myJob = coroutineContext[Job]
-                            val proc = spawnShizukuProcess(arrayOf("cat", nodeInfo.nodePath)) ?: return@launch
+                            val apk = exclusiveApkPath
+                            val proc = spawnShizukuProcess(nodeReadCommand(nodeInfo.nodePath, apk), nodeReadEnv(apk)) ?: return@launch
                             val inStream = proc.inputStream
                             synchronized(processLock) {
                                 if (!isRunning) {
