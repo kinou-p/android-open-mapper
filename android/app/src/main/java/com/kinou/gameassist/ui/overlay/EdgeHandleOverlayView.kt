@@ -47,6 +47,9 @@ class EdgeHandleOverlayView(
         fun setBubble(context: Context, bubble: Boolean) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_BUBBLE, bubble).apply()
         }
+
+        /** Window origin that keeps a window of [size] fully inside a [screen] long axis. */
+        fun clampToScreen(pos: Int, size: Int, screen: Int): Int = pos.coerceIn(0, max(0, screen - size))
     }
 
     enum class ScreenEdge { LEFT, RIGHT }
@@ -140,6 +143,8 @@ class EdgeHandleOverlayView(
     // Bubble mode: top-left of the bubble on screen; the open menu is anchored there.
     private var bubbleX = 0
     private var bubbleY = 0
+    // The app's own launcher icon, shown inside the bubble
+    internal val bubbleIcon = if (bubble) context.getDrawable(com.kinou.gameassist.R.mipmap.ic_launcher_round) else null
     private var alphaAnimator: ValueAnimator? = null
     private var menuAnimator: ValueAnimator? = null
 
@@ -208,8 +213,8 @@ class EdgeHandleOverlayView(
         if (bubble) {
             // Keep the bubble, or the menu opened from it, fully on screen
             val dm = resources.displayMetrics
-            val x = bubbleX.coerceIn(0, max(0, dm.widthPixels - w))
-            val y = bubbleY.coerceIn(0, max(0, dm.heightPixels - h))
+            val x = clampToScreen(bubbleX, w, dm.widthPixels)
+            val y = clampToScreen(bubbleY, h, dm.heightPixels)
             if (params.x != x || params.y != y) {
                 params.x = x
                 params.y = y
@@ -322,11 +327,12 @@ class EdgeHandleOverlayView(
         canvas.drawPath(path, handleStrokePaint)
 
         if (bubble && menuProgress < 0.35f) {
-            textPaint.textAlign = Paint.Align.CENTER
-            textPaint.textSize = 20 * density
-            textPaint.color = Color.WHITE
-            textPaint.alpha = alphaInt
-            canvas.drawText("🎮", restingWidth / 2f, restingHeight / 2f + 7 * density, textPaint)
+            bubbleIcon?.let { icon ->
+                val inset = (4 * density).toInt()
+                icon.setBounds(inset, inset, restingWidth - inset, restingHeight - inset)
+                icon.alpha = alphaInt
+                icon.draw(canvas)
+            }
         } else if (menuProgress < 0.35f) {
             // Draw resting handle grip bar
             handleBarIndicatorPaint.alpha = (alphaInt * 0.85f).toInt()

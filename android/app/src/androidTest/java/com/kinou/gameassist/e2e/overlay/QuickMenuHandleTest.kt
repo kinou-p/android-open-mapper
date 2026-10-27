@@ -135,4 +135,28 @@ class QuickMenuHandleTest {
         assertTrue(view.isMenuOpen)
         assertEquals(view.menuWidth, params.width)
     }
+
+    @Test
+    fun theBubbleShowsTheAppIconAndTheEdgeTabDoesNot() {
+        val (bubbleView, _) = handle(bubble = true)
+        val (edgeView, _) = handle(bubble = false)
+
+        assertTrue("bubble uses the launcher icon", bubbleView.bubbleIcon != null)
+        assertTrue("edge tab has no icon", edgeView.bubbleIcon == null)
+
+        // the icon is actually painted in the middle of the bubble
+        val size = bubbleView.restingWidth
+        val bmp = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        instrumentation.runOnMainSync {
+            bubbleView.measure(
+                android.view.View.MeasureSpec.makeMeasureSpec(size, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(size, android.view.View.MeasureSpec.EXACTLY)
+            )
+            bubbleView.layout(0, 0, size, size)
+            bubbleView.draw(android.graphics.Canvas(bmp))
+        }
+        val bounds = bubbleView.bubbleIcon!!.bounds
+        assertTrue("icon fills most of the bubble", bounds.width() > size * 0.7f)
+        assertTrue("center pixel is painted", android.graphics.Color.alpha(bmp.getPixel(size / 2, size / 2)) > 0)
+    }
 }
