@@ -1,6 +1,7 @@
 package com.kinou.gameassist.engine
 
 import com.kinou.gameassist.data.model.CameraConfig
+import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -9,8 +10,16 @@ import kotlin.math.sign
 
 class CameraProcessor(
     private val injector: ShizukuTouchInjector,
-    @Volatile var config: CameraConfig = CameraConfig()
+    config: CameraConfig = CameraConfig()
 ) {
+    @Volatile var config: CameraConfig = config
+        set(value) {
+            // Switching swipe <-> joystick mid-press would turn the held finger into the other
+            // gesture (a swipe dragged to a joystick point, or back): lift it first.
+            if (value.mode != field.mode) release()
+            field = value
+        }
+
     companion object {
         const val POINTER_CAM_A = 1
         const val POINTER_CAM_B = 2
@@ -30,6 +39,10 @@ class CameraProcessor(
         val cfg = config
         if (!cfg.enabled) {
             if (isActive) release()
+            return
+        }
+        if (cfg.mode == CameraMode.JOYSTICK) {
+            processJoystick(rx, ry, cfg)
             return
         }
 
@@ -157,6 +170,42 @@ class CameraProcessor(
             if (isActive) {
                 release()
             }
+        }
+    }
+
+    /**
+     * Right stick as a second joystick (twin-stick games): press the center of the camera zone,
+     * hold the finger at stick direction x deflection x radius, lift when the stick is centered.
+     */
+    private fun processJoystick(rx: Float, ry: Float, cfg: CameraConfig) {
+        val screenW = injector.screenWidth
+        val screenH = injector.screenHeight
+        val centerX = (cfg.rectX1 + cfg.rectX2) / 2f * screenW
+        val centerY = (cfg.rectY1 + cfg.rectY2) / 2f * screenH
+        val radiusPx = cfg.joystickRadius * screenH
+
+        val mag = hypot(rx, ry)
+        val innerDeadzone = cfg.deadzone
+        val outerDeadzone = cfg.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
+        if (mag <= innerDeadzone) {
+            if (isActive) release()
+            return
+        }
+
+        val normMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
+        val dirX = if (cfg.invertX) -rx / mag else rx / mag
+        val dirY = if (cfg.invertY) -ry / mag else ry / mag
+
+        // Same lock as release(): a concurrent reset can't strand the finger between down and move
+        synchronized(this) {
+            if (!isActive) {
+                activePointerId = POINTER_CAM_A
+                injector.touchDown(activePointerId, centerX, centerY)
+                isActive = true
+            }
+            currentX = centerX + dirX * normMag * radiusPx
+            currentY = centerY + dirY * normMag * radiusPx
+            injector.touchMove(activePointerId, currentX, currentY)
         }
     }
 

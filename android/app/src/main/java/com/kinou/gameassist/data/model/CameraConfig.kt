@@ -11,10 +11,24 @@ enum class ResponseCurve {
     @SerialName("LINEAR") LINEAR
 }
 
+/** What the right stick does: swipe the camera, or act as a second joystick (twin-stick games). */
+@Serializable
+enum class CameraMode {
+    @SerialName("swipe") SWIPE,
+    @SerialName("joystick") JOYSTICK
+}
+
 @Serializable
 data class CameraConfig(
     @SerialName("enabled")
     var enabled: Boolean = true,
+
+    @SerialName("mode")
+    var mode: CameraMode = CameraMode.SWIPE,
+
+    // Joystick mode: drag radius around the center of the camera zone, normalized to screen height
+    @SerialName("joystick_radius")
+    var joystickRadius: Float = 0.12f,
 
     @SerialName("rect_x1")
     var rectX1: Float = 0.50f,
