@@ -427,8 +427,14 @@ class OverlayService : LifecycleService() {
         val visibility = old.visibility
         safeRemoveView(old)
         edgeHandleView = null
-        showEdgeHandle()
-        edgeHandleView?.visibility = visibility
+        try {
+            showEdgeHandle()
+            edgeHandleView?.visibility = visibility
+        } catch (e: Exception) {
+            // e.g. overlay permission revoked meanwhile: keep the service alive without a handle
+            AppLog.w("Service", "quick menu handle could not be shown: ${e.message}")
+            edgeHandleView = null
+        }
     }
 
     private fun toggleHudEditor() {

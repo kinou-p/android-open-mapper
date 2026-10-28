@@ -74,4 +74,12 @@ class QuickMenuBubbleTest {
     fun anUnknownOldScreenJustClamps() {
         assertEquals(1080 - 120, remap(5000, 0, 1080))
     }
+
+    @Test
+    fun theBubbleIsPlacedFromTheLeftEvenInRightToLeftLanguages() {
+        val g = EdgeHandleOverlayView.BUBBLE_GRAVITY
+        assertEquals("not START/END, which RTL mirrors", 0, g and android.view.Gravity.RELATIVE_LAYOUT_DIRECTION)
+        assertEquals(android.view.Gravity.LEFT, g and android.view.Gravity.HORIZONTAL_GRAVITY_MASK)
+        assertEquals(android.view.Gravity.TOP, g and android.view.Gravity.VERTICAL_GRAVITY_MASK)
+    }
 }

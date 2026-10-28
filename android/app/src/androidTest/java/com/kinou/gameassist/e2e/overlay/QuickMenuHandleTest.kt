@@ -235,4 +235,25 @@ class QuickMenuHandleTest {
             instrumentation.runOnMainSync { runCatching { wm.removeView(view) } }
         }
     }
+
+    @Test
+    fun theBubbleWindowUsesAbsoluteLeftPlacement() {
+        val (_, params) = handle(bubble = true)
+        assertEquals(EdgeHandleOverlayView.BUBBLE_GRAVITY, params.gravity)
+    }
+
+    @Test
+    fun aMenuOpenedAtTheEdgeShiftsToFitThenTheBubbleReturnsToItsPlace() {
+        val (view, params) = handle(bubble = true)
+        val size = view.restingWidth
+        touch(view, listOf(20f to 20f, 20f + screenW to 400f, 20f + screenW to 400f)) // right edge
+        val bubbleX = params.x
+        assertEquals(screenW - size, bubbleX)
+
+        touch(view, listOf(20f to 20f, 20f to 20f)) // tap: open
+        assertEquals("menu kept on screen", screenW - view.menuWidth, params.x)
+
+        instrumentation.runOnMainSync { view.closeMenu() }
+        com.kinou.gameassist.e2e.waitFor("the bubble back at its place") { params.width == size && params.x == bubbleX }
+    }
 }

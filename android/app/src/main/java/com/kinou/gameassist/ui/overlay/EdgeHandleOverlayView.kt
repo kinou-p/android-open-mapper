@@ -40,6 +40,9 @@ class EdgeHandleOverlayView(
 
     companion object {
         const val PREFS = "overlay_prefs"
+
+        /** Absolute LEFT: with START, an RTL locale (Hebrew) mirrors params.x and drags go backwards. */
+        const val BUBBLE_GRAVITY = Gravity.TOP or Gravity.LEFT
         const val KEY_BUBBLE = "handle_bubble"
 
         fun isBubble(context: Context): Boolean =
@@ -158,12 +161,12 @@ class EdgeHandleOverlayView(
     private var lastScreenW = 0
     private var lastScreenH = 0
     // The app's own launcher icon, shown inside the bubble
-    internal val bubbleIcon = if (bubble) context.getDrawable(com.kinou.gameassist.R.mipmap.ic_launcher_round) else null
+    internal val bubbleIcon = if (bubble) context.getDrawable(com.kinou.gameassist.R.mipmap.ic_launcher_round)?.mutate() else null
     private var alphaAnimator: ValueAnimator? = null
     private var menuAnimator: ValueAnimator? = null
 
     init {
-        val prefs = context.getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val isRight = prefs.getBoolean("edge_handle_is_right", false)
         currentEdge = if (isRight) ScreenEdge.RIGHT else ScreenEdge.LEFT
         lastScreenW = screenWidth()
@@ -172,7 +175,7 @@ class EdgeHandleOverlayView(
             currentEdge = ScreenEdge.LEFT
             bubbleX = prefs.getInt("bubble_x", (lastScreenW - restingWidth) / 2)
             bubbleY = prefs.getInt("bubble_y", (8 * density).toInt())
-            params.gravity = Gravity.TOP or Gravity.START
+            params.gravity = BUBBLE_GRAVITY
             params.width = -1 // forces ensureWindowSize to apply size and position
             ensureWindowSize(restingWidth, restingHeight)
         }
@@ -189,7 +192,7 @@ class EdgeHandleOverlayView(
                 .apply()
             return
         }
-        context.getSharedPreferences("overlay_prefs", Context.MODE_PRIVATE)
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putBoolean("edge_handle_is_right", currentEdge == ScreenEdge.RIGHT)
             .putInt("edge_handle_y", params.y)
@@ -797,8 +800,8 @@ class EdgeHandleOverlayView(
             MotionEvent.ACTION_MOVE -> {
                 val dxRaw = event.rawX - initialTouchRawX
                 val dyRaw = event.rawY - initialTouchRawY
-                val screenWidth = resources.displayMetrics.widthPixels
-                val screenHeight = resources.displayMetrics.heightPixels
+                val screenWidth = screenWidth()
+                val screenHeight = screenHeight()
 
                 if (!isDraggingHandle && !isSlidingToOpen) {
                     val isPullingAway = if (currentEdge == ScreenEdge.LEFT) {
