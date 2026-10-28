@@ -108,7 +108,7 @@ class UiAutomationTouchInjector : ShizukuTouchInjector() {
             0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0
         )
         val accepted = uiAutomation.injectInputEvent(event, sync)
-        Log.d(TAG, "inject action=$action pointers=$count accepted=$accepted ${coords.joinToString { "(${it.x.toInt()},${it.y.toInt()})" }}")
+        Log.d(TAG, "inject action=$action pointers=$count sync=$sync accepted=$accepted ${coords.joinToString { "(${it.x.toInt()},${it.y.toInt()})" }}")
         event.recycle()
     }
 }
