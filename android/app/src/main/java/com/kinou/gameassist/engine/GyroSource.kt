@@ -1,6 +1,5 @@
 package com.kinou.gameassist.engine
 
-import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -15,7 +14,7 @@ import kotlin.math.abs
  * phone's. Android 12+ only. Accumulates the rotation between two [consumeDelta] calls so the
  * engine loop never misses a sample.
  */
-class GyroSource(private val context: Context) : SensorEventListener {
+class GyroSource : SensorEventListener {
 
     companion object {
         /** Rates below this (rad/s) are sensor drift, not a hand movement. */
@@ -48,6 +47,7 @@ class GyroSource(private val context: Context) : SensorEventListener {
         private set
 
     /** Tries to attach to a gamepad gyroscope, at most every couple of seconds. */
+    @Synchronized
     fun ensureStarted() {
         if (running || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         val now = System.currentTimeMillis()
@@ -68,6 +68,8 @@ class GyroSource(private val context: Context) : SensorEventListener {
         }
     }
 
+    /** Detaches; the next [ensureStarted] re-attaches (e.g. to a newly connected controller). */
+    @Synchronized
     fun stop() {
         manager?.unregisterListener(this)
         manager = null
@@ -79,12 +81,30 @@ class GyroSource(private val context: Context) : SensorEventListener {
         }
     }
 
-    /** Returns (yaw, pitch) radians turned since the previous call and resets them. */
-    fun consumeDelta(): Pair<Float, Float> = synchronized(lock) {
-        val out = Pair(yawRad, pitchRad)
-        yawRad = 0f
-        pitchRad = 0f
-        out
+    /** Writes the (yaw, pitch) radians turned since the previous call into [out] and resets them. */
+    fun consumeDelta(out: FloatArray) {
+        synchronized(lock) {
+            out[0] = yawRad
+            out[1] = pitchRad
+            yawRad = 0f
+            pitchRad = 0f
+        }
+    }
+
+    /** Drops the rotation gathered while the camera was not driven (HUD editor, cursor, MOBA). */
+    fun discard() {
+        synchronized(lock) {
+            yawRad = 0f
+            pitchRad = 0f
+        }
+    }
+
+    /** Adds a rotation as if the sensor reported it; lets tests drive the gyro without a controller. */
+    internal fun feed(yaw: Float, pitch: Float) {
+        synchronized(lock) {
+            yawRad += yaw
+            pitchRad += pitch
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent) {

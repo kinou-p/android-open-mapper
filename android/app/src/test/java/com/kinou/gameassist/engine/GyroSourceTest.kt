@@ -32,4 +32,34 @@ class GyroSourceTest {
         assertEquals(base * 1.5f, GyroSource.radiansToPixels(1f, 2000f, 1.5f), 0.001f)
         assertEquals(-base, GyroSource.radiansToPixels(-1f, 2000f, 1f), 0.001f)
     }
+
+    private fun source() = GyroSource()
+
+    @Test
+    fun consumeReturnsTheRotationOnceIntoTheGivenArray() {
+        val gyro = source()
+        val out = FloatArray(2)
+        gyro.feed(0.3f, -0.1f)
+        gyro.feed(0.2f, 0f)
+
+        gyro.consumeDelta(out)
+        assertEquals(0.5f, out[0], 0.0001f)
+        assertEquals(-0.1f, out[1], 0.0001f)
+
+        gyro.consumeDelta(out)
+        assertEquals("consumed once", 0f, out[0], 0f)
+        assertEquals(0f, out[1], 0f)
+    }
+
+    @Test
+    fun discardForgetsRotationGatheredWhileTheCameraWasPaused() {
+        val gyro = source()
+        val out = FloatArray(2)
+        gyro.feed(2f, 1f) // turned while the HUD editor was open
+        gyro.discard()
+
+        gyro.consumeDelta(out)
+        assertEquals(0f, out[0], 0f)
+        assertEquals(0f, out[1], 0f)
+    }
 }

@@ -66,6 +66,8 @@ class GamepadEngine(
     private val deviceHotplugListener = object : InputManager.InputDeviceListener {
         override fun onInputDeviceAdded(deviceId: Int) {
             hasConnectedGamepad = true
+            // Re-attach the gyro to whichever controller is connected now
+            gyroSource.stop()
             if (isRunning) {
                 hapticManager?.refreshGamepadVibrators()
                 linuxReader.restart()
@@ -73,6 +75,7 @@ class GamepadEngine(
         }
 
         override fun onInputDeviceRemoved(deviceId: Int) {
+            gyroSource.stop()
             if (isRunning) {
                 val wasConnected = hasConnectedGamepad
                 val nowConnected = checkConnectedGamepads()
@@ -94,7 +97,8 @@ class GamepadEngine(
 
     val movementProcessor = MovementProcessor(injector)
     val cameraProcessor = CameraProcessor(injector)
-    private val gyroSource = GyroSource(context)
+    internal val gyroSource = GyroSource()
+    private val gyroDelta = FloatArray(2)
     private var gyroSmoothX = 0f
     private var gyroSmoothY = 0f
     val buttonProcessor = ButtonProcessor(injector, scope, hapticManager)
@@ -379,6 +383,13 @@ class GamepadEngine(
     }
 
     /** Thread moteur : déplace le curseur selon le stick le plus incliné. */
+    /** The camera is not driven this frame: forget gyro motion so it can't jump in later (#22). */
+    private fun dropGyro() {
+        gyroSource.discard()
+        gyroSmoothX = 0f
+        gyroSmoothY = 0f
+    }
+
     private fun processCursorFrame() {
         val now = System.nanoTime()
         if (!cursorPrepared) {
@@ -479,12 +490,14 @@ class GamepadEngine(
                         val cursorActive = isCursorMode
                         val isFiring = !cursorActive && (rtPressed || buttonProcessor.isFireActive())
                         if (isInjectionSuspended) {
+                            dropGyro()
                             if (!suspendPrepared) {
                                 movementProcessor.release()
                                 cameraProcessor.release()
                                 suspendPrepared = true
                             }
                         } else if (cursorActive) {
+                            dropGyro()
                             processCursorFrame()
                         } else {
                             suspendPrepared = false
@@ -494,6 +507,7 @@ class GamepadEngine(
                                 // MOBA profile: the right stick only drives the aim joystick of the game
                                 // (the camera would press the fire zone). The left stick still walks.
                                 cameraProcessor.release()
+                                dropGyro()
                                 movementProcessor.process(lx, ly, false, isFiring = isFiring)
                                 buttonProcessor.processAimJoystick(rx, ry)
                             } else {
@@ -504,7 +518,9 @@ class GamepadEngine(
                                 var gyroDy = 0f
                                 if (camCfg.gyroEnabled) {
                                     gyroSource.ensureStarted()
-                                    val (yaw, pitch) = gyroSource.consumeDelta()
+                                    gyroSource.consumeDelta(gyroDelta)
+                                    val yaw = gyroDelta[0]
+                                    val pitch = gyroDelta[1]
                                     val held = camCfg.gyroActivation == GyroActivation.ALWAYS || ltPressed || "BUTTON_L2" in pressedRawButtons
                                     if (held) {
                                         val sign = { invert: Boolean -> if (invert) -1f else 1f }
