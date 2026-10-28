@@ -85,6 +85,8 @@ class ProfileRepository internal constructor(context: Context) {
             if (!cam.flickThreshold.isFinite()) cam.flickThreshold = 0.80f else cam.flickThreshold = cam.flickThreshold.coerceIn(0.5f, 1.0f)
             if (!cam.adsSensitivityMultiplier.isFinite()) cam.adsSensitivityMultiplier = 0.70f else cam.adsSensitivityMultiplier = cam.adsSensitivityMultiplier.coerceIn(0.1f, 3.0f)
             if (!cam.maxStepPixels.isFinite() || cam.maxStepPixels <= 0f) cam.maxStepPixels = 55.0f else cam.maxStepPixels = cam.maxStepPixels.coerceIn(1.0f, 150.0f)
+            // Same range as the Joystick radius slider
+            if (!cam.joystickRadius.isFinite() || cam.joystickRadius <= 0f) cam.joystickRadius = 0.12f else cam.joystickRadius = cam.joystickRadius.coerceIn(0.04f, 0.30f)
 
             // Sanitize Buttons
             if (p.buttons.size > 50) {

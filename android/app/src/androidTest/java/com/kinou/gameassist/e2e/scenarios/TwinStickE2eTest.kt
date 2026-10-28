@@ -66,4 +66,18 @@ class TwinStickE2eTest : GameE2eTest<FpsGameActivity, FpsGameView>(FpsGameActivi
 
         waitFor("the finger lifted") { game.snapshotState().pointersDown == 0 }
     }
+
+    @Test
+    fun switchingToJoystickMidPressStartsAFreshPressAtTheCenter() {
+        val swipe = twinStickProfile().also { it.camera.mode = CameraMode.SWIPE }
+        val rig = startEngine(swipe)
+        rig.rightStick(1f, 0f)
+        waitFor("the swipe finger down") { game.snapshotState().cameraTouches == 1 }
+
+        // the player switches the profile to Joystick while still pushing the stick: the swipe
+        // finger must be lifted and a new joystick press made, not dragged over to the joystick
+        rig.engine.setProfile(twinStickProfile())
+
+        waitFor("a fresh joystick press") { game.snapshotState().cameraTouches == 2 }
+    }
 }

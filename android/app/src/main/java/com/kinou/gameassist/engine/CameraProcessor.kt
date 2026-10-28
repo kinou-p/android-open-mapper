@@ -1,6 +1,7 @@
 package com.kinou.gameassist.engine
 
 import com.kinou.gameassist.data.model.CameraConfig
+import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -9,8 +10,16 @@ import kotlin.math.sign
 
 class CameraProcessor(
     private val injector: ShizukuTouchInjector,
-    @Volatile var config: CameraConfig = CameraConfig()
+    config: CameraConfig = CameraConfig()
 ) {
+    @Volatile var config: CameraConfig = config
+        set(value) {
+            // Switching swipe <-> joystick mid-press would turn the held finger into the other
+            // gesture (a swipe dragged to a joystick point, or back): lift it first.
+            if (value.mode != field.mode) release()
+            field = value
+        }
+
     companion object {
         const val POINTER_CAM_A = 1
         const val POINTER_CAM_B = 2
@@ -32,7 +41,7 @@ class CameraProcessor(
             if (isActive) release()
             return
         }
-        if (cfg.mode == com.kinou.gameassist.data.model.CameraMode.JOYSTICK) {
+        if (cfg.mode == CameraMode.JOYSTICK) {
             processJoystick(rx, ry, cfg)
             return
         }
@@ -187,14 +196,17 @@ class CameraProcessor(
         val dirX = if (cfg.invertX) -rx / mag else rx / mag
         val dirY = if (cfg.invertY) -ry / mag else ry / mag
 
-        if (!isActive) {
-            activePointerId = POINTER_CAM_A
-            injector.touchDown(activePointerId, centerX, centerY)
-            isActive = true
+        // Same lock as release(): a concurrent reset can't strand the finger between down and move
+        synchronized(this) {
+            if (!isActive) {
+                activePointerId = POINTER_CAM_A
+                injector.touchDown(activePointerId, centerX, centerY)
+                isActive = true
+            }
+            currentX = centerX + dirX * normMag * radiusPx
+            currentY = centerY + dirY * normMag * radiusPx
+            injector.touchMove(activePointerId, currentX, currentY)
         }
-        currentX = centerX + dirX * normMag * radiusPx
-        currentY = centerY + dirY * normMag * radiusPx
-        injector.touchMove(activePointerId, currentX, currentY)
     }
 
     fun release() {

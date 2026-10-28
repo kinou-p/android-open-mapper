@@ -167,4 +167,36 @@ class RightStickJoystickTest {
         assertTrue(moves.size >= 2)
         assertTrue(moves[1].x > moves[0].x)
     }
+
+    @Test
+    fun changingTheModeMidPressLiftsTheFinger() {
+        processor.process(1f, 0f)
+        processor.config = joystickConfig().copy(mode = CameraMode.SWIPE)
+
+        assertEquals("UP", injector.events.last().type)
+        assertEquals(1, injector.events.count { it.type == "UP" })
+    }
+
+    @Test
+    fun keepingTheModeKeepsTheFingerDown() {
+        processor.process(1f, 0f)
+        processor.config = joystickConfig().copy(joystickRadius = 0.2f)
+
+        assertTrue(injector.events.none { it.type == "UP" })
+    }
+
+    @Test
+    fun aConcurrentResetNeverStrandsTheFinger() {
+        val stop = java.util.concurrent.atomic.AtomicBoolean(false)
+        val resetter = Thread { while (!stop.get()) processor.release() }
+        resetter.start()
+        repeat(20_000) { processor.process(1f, 0f) }
+        stop.set(true)
+        resetter.join()
+        processor.release()
+
+        val downs = synchronized(injector.events) { injector.events.count { it.type == "DOWN" } }
+        val ups = synchronized(injector.events) { injector.events.count { it.type == "UP" } }
+        assertEquals("every press is lifted", downs, ups)
+    }
 }
