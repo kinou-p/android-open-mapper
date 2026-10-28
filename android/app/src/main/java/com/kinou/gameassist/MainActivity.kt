@@ -41,6 +41,14 @@ import com.kinou.gameassist.ui.screens.ProfileEditorScreen
 import com.kinou.gameassist.ui.screens.VisualHudEditorScreen
 import com.kinou.gameassist.ui.theme.*
 
+/** Who handles gamepad events in [MainActivity]: its visualizer, or the in-app HUD editor (#29). */
+internal object GamepadHandoff {
+    fun editorOwnsGamepad(screen: Screen): Boolean = screen == Screen.VISUAL_HUD_EDITOR
+
+    /** Live pressed/axis state is dropped only when the editor takes over. */
+    fun clearsLiveState(wasOwned: Boolean, nowOwned: Boolean): Boolean = nowOwned && !wasOwned
+}
+
 enum class Screen {
     HOME,
     PROFILES,
@@ -79,7 +87,7 @@ class MainActivity : AppCompatActivity() {
         set(value) {
             // Releases and neutral axes stop reaching this activity while the editor owns the
             // gamepad, so drop the live state instead of leaving buttons stuck "pressed".
-            if (value && !field) {
+            if (GamepadHandoff.clearsLiveState(field, value)) {
                 pressedButtons.clear()
                 pendingLx = 0f; pendingLy = 0f; pendingRx = 0f; pendingRy = 0f
                 flushUiStates()
@@ -169,7 +177,7 @@ class MainActivity : AppCompatActivity() {
                 var visualEditorOrigin by remember { mutableStateOf(Screen.PROFILES) }
                 val isServiceRunning by OverlayService.isServiceRunningFlow.collectAsState()
 
-                SideEffect { editorOwnsGamepad = currentScreen == Screen.VISUAL_HUD_EDITOR }
+                LaunchedEffect(currentScreen) { editorOwnsGamepad = GamepadHandoff.editorOwnsGamepad(currentScreen) }
                 DisposableEffect(Unit) { onDispose { editorOwnsGamepad = false } }
 
                 LaunchedEffect(profiles) {
