@@ -1121,25 +1121,16 @@ class HudEditorOverlayView(
         val minTop = topBarHeight + 8f * density
         val available = (barTop - 10f * density - minTop).coerceAtLeast(120f * density)
 
-        // Short (landscape) screens cannot fit every row in one column: split into two columns
-        // instead of letting the last rows (e.g. Aim) run under the bottom bar.
-        val minRow = 36f * density
-        fun heightFor(rows: Int, rowH: Float) = rows * rowH + (rows - 1) * gap + 2f * padding
-        val columns = if (heightFor(entries.size, minRow) > available) 2 else 1
-        val rowsPerColumn = (entries.size + columns - 1) / columns
+        val layout = menuLayout(entries.size, available, density)
+        val columns = layout.columns
+        val rowsPerColumn = layout.rowsPerColumn
+        val rowHeight = layout.rowHeight
+        val total = layout.height
         val columnWidth = 300f * density
         val panelWidth = (columnWidth * columns + (columns - 1) * gap)
             .coerceAtMost(w - 2f * sideMargin)
         val rowWidth = (panelWidth - 2f * padding - (columns - 1) * gap) / columns
 
-        var rowHeight = 46f * density
-        var total = heightFor(rowsPerColumn, rowHeight)
-        if (total > available) {
-            val needed = (available - 2f * padding - (rowsPerColumn - 1) * gap) / rowsPerColumn
-            // 20 dp floor: four rows always fit the 120 dp minimum area
-            rowHeight = needed.coerceIn(20f * density, rowHeight)
-            total = heightFor(rowsPerColumn, rowHeight)
-        }
 
         val anchorRect = if (openMenu == EditorMenu.ROLE) btnRoleRect else btnModeRect
         val panelLeft = (anchorRect.centerX() - panelWidth / 2f)
@@ -1793,4 +1784,26 @@ class HudEditorOverlayView(
         // Do not recycle bitmap on detach; ownership is managed by parent container
         screenshotBitmap = null
     }
+}
+
+/** Size of the role / mode selection menu, in px. */
+internal data class MenuLayout(val columns: Int, val rowsPerColumn: Int, val rowHeight: Float, val height: Float)
+
+/**
+ * Lays out [entries] menu rows in [available] px of height (issue #25): one column when every row
+ * fits at the 36 dp minimum, otherwise two columns (short landscape screens), with rows shrunk
+ * from 46 dp down to a 20 dp floor, so 4 rows per column always fit the 120 dp minimum area.
+ */
+internal fun menuLayout(entries: Int, available: Float, density: Float): MenuLayout {
+    val gap = 4f * density
+    val padding = 10f * density
+    fun heightFor(rows: Int, rowH: Float) = rows * rowH + (rows - 1) * gap + 2f * padding
+    val columns = if (heightFor(entries, 36f * density) > available) 2 else 1
+    val rowsPerColumn = (entries + columns - 1) / columns
+    var rowHeight = 46f * density
+    if (heightFor(rowsPerColumn, rowHeight) > available) {
+        val needed = (available - 2f * padding - (rowsPerColumn - 1) * gap) / rowsPerColumn
+        rowHeight = needed.coerceIn(20f * density, rowHeight)
+    }
+    return MenuLayout(columns, rowsPerColumn, rowHeight, heightFor(rowsPerColumn, rowHeight))
 }
