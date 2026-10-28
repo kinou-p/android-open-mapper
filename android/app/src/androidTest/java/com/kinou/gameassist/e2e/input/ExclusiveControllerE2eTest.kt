@@ -134,4 +134,55 @@ class ExclusiveControllerE2eTest {
         waitFor("the game to get the controller back") { gameSees.get() > seenBeforeGrab }
         assertTrue(gameSees.get() >= seenBeforeGrab + 4)
     }
+
+    @Test
+    fun theGrabIsReleasedWhenOpenMapperStopsReadingEvenWhileTheControllerIsIdle() {
+        val gameSees = startCounting("getevent -q $node") { input, n -> input.bufferedReader().forEachLine { n.incrementAndGet() } }
+        Thread.sleep(500)
+
+        // OpenMapper's reader piped into a background `cat` that plays the app reading it
+        val pidFile = "/data/local/tmp/om_exclusive_reader.pid"
+        val script = LinuxInputReader.nodeReadCommand(node, apk).last()
+        val sh = automation.executeShellCommandRw("sh")
+        toClose += sh[0]
+        toClose += sh[1]
+        val shIn = ParcelFileDescriptor.AutoCloseOutputStream(sh[1])
+        val nl = System.lineSeparator()
+        shIn.write(("( $script ) 2>/dev/null | cat > /dev/null & echo ${'$'}! > $pidFile" + nl).toByteArray())
+        shIn.flush()
+        Thread.sleep(2000) // app_process start-up and grab
+        val before = gameSees.get()
+        press()
+        Thread.sleep(500)
+        assertEquals("grabbed: the game sees nothing", before, gameSees.get())
+
+        // OpenMapper dies while the player isn't touching the controller
+        shIn.write(("kill $(cat $pidFile)" + nl).toByteArray())
+        shIn.flush()
+        Thread.sleep(2500) // longer than the reader's idle check
+
+        press()
+        waitFor("the game to get the controller back") { gameSees.get() > before }
+    }
+
+    @Test
+    fun theEngineHoldsTheGrabOnlyWhileMappingNotInTheHudEditor() {
+        val profile = com.kinou.gameassist.e2e.Profiles.profile(
+            "exclusive", emptyList(),
+            settings = com.kinou.gameassist.data.model.GameSettings(exclusiveController = true)
+        )
+        val rig = com.kinou.gameassist.e2e.E2eRig(profile)
+        try {
+            val reader = rig.engine.linuxReader
+            waitFor("the grabbing reader while mapping") { reader.exclusiveApkPath == apk }
+
+            rig.engine.setInjectionSuspended(true) // HUD editor open
+            waitFor("normal reading in the HUD editor") { reader.exclusiveApkPath == null }
+
+            rig.engine.setInjectionSuspended(false)
+            waitFor("the grabbing reader again") { reader.exclusiveApkPath == apk }
+        } finally {
+            rig.close()
+        }
+    }
 }

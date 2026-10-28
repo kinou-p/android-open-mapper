@@ -90,7 +90,7 @@
     <string name="tab_aim_title">🎯 Apuntado</string>
     <string name="tab_movement_title">🕹️ Mover</string>
     <string name="exclusive_controller_title">🔒 Ocultar el mando al juego</string>
-    <string name="exclusive_controller_desc">Para juegos que también leen el mando por su cuenta (cámara invertida, entradas dobles). Mientras se mapea, solo OpenMapper recibe el mando y el juego solo ve toques. Déjalo desactivado para otros juegos.</string>
+    <string name="exclusive_controller_desc">Para juegos que también leen el mando por su cuenta (cámara invertida, entradas dobles). Mientras se mapea, solo OpenMapper recibe el mando y el juego solo ve toques. Déjalo desactivado para otros juegos. Mientras está activo, la pantalla de prueba del mando de la app no ve el mando.</string>
     <string name="tab_buttons_title">🎮 Botones</string>
     <string name="tab_haptic_title">📳 Háptica</string>
     <string name="profile_copied_toast">¡Perfil copiado al portapapeles!</string>

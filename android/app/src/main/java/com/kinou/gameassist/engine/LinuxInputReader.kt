@@ -1,6 +1,7 @@
 package com.kinou.gameassist.engine
 
 import android.os.Build
+import com.kinou.gameassist.util.AppLog
 import kotlinx.coroutines.*
 import rikka.shizuku.Shizuku
 import java.io.File
@@ -21,6 +22,8 @@ class LinuxInputReader(
     private val scope: CoroutineScope
 ) {
     companion object {
+        private const val TAG = "Input"
+
         // linux/input-event-codes.h
         private const val ABS_Z = 0x02
         private const val ABS_RX = 0x03
@@ -180,8 +183,17 @@ class LinuxInputReader(
          * environment (an env array would replace it).
          */
         internal fun nodeReadCommand(nodePath: String, exclusiveApkPath: String?): Array<String> =
-            if (exclusiveApkPath == null) arrayOf("cat", nodePath)
+            // A quote would break the single-quoted sh arguments: read normally instead
+            if (exclusiveApkPath == null || '\'' in exclusiveApkPath || '\'' in nodePath) arrayOf("cat", nodePath)
             else arrayOf("sh", "-c", "CLASSPATH='$exclusiveApkPath' exec /system/bin/app_process /system/bin $EXCLUSIVE_READER_CLASS '$nodePath'")
+
+        /**
+         * The grabbing reader ended without delivering a single event while this reader is still
+         * current: it could not run (ROM blocks it, class missing...). Read the node with `cat`
+         * instead, so the worst case is today's behaviour, not a dead controller.
+         */
+        internal fun shouldFallBackToCat(exclusive: Boolean, eventsRead: Long, stillCurrent: Boolean): Boolean =
+            exclusive && eventsRead == 0L && stillCurrent
 
         private fun spawnShizukuProcess(cmd: Array<String>): Process? {
             return try {
@@ -481,8 +493,22 @@ class LinuxInputReader(
     /** Non-null: read the controllers exclusively (hidden from the game) with this APK's reader. */
     @Volatile var exclusiveApkPath: String? = null
 
+    /** Bumped by [stop]: node readers started before it know they are stale. */
+    @Volatile private var generation = 0
+
+    /** The grabbing reader reports on stderr whether the grab worked; keep that in the app log. */
+    private fun logReaderMessages(proc: Process, node: String) {
+        Thread({
+            runCatching {
+                proc.errorStream.bufferedReader().forEachLine { AppLog.i(TAG, "exclusive $node: $it") }
+            }
+        }, "ExclusiveReaderLog").apply { isDaemon = true }.start()
+    }
+
     fun start() {
         if (!isStartingOrRunning.compareAndSet(false, true)) return
+        // Captured now, not when the node readers get to run: a stop() in between makes them stale
+        val gen = generation
         isRunning = true
 
         readerJob = scope.launch(Dispatchers.IO) {
@@ -510,26 +536,39 @@ class LinuxInputReader(
                         if (!isRunning) break
                         val child = launch(Dispatchers.IO) {
                             val myJob = coroutineContext[Job]
-                            val apk = exclusiveApkPath
-                            val proc = spawnShizukuProcess(nodeReadCommand(nodeInfo.nodePath, apk)) ?: return@launch
-                            val inStream = proc.inputStream
-                            synchronized(processLock) {
-                                if (!isRunning) {
-                                    closeProcessQuietly(proc, inStream)
-                                    return@launch
-                                }
-                                activeProcesses.add(proc)
-                                activeStreams.add(inStream)
-                            }
+                            var apk = exclusiveApkPath
                             try {
-                                runBinaryStream(inStream, is64Bit, nodeInfo)
-                            } finally {
-                                synchronized(processLock) {
-                                    activeProcesses.remove(proc)
-                                    activeStreams.remove(inStream)
-                                    childJobs.remove(myJob)
+                                while (true) {
+                                    val proc = spawnShizukuProcess(nodeReadCommand(nodeInfo.nodePath, apk)) ?: return@launch
+                                    val inStream = proc.inputStream
+                                    synchronized(processLock) {
+                                        // A restart may have begun while we were spawning: this reader is stale
+                                        if (!isRunning || gen != generation) {
+                                            closeProcessQuietly(proc, inStream)
+                                            return@launch
+                                        }
+                                        activeProcesses.add(proc)
+                                        activeStreams.add(inStream)
+                                    }
+                                    if (apk != null) logReaderMessages(proc, nodeInfo.nodePath)
+                                    val events = try {
+                                        runBinaryStream(inStream, is64Bit, nodeInfo)
+                                    } finally {
+                                        synchronized(processLock) {
+                                            activeProcesses.remove(proc)
+                                            activeStreams.remove(inStream)
+                                        }
+                                        closeProcessQuietly(proc, inStream)
+                                    }
+                                    if (shouldFallBackToCat(apk != null, events, isRunning && gen == generation)) {
+                                        AppLog.w(TAG, "exclusive reader for ${nodeInfo.nodePath} gave no input, reading it normally")
+                                        apk = null
+                                        continue
+                                    }
+                                    break
                                 }
-                                closeProcessQuietly(proc, inStream)
+                            } finally {
+                                synchronized(processLock) { childJobs.remove(myJob) }
                             }
                         }
                         synchronized(processLock) {
@@ -606,6 +645,7 @@ class LinuxInputReader(
     }
 
     fun stop() {
+        generation++
         isRunning = false
         readerJob?.cancel()
         synchronized(processLock) {
@@ -649,7 +689,9 @@ class LinuxInputReader(
     /**
      * Reads direct binary `struct input_event` without any allocations.
      */
-    private fun runBinaryStream(inStream: InputStream, is64Bit: Boolean, nodeInfo: GamepadNodeInfo) {
+    /** Returns how many events were read. */
+    private fun runBinaryStream(inStream: InputStream, is64Bit: Boolean, nodeInfo: GamepadNodeInfo): Long {
+        var events = 0L
         val structSize = if (is64Bit) BinaryInputParser.STRUCT_SIZE_64 else BinaryInputParser.STRUCT_SIZE_32
         val buf = ByteArray(structSize)
         val rawEvent = BinaryInputParser.RawInputEvent()
@@ -659,7 +701,7 @@ class LinuxInputReader(
                 var bytesRead = 0
                 while (bytesRead < structSize && isRunning) {
                     val count = inStream.read(buf, bytesRead, structSize - bytesRead)
-                    if (count == -1) return
+                    if (count == -1) return events
                     bytesRead += count
                 }
                 if (bytesRead == structSize && isRunning) {
@@ -669,6 +711,7 @@ class LinuxInputReader(
                         BinaryInputParser.parseBinaryEvent32(buf, 0, rawEvent)
                     }
                     if (ok) {
+                        events++
                         dispatchRawEvent(rawEvent, nodeInfo)
                     }
                 }
@@ -680,6 +723,7 @@ class LinuxInputReader(
         } finally {
             try { inStream.close() } catch (_: Exception) {}
         }
+        return events
     }
 
     /**

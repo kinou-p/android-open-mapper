@@ -308,12 +308,23 @@ class GamepadEngine(
 
     @Volatile private var exclusiveSetting = false
 
-    /** Grabs or releases the controllers to match the profile setting and the HUD editor state. */
+    private val exclusiveLock = Any()
+
+    /**
+     * Grabs or releases the controllers to match the profile setting and the HUD editor state.
+     * Off the caller's thread (setProfile runs on the main thread and a restart waits for the old
+     * processes), one change at a time, always from the latest state: overlapping profile and
+     * editor changes can't leave the controller hidden in the editor.
+     */
     private fun applyExclusiveInput() {
-        val apk = if (exclusiveWanted(exclusiveSetting, isInjectionSuspended)) context.applicationInfo.sourceDir else null
-        if (linuxReader.exclusiveApkPath == apk) return
-        linuxReader.exclusiveApkPath = apk
-        if (isRunning) linuxReader.restart()
+        scope.launch(Dispatchers.IO) {
+            synchronized(exclusiveLock) {
+                val apk = if (exclusiveWanted(exclusiveSetting, isInjectionSuspended)) context.applicationInfo.sourceDir else null
+                if (linuxReader.exclusiveApkPath == apk) return@synchronized
+                linuxReader.exclusiveApkPath = apk
+                if (isRunning) linuxReader.restart()
+            }
+        }
     }
 
     /** Quitte le mode curseur (ex. surcouche impossible à afficher). */

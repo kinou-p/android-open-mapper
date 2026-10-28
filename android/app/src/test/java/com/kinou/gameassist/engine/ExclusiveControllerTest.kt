@@ -5,6 +5,7 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -59,5 +60,64 @@ class ExclusiveControllerTest {
         assertFalse("HUD editor open: release so it can learn keys", GamepadEngine.exclusiveWanted(setting = true, suspended = true))
         assertFalse(GamepadEngine.exclusiveWanted(setting = false, suspended = false))
         assertFalse(GamepadEngine.exclusiveWanted(setting = false, suspended = true))
+    }
+
+    @Test
+    fun aQuoteInAPathFallsBackToCatInsteadOfBreakingTheShellCommand() {
+        assertArrayEquals(arrayOf("cat", "/dev/input/event5"), LinuxInputReader.nodeReadCommand("/dev/input/event5", "/data/app/it's/base.apk"))
+        assertArrayEquals(arrayOf("cat", "/dev/input/ev'5"), LinuxInputReader.nodeReadCommand("/dev/input/ev'5", "/data/app/x/base.apk"))
+    }
+
+    @Test
+    fun aGrabbingReaderThatGaveNoInputFallsBackToNormalReading() {
+        assertTrue(LinuxInputReader.shouldFallBackToCat(exclusive = true, eventsRead = 0, stillCurrent = true))
+    }
+
+    @Test
+    fun noFallBackWhenItWorkedWasStoppedOrWasAlreadyNormal() {
+        assertFalse("it delivered input", LinuxInputReader.shouldFallBackToCat(exclusive = true, eventsRead = 12, stillCurrent = true))
+        assertFalse("the reader was stopped or restarted", LinuxInputReader.shouldFallBackToCat(exclusive = true, eventsRead = 0, stillCurrent = false))
+        assertFalse("already reading with cat", LinuxInputReader.shouldFallBackToCat(exclusive = false, eventsRead = 0, stillCurrent = true))
+    }
+
+    // Fake shapes of the hidden Os.ioctlInt across Android versions
+    object OsTwoArgs {
+        val calls = mutableListOf<Int>()
+        @JvmStatic fun ioctlInt(fd: java.io.FileDescriptor, cmd: Int): Int { calls += cmd; return 0 }
+    }
+
+    object OsThreeInts {
+        val calls = mutableListOf<Pair<Int, Int>>()
+        @JvmStatic fun ioctlInt(fd: java.io.FileDescriptor, cmd: Int, arg: Int): Int { calls += cmd to arg; return 0 }
+    }
+
+    class Int32Ref(@JvmField var value: Int)
+
+    object OsHolder {
+        val calls = mutableListOf<Pair<Int, Int>>()
+        @JvmStatic fun ioctlInt(fd: java.io.FileDescriptor, cmd: Int, arg: Int32Ref): Int { calls += cmd to arg.value; return 0 }
+    }
+
+    object OsNone {
+        @JvmStatic fun read(fd: java.io.FileDescriptor): Int = 0
+    }
+
+    @Test
+    fun theGrabWorksWithEveryKnownShapeOfIoctlInt() {
+        val fd = java.io.FileDescriptor()
+
+        ExclusiveInputReader.grabCall(OsTwoArgs::class.java)!!(fd)
+        assertEquals(listOf(ExclusiveInputReader.EVIOCGRAB), OsTwoArgs.calls)
+
+        ExclusiveInputReader.grabCall(OsThreeInts::class.java)!!(fd)
+        assertEquals(listOf(ExclusiveInputReader.EVIOCGRAB to 1), OsThreeInts.calls)
+
+        ExclusiveInputReader.grabCall(OsHolder::class.java)!!(fd)
+        assertEquals(listOf(ExclusiveInputReader.EVIOCGRAB to 1), OsHolder.calls)
+    }
+
+    @Test
+    fun noIoctlIntMeansNoGrabInsteadOfACrash() {
+        assertNull(ExclusiveInputReader.grabCall(OsNone::class.java))
     }
 }
