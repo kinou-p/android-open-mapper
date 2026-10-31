@@ -89,6 +89,8 @@
     <string name="btn_select">Select</string>
     <string name="tab_aim_title">🎯 Aim</string>
     <string name="tab_movement_title">🕹️ Move</string>
+    <string name="exclusive_controller_title">🔒 Hide controller from the game</string>
+    <string name="exclusive_controller_desc">For games that also read the controller themselves (inverted camera, double inputs). While mapping, only OpenMapper receives the controller and the game only sees touches. Leave off for other games. While on, the app\'s own gamepad test screen can\'t see the controller.</string>
     <string name="tab_buttons_title">🎮 Keys</string>
     <string name="tab_haptic_title">📳 Haptic</string>
     <string name="profile_copied_toast">Profile copied to clipboard!</string>

@@ -108,6 +108,9 @@ class GamepadEngine(
     @Volatile
     private var isRunning = false
 
+    /** Lets the reader refuse a queued restart once [stop] has begun. */
+    internal val isEngineRunning: Boolean get() = isRunning
+
     // Stick states (accessed concurrently by LinuxInputReader IO threads & engine loop)
     @Volatile var lx = 0.0f
     @Volatile var ly = 0.0f
@@ -125,6 +128,9 @@ class GamepadEngine(
     @Volatile private var hatRight = false
 
     companion object {
+        /** The controller is hidden from the game only while mapping, never while the HUD editor learns keys. */
+        fun exclusiveWanted(setting: Boolean, suspended: Boolean): Boolean = setting && !suspended
+
         const val TRIGGER_THRESHOLD = 0.30f
 
         // Mode curseur : le pointeur du joystick est libéré en entrant, on le réutilise pour cliquer
@@ -308,6 +314,28 @@ class GamepadEngine(
             }
             isInjectionSuspended = suspended
         }
+        applyExclusiveInput()
+    }
+
+    @Volatile private var exclusiveSetting = false
+
+    private val exclusiveLock = Any()
+
+    /**
+     * Grabs or releases the controllers to match the profile setting and the HUD editor state.
+     * Off the caller's thread (setProfile runs on the main thread and a restart waits for the old
+     * processes), one change at a time, always from the latest state: overlapping profile and
+     * editor changes can't leave the controller hidden in the editor.
+     */
+    private fun applyExclusiveInput() {
+        scope.launch(Dispatchers.IO) {
+            synchronized(exclusiveLock) {
+                val apk = if (exclusiveWanted(exclusiveSetting, isInjectionSuspended)) context.applicationInfo.sourceDir else null
+                if (linuxReader.exclusiveApkPath == apk) return@synchronized
+                linuxReader.exclusiveApkPath = apk
+                if (isRunning) linuxReader.restart()
+            }
+        }
     }
 
     /** Quitte le mode curseur (ex. surcouche impossible à afficher). */
@@ -433,6 +461,8 @@ class GamepadEngine(
 
     fun setProfile(profile: GameProfile) {
         currentProfile = profile
+        exclusiveSetting = profile.settings.exclusiveController
+        applyExclusiveInput()
         cursorSpeed = CursorSpeed.coerce(profile.settings.cursorSpeed)
         // Snapshots immuables et isolés du modèle : la boucle engine lit ces copies
         // @Volatile, jamais mutées in-place, donc aucune data race avec l'UI/l'éditeur.

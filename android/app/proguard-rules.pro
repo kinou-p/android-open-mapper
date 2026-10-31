@@ -18,4 +18,5 @@
 # Security Crypto (Tink) optional annotations
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.**
-
+# Started by name as the shell user via app_process (exclusive controller, issue #28)
+-keep class com.kinou.gameassist.engine.ExclusiveInputReader { public static void main(java.lang.String[]); }

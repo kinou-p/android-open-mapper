@@ -1,6 +1,7 @@
 package com.kinou.gameassist.engine
 
 import android.os.Build
+import com.kinou.gameassist.util.AppLog
 import kotlinx.coroutines.*
 import rikka.shizuku.Shizuku
 import java.io.File
@@ -21,6 +22,8 @@ class LinuxInputReader(
     private val scope: CoroutineScope
 ) {
     companion object {
+        private const val TAG = "Input"
+
         // linux/input-event-codes.h
         private const val ABS_Z = 0x02
         private const val ABS_RX = 0x03
@@ -171,6 +174,26 @@ class LinuxInputReader(
                 null
             }
         }
+
+        internal const val EXCLUSIVE_READER_CLASS = "com.kinou.gameassist.engine.ExclusiveInputReader"
+
+        /**
+         * How a controller node is read: `cat`, or the grabbing [ExclusiveInputReader] run from
+         * [exclusiveApkPath]. CLASSPATH is set inside `sh -c` so app_process keeps the shell's
+         * environment (an env array would replace it).
+         */
+        internal fun nodeReadCommand(nodePath: String, exclusiveApkPath: String?): Array<String> =
+            // A quote would break the single-quoted sh arguments: read normally instead
+            if (exclusiveApkPath == null || '\'' in exclusiveApkPath || '\'' in nodePath) arrayOf("cat", nodePath)
+            else arrayOf("sh", "-c", "CLASSPATH='$exclusiveApkPath' exec /system/bin/app_process /system/bin $EXCLUSIVE_READER_CLASS '$nodePath'")
+
+        /**
+         * The grabbing reader ended while this reader is still current (it crashed, the ROM
+         * blocked it, the class is missing...): its process death released the grab, so read the
+         * node with `cat` instead. The worst case is today's behaviour, not a dead controller.
+         */
+        internal fun shouldFallBackToCat(exclusive: Boolean, stillCurrent: Boolean): Boolean =
+            exclusive && stillCurrent
 
         private fun spawnShizukuProcess(cmd: Array<String>): Process? {
             return try {
@@ -467,8 +490,38 @@ class LinuxInputReader(
      * la réouverture par une nouvelle session. Aucun nettoyage agressif n'est donc requis.
      */
 
+    /** Non-null: read the controllers exclusively (hidden from the game) with this APK's reader. */
+    @Volatile var exclusiveApkPath: String? = null
+
+    /** Bumped by [stop]: node readers started before it know they are stale. */
+    @Volatile private var generation = 0
+
+    /** Serializes start/stop/restart so a queued restart can't outlive the engine's stop. */
+    private val lifecycleLock = Any()
+
+    /** The grabbing reader reports on stderr whether the grab worked; keep that in the app log. */
+    private fun logReaderMessages(proc: Process, node: String) {
+        Thread({
+            runCatching {
+                proc.errorStream.bufferedReader().forEachLine { AppLog.i(TAG, "exclusive $node: $it") }
+            }
+        }, "ExclusiveReaderLog").apply { isDaemon = true }.start()
+    }
+
     fun start() {
+        synchronized(lifecycleLock) { startLocked() }
+    }
+
+    /** True while the node readers are attached (so a stopped engine can be told apart). */
+    internal fun isReaderRunning(): Boolean = isRunning
+
+    private fun startLocked() {
+        // A hotplug or Shizuku-reconnect restart can be queued while the engine stops: never
+        // resurrect the reader behind its back, it would keep grabbing the controller.
+        if (!engine.isEngineRunning) return
         if (!isStartingOrRunning.compareAndSet(false, true)) return
+        // Captured now, not when the node readers get to run: a stop() in between makes them stale
+        val gen = generation
         isRunning = true
 
         readerJob = scope.launch(Dispatchers.IO) {
@@ -496,25 +549,42 @@ class LinuxInputReader(
                         if (!isRunning) break
                         val child = launch(Dispatchers.IO) {
                             val myJob = coroutineContext[Job]
-                            val proc = spawnShizukuProcess(arrayOf("cat", nodeInfo.nodePath)) ?: return@launch
-                            val inStream = proc.inputStream
-                            synchronized(processLock) {
-                                if (!isRunning) {
-                                    closeProcessQuietly(proc, inStream)
-                                    return@launch
-                                }
-                                activeProcesses.add(proc)
-                                activeStreams.add(inStream)
-                            }
+                            var apk = exclusiveApkPath
                             try {
-                                runBinaryStream(inStream, is64Bit, nodeInfo)
-                            } finally {
-                                synchronized(processLock) {
-                                    activeProcesses.remove(proc)
-                                    activeStreams.remove(inStream)
-                                    childJobs.remove(myJob)
+                                while (true) {
+                                    // A failed spawn means the Shizuku bridge itself is down: `cat`
+                                    // goes through the same bridge, so falling back wouldn't help.
+                                    // The next hotplug/reconnect restarts the reader instead.
+                                    val proc = spawnShizukuProcess(nodeReadCommand(nodeInfo.nodePath, apk)) ?: return@launch
+                                    val inStream = proc.inputStream
+                                    synchronized(processLock) {
+                                        // A restart may have begun while we were spawning: this reader is stale
+                                        if (!isRunning || gen != generation) {
+                                            closeProcessQuietly(proc, inStream)
+                                            return@launch
+                                        }
+                                        activeProcesses.add(proc)
+                                        activeStreams.add(inStream)
+                                    }
+                                    if (apk != null) logReaderMessages(proc, nodeInfo.nodePath)
+                                    try {
+                                        runBinaryStream(inStream, is64Bit, nodeInfo)
+                                    } finally {
+                                        synchronized(processLock) {
+                                            activeProcesses.remove(proc)
+                                            activeStreams.remove(inStream)
+                                        }
+                                        closeProcessQuietly(proc, inStream)
+                                    }
+                                    if (shouldFallBackToCat(apk != null, isRunning && gen == generation)) {
+                                        AppLog.w(TAG, "exclusive reader for ${nodeInfo.nodePath} ended, reading it normally")
+                                        apk = null
+                                        continue
+                                    }
+                                    break
                                 }
-                                closeProcessQuietly(proc, inStream)
+                            } finally {
+                                synchronized(processLock) { childJobs.remove(myJob) }
                             }
                         }
                         synchronized(processLock) {
@@ -591,6 +661,11 @@ class LinuxInputReader(
     }
 
     fun stop() {
+        synchronized(lifecycleLock) { stopLocked() }
+    }
+
+    private fun stopLocked() {
+        generation++
         isRunning = false
         readerJob?.cancel()
         synchronized(processLock) {
@@ -627,8 +702,10 @@ class LinuxInputReader(
      * redevient RUNNING_AUTHORIZED alors que le moteur est toujours actif.
      */
     fun restart() {
-        stop()
-        start()
+        synchronized(lifecycleLock) {
+            stopLocked()
+            startLocked()
+        }
     }
 
     /**

@@ -91,6 +91,7 @@ fun ProfileEditScreen(
     var aimRadius by remember(profile.id) { mutableFloatStateOf(AimSettings.coerceRadius(profile.settings.aimRadius)) }
     var aimDeadzone by remember(profile.id) { mutableFloatStateOf(AimSettings.coerceDeadzone(profile.settings.aimDeadzone)) }
     var responseCurve by remember(profile.id) { mutableStateOf(profile.camera.responseCurve) }
+    var exclusiveController by remember(profile.id) { mutableStateOf(profile.settings.exclusiveController) }
     var cameraMode by remember(profile.id) { mutableStateOf(profile.camera.mode) }
     var joystickRadius by remember(profile.id) { mutableFloatStateOf(profile.camera.joystickRadius) }
 
@@ -863,6 +864,43 @@ fun ProfileEditScreen(
                 // ==========================================
                 if (selectedTab == 1) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Hide the controller from games that partly read it themselves (issue #28)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    stringResource(R.string.exclusive_controller_title),
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    stringResource(R.string.exclusive_controller_desc),
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Switch(
+                                checked = exclusiveController,
+                                onCheckedChange = {
+                                    exclusiveController = it
+                                    profile.settings.exclusiveController = it
+                                    onSave()
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = DarkBackground,
+                                    checkedTrackColor = NeonPink,
+                                    uncheckedThumbColor = TextSecondary,
+                                    uncheckedTrackColor = DarkSurface
+                                )
+                            )
+                        }
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
                         SliderSetting(
                             label = stringResource(R.string.joystick_deadzone),
                             value = deadzoneJoy,
