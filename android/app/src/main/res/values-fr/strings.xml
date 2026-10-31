@@ -272,6 +272,7 @@
     <string name="invert_x_desc">Inverse les mouvements Gauche / Droite du stick caméra.</string>
     <string name="gyro_title">🎮 Visée au gyroscope de la manette</string>
     <string name="gyro_desc">Visez en inclinant la manette (manette avec gyroscope requise, Android 12+).</string>
+    <string name="gyro_swipe_only">La visée au gyroscope ne fonctionne qu\'avec la caméra par balayage.</string>
     <string name="gyro_activation_label">Activer avec</string>
     <string name="gyro_activation_lt">LT maintenu</string>
     <string name="gyro_activation_always">Toujours actif</string>

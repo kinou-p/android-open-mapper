@@ -734,7 +734,8 @@ fun ProfileEditScreen(
 
                         HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
 
-                        // --- Controller gyro aim ---
+                        // --- Controller gyro aim (swipe camera only) ---
+                        if (cameraMode == CameraMode.SWIPE) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -830,6 +831,13 @@ fun ProfileEditScreen(
                                     )
                                 }
                             }
+                        }
+                        } else {
+                            Text(
+                                stringResource(R.string.gyro_swipe_only),
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
                         }
 
                         // --- Raccourci Hot-Switch Info Banner ---

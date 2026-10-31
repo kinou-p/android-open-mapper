@@ -516,7 +516,7 @@ class GamepadEngine(
                                 movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
                                 var gyroDx = 0f
                                 var gyroDy = 0f
-                                if (camCfg.gyroEnabled) {
+                                if (camCfg.gyroApplies) {
                                     gyroSource.ensureStarted()
                                     gyroSource.consumeDelta(gyroDelta)
                                     val yaw = gyroDelta[0]

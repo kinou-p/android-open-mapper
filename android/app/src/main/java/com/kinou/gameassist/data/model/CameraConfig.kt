@@ -114,4 +114,7 @@ data class CameraConfig(
 
     @SerialName("gyro_smoothing")
     var gyroSmoothing: Float = 0.3f
-)
+) {
+    /** Gyro aim drives the swipe camera; in joystick mode the right stick owns the camera contact. */
+    val gyroApplies: Boolean get() = gyroEnabled && mode == CameraMode.SWIPE
+}

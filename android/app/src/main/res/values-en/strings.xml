@@ -272,6 +272,7 @@
     <string name="invert_x_desc">Inverts Left / Right camera movements.</string>
     <string name="gyro_title">🎮 Controller Gyro Aim</string>
     <string name="gyro_desc">Aim by tilting the controller (needs a controller with a gyro, Android 12+).</string>
+    <string name="gyro_swipe_only">Gyro aim works with the swipe camera only.</string>
     <string name="gyro_activation_label">Activate with</string>
     <string name="gyro_activation_lt">LT held</string>
     <string name="gyro_activation_always">Always on</string>

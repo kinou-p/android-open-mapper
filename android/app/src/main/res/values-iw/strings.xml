@@ -255,6 +255,7 @@
     <string name="invert_x_desc">היפוך תנועות מצלמה שמאלה/ימינה.</string>
     <string name="gyro_title">🎮 כוונון בג׳ירו של הבקר</string>
     <string name="gyro_desc">כוונו על ידי הטיית הבקר (נדרש בקר עם ג׳ירו, Android 12+).</string>
+    <string name="gyro_swipe_only">כוונון הג׳ירו עובד רק עם מצלמת ההחלקה.</string>
     <string name="gyro_activation_label">הפעלה באמצעות</string>
     <string name="gyro_activation_lt">LT לחוץ</string>
     <string name="gyro_activation_always">תמיד פעיל</string>

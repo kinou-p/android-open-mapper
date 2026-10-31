@@ -261,6 +261,7 @@
     <string name="invert_x_desc">Invierte los movimientos Izquierda / Derecha del stick de cámara.</string>
     <string name="gyro_title">🎮 Apuntar con giroscopio del mando</string>
     <string name="gyro_desc">Apunta inclinando el mando (requiere un mando con giroscopio, Android 12+).</string>
+    <string name="gyro_swipe_only">La mira con giroscopio solo funciona con la cámara de deslizar.</string>
     <string name="gyro_activation_label">Activar con</string>
     <string name="gyro_activation_lt">LT mantenido</string>
     <string name="gyro_activation_always">Siempre activo</string>

@@ -261,6 +261,7 @@
     <string name="invert_x_desc">Inverte os movimentos Esquerda / Direita do analógico de câmera.</string>
     <string name="gyro_title">🎮 Mira com giroscópio do controle</string>
     <string name="gyro_desc">Mire inclinando o controle (requer controle com giroscópio, Android 12+).</string>
+    <string name="gyro_swipe_only">A mira com giroscópio só funciona com a câmera de deslizar.</string>
     <string name="gyro_activation_label">Ativar com</string>
     <string name="gyro_activation_lt">LT segurado</string>
     <string name="gyro_activation_always">Sempre ativo</string>

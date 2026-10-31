@@ -5,6 +5,7 @@ import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -16,6 +17,7 @@ class RightStickJoystickTest {
         data class Touch(val type: String, val pointerId: Int, val x: Float, val y: Float)
 
         val events = mutableListOf<Touch>()
+        var beforeMove: (() -> Unit)? = null
 
         init {
             screenWidth = 2400
@@ -27,6 +29,7 @@ class RightStickJoystickTest {
         }
 
         override fun touchMove(pointerId: Int, x: Float, y: Float, pressure: Float?) {
+            beforeMove?.invoke()
             events.add(Touch("MOVE", pointerId, x, y))
         }
 
@@ -198,5 +201,67 @@ class RightStickJoystickTest {
         val downs = synchronized(injector.events) { injector.events.count { it.type == "DOWN" } }
         val ups = synchronized(injector.events) { injector.events.count { it.type == "UP" } }
         assertEquals("every press is lifted", downs, ups)
+    }
+
+    @Test
+    fun gyroAimOnlyAppliesToTheSwipeCamera() {
+        assertTrue(CameraConfig(gyroEnabled = true, mode = CameraMode.SWIPE).gyroApplies)
+        assertFalse(CameraConfig(gyroEnabled = true, mode = CameraMode.JOYSTICK).gyroApplies)
+        assertFalse(CameraConfig(gyroEnabled = false, mode = CameraMode.SWIPE).gyroApplies)
+    }
+
+    @Test
+    fun aFrameStillHoldingTheOldJoystickModeDoesNotPressAfterTheSwitch() {
+        processor.config = joystickConfig().copy(mode = CameraMode.SWIPE)
+
+        // The frame captured the config before the switch and only touches afterwards.
+        processor.processFrame(joystickConfig(), 1f, 0f)
+
+        assertTrue("the stale joystick frame pressed the camera zone", injector.events.isEmpty())
+    }
+
+    @Test
+    fun aFrameStillHoldingTheOldSwipeModeDoesNotPressAfterTheSwitch() {
+        processor.config = joystickConfig()
+
+        processor.processFrame(joystickConfig().copy(mode = CameraMode.SWIPE), 1f, 0f)
+
+        assertTrue("the stale swipe frame pressed the camera zone", injector.events.isEmpty())
+    }
+
+    @Test
+    fun aModeSwitchWaitsForTheSwipeTouchItCouldLiftToFinish() {
+        processor.config = joystickConfig().copy(mode = CameraMode.SWIPE)
+        val inMove = java.util.concurrent.CountDownLatch(1)
+        val resume = java.util.concurrent.CountDownLatch(1)
+        injector.beforeMove = {
+            inMove.countDown()
+            resume.await()
+        }
+
+        val frame = Thread { processor.process(1f, 0f) }
+        frame.start()
+        assertTrue("the swipe frame reached its move", inMove.await(2, java.util.concurrent.TimeUnit.SECONDS))
+
+        val setter = Thread { processor.config = joystickConfig() }
+        setter.start()
+        val deadline = System.nanoTime() + 2_000_000_000L
+        while (setter.state != Thread.State.BLOCKED && setter.state != Thread.State.TERMINATED && System.nanoTime() < deadline) {
+            Thread.yield()
+        }
+        assertEquals(
+            "the mode switch must not lift the finger while the frame is injecting",
+            Thread.State.BLOCKED, setter.state
+        )
+
+        resume.countDown()
+        frame.join(2000)
+        setter.join(2000)
+
+        assertEquals("the mode switch lifts the finger last: ${injector.events}", "UP", injector.events.last().type)
+        assertEquals(
+            injector.events.count { it.type == "DOWN" },
+            injector.events.count { it.type == "UP" }
+        )
     }
 }
