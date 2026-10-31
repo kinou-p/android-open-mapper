@@ -15,6 +15,11 @@ import com.kinou.gameassist.injector.ShizukuTouchInjector
  *
  * Mirrors the multi-touch semantics of the real injector: DOWN / POINTER_DOWN, MOVE with every
  * active pointer, POINTER_UP / UP.
+ *
+ * MOVEs are injected without waiting, like the real injector does for everything (async mode).
+ * Waiting for each one (~45 ms on a slow CI emulator) let a 120 Hz stream of joystick MOVEs, e.g.
+ * the aim-assist keep-alive while firing, hog the lock and starve rapid-fire taps. Downs and ups
+ * still wait, so the order the game sees stays deterministic.
  */
 class UiAutomationTouchInjector : ShizukuTouchInjector() {
 
@@ -46,7 +51,7 @@ class UiAutomationTouchInjector : ShizukuTouchInjector() {
             val point = pointers[pointerId] ?: return
             point[0] = x
             point[1] = y
-            inject(MotionEvent.ACTION_MOVE)
+            inject(MotionEvent.ACTION_MOVE, sync = false)
         }
     }
 
@@ -84,7 +89,7 @@ class UiAutomationTouchInjector : ShizukuTouchInjector() {
 
     private fun indexOf(pointerId: Int) = pointers.keys.indexOf(pointerId)
 
-    private fun inject(action: Int) {
+    private fun inject(action: Int, sync: Boolean = true) {
         val count = pointers.size
         val properties = Array(count) { MotionEvent.PointerProperties() }
         val coords = Array(count) { MotionEvent.PointerCoords() }
@@ -102,8 +107,8 @@ class UiAutomationTouchInjector : ShizukuTouchInjector() {
             downTime, SystemClock.uptimeMillis(), action, count, properties, coords,
             0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_TOUCHSCREEN, 0
         )
-        val accepted = uiAutomation.injectInputEvent(event, true)
-        Log.d(TAG, "inject action=$action pointers=$count accepted=$accepted ${coords.joinToString { "(${it.x.toInt()},${it.y.toInt()})" }}")
+        val accepted = uiAutomation.injectInputEvent(event, sync)
+        Log.d(TAG, "inject action=$action pointers=$count sync=$sync accepted=$accepted ${coords.joinToString { "(${it.x.toInt()},${it.y.toInt()})" }}")
         event.recycle()
     }
 }
