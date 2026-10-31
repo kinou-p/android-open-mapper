@@ -108,6 +108,9 @@ class GamepadEngine(
     @Volatile
     private var isRunning = false
 
+    /** Lets the reader refuse a queued restart once [stop] has begun. */
+    internal val isEngineRunning: Boolean get() = isRunning
+
     // Stick states (accessed concurrently by LinuxInputReader IO threads & engine loop)
     @Volatile var lx = 0.0f
     @Volatile var ly = 0.0f

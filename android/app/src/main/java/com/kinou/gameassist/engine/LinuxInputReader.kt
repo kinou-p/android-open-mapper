@@ -188,12 +188,12 @@ class LinuxInputReader(
             else arrayOf("sh", "-c", "CLASSPATH='$exclusiveApkPath' exec /system/bin/app_process /system/bin $EXCLUSIVE_READER_CLASS '$nodePath'")
 
         /**
-         * The grabbing reader ended without delivering a single event while this reader is still
-         * current: it could not run (ROM blocks it, class missing...). Read the node with `cat`
-         * instead, so the worst case is today's behaviour, not a dead controller.
+         * The grabbing reader ended while this reader is still current (it crashed, the ROM
+         * blocked it, the class is missing...): its process death released the grab, so read the
+         * node with `cat` instead. The worst case is today's behaviour, not a dead controller.
          */
-        internal fun shouldFallBackToCat(exclusive: Boolean, eventsRead: Long, stillCurrent: Boolean): Boolean =
-            exclusive && eventsRead == 0L && stillCurrent
+        internal fun shouldFallBackToCat(exclusive: Boolean, stillCurrent: Boolean): Boolean =
+            exclusive && stillCurrent
 
         private fun spawnShizukuProcess(cmd: Array<String>): Process? {
             return try {
@@ -496,6 +496,9 @@ class LinuxInputReader(
     /** Bumped by [stop]: node readers started before it know they are stale. */
     @Volatile private var generation = 0
 
+    /** Serializes start/stop/restart so a queued restart can't outlive the engine's stop. */
+    private val lifecycleLock = Any()
+
     /** The grabbing reader reports on stderr whether the grab worked; keep that in the app log. */
     private fun logReaderMessages(proc: Process, node: String) {
         Thread({
@@ -506,6 +509,16 @@ class LinuxInputReader(
     }
 
     fun start() {
+        synchronized(lifecycleLock) { startLocked() }
+    }
+
+    /** True while the node readers are attached (so a stopped engine can be told apart). */
+    internal fun isReaderRunning(): Boolean = isRunning
+
+    private fun startLocked() {
+        // A hotplug or Shizuku-reconnect restart can be queued while the engine stops: never
+        // resurrect the reader behind its back, it would keep grabbing the controller.
+        if (!engine.isEngineRunning) return
         if (!isStartingOrRunning.compareAndSet(false, true)) return
         // Captured now, not when the node readers get to run: a stop() in between makes them stale
         val gen = generation
@@ -539,6 +552,9 @@ class LinuxInputReader(
                             var apk = exclusiveApkPath
                             try {
                                 while (true) {
+                                    // A failed spawn means the Shizuku bridge itself is down: `cat`
+                                    // goes through the same bridge, so falling back wouldn't help.
+                                    // The next hotplug/reconnect restarts the reader instead.
                                     val proc = spawnShizukuProcess(nodeReadCommand(nodeInfo.nodePath, apk)) ?: return@launch
                                     val inStream = proc.inputStream
                                     synchronized(processLock) {
@@ -551,7 +567,7 @@ class LinuxInputReader(
                                         activeStreams.add(inStream)
                                     }
                                     if (apk != null) logReaderMessages(proc, nodeInfo.nodePath)
-                                    val events = try {
+                                    try {
                                         runBinaryStream(inStream, is64Bit, nodeInfo)
                                     } finally {
                                         synchronized(processLock) {
@@ -560,8 +576,8 @@ class LinuxInputReader(
                                         }
                                         closeProcessQuietly(proc, inStream)
                                     }
-                                    if (shouldFallBackToCat(apk != null, events, isRunning && gen == generation)) {
-                                        AppLog.w(TAG, "exclusive reader for ${nodeInfo.nodePath} gave no input, reading it normally")
+                                    if (shouldFallBackToCat(apk != null, isRunning && gen == generation)) {
+                                        AppLog.w(TAG, "exclusive reader for ${nodeInfo.nodePath} ended, reading it normally")
                                         apk = null
                                         continue
                                     }
@@ -645,6 +661,10 @@ class LinuxInputReader(
     }
 
     fun stop() {
+        synchronized(lifecycleLock) { stopLocked() }
+    }
+
+    private fun stopLocked() {
         generation++
         isRunning = false
         readerJob?.cancel()
@@ -682,16 +702,16 @@ class LinuxInputReader(
      * redevient RUNNING_AUTHORIZED alors que le moteur est toujours actif.
      */
     fun restart() {
-        stop()
-        start()
+        synchronized(lifecycleLock) {
+            stopLocked()
+            startLocked()
+        }
     }
 
     /**
      * Reads direct binary `struct input_event` without any allocations.
      */
-    /** Returns how many events were read. */
-    private fun runBinaryStream(inStream: InputStream, is64Bit: Boolean, nodeInfo: GamepadNodeInfo): Long {
-        var events = 0L
+    private fun runBinaryStream(inStream: InputStream, is64Bit: Boolean, nodeInfo: GamepadNodeInfo) {
         val structSize = if (is64Bit) BinaryInputParser.STRUCT_SIZE_64 else BinaryInputParser.STRUCT_SIZE_32
         val buf = ByteArray(structSize)
         val rawEvent = BinaryInputParser.RawInputEvent()
@@ -701,7 +721,7 @@ class LinuxInputReader(
                 var bytesRead = 0
                 while (bytesRead < structSize && isRunning) {
                     val count = inStream.read(buf, bytesRead, structSize - bytesRead)
-                    if (count == -1) return events
+                    if (count == -1) return
                     bytesRead += count
                 }
                 if (bytesRead == structSize && isRunning) {
@@ -711,7 +731,6 @@ class LinuxInputReader(
                         BinaryInputParser.parseBinaryEvent32(buf, 0, rawEvent)
                     }
                     if (ok) {
-                        events++
                         dispatchRawEvent(rawEvent, nodeInfo)
                     }
                 }
@@ -723,7 +742,6 @@ class LinuxInputReader(
         } finally {
             try { inStream.close() } catch (_: Exception) {}
         }
-        return events
     }
 
     /**

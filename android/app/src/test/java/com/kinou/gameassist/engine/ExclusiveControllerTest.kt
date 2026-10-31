@@ -68,16 +68,16 @@ class ExclusiveControllerTest {
         assertArrayEquals(arrayOf("cat", "/dev/input/ev'5"), LinuxInputReader.nodeReadCommand("/dev/input/ev'5", "/data/app/x/base.apk"))
     }
 
+    /** Also covers a grabber that crashed after delivering events: its death released the grab. */
     @Test
-    fun aGrabbingReaderThatGaveNoInputFallsBackToNormalReading() {
-        assertTrue(LinuxInputReader.shouldFallBackToCat(exclusive = true, eventsRead = 0, stillCurrent = true))
+    fun anExclusiveReaderThatEndsWhileCurrentFallsBackToNormalReading() {
+        assertTrue(LinuxInputReader.shouldFallBackToCat(exclusive = true, stillCurrent = true))
     }
 
     @Test
-    fun noFallBackWhenItWorkedWasStoppedOrWasAlreadyNormal() {
-        assertFalse("it delivered input", LinuxInputReader.shouldFallBackToCat(exclusive = true, eventsRead = 12, stillCurrent = true))
-        assertFalse("the reader was stopped or restarted", LinuxInputReader.shouldFallBackToCat(exclusive = true, eventsRead = 0, stillCurrent = false))
-        assertFalse("already reading with cat", LinuxInputReader.shouldFallBackToCat(exclusive = false, eventsRead = 0, stillCurrent = true))
+    fun noFallBackWhenStoppedOrAlreadyNormal() {
+        assertFalse("the reader was stopped or restarted", LinuxInputReader.shouldFallBackToCat(exclusive = true, stillCurrent = false))
+        assertFalse("already reading with cat", LinuxInputReader.shouldFallBackToCat(exclusive = false, stillCurrent = true))
     }
 
     // Fake shapes of the hidden Os.ioctlInt across Android versions
