@@ -21,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kinou.gameassist.MainActivity
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.model.ButtonMode
+import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.e2e.Profiles
 import com.kinou.gameassist.e2e.waitFor
@@ -29,6 +30,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -147,5 +149,25 @@ class HudEditorE2eTest {
         }
 
         waitFor("BUTTON_B to be assigned") { view.selectedButton?.gamepadButton == "BUTTON_B" }
+    }
+
+    @Test
+    fun everyRoleIsReachableInTheRoleMenu() {
+        val view = editor()!!
+        tap(view, view.width * 0.5f, view.height * 0.5f)
+        waitFor("the button to be selected") { view.selectedButton != null }
+        waitFor("the Role button to be drawn") { !view.btnRoleRect.isEmpty }
+
+        tap(view, view.btnRoleRect.centerX(), view.btnRoleRect.centerY())
+
+        waitFor("the role menu to open") { view.menuRowRects.size == ButtonRole.entries.size }
+        view.menuRowRects.forEachIndexed { i, row ->
+            assertTrue("role row $i is fully on screen: $row", row.left >= 0f && row.top >= 0f && row.right <= view.width && row.bottom <= view.height)
+            assertTrue("role row $i sits above the bottom bar: $row vs Role button ${view.btnRoleRect}", row.bottom <= view.btnRoleRect.top)
+        }
+        val aim = view.menuRowRects[ButtonRole.entries.indexOf(ButtonRole.AIM_JOYSTICK)]
+        tap(view, aim.centerX(), aim.centerY())
+
+        waitFor("the Aim role to be applied") { view.selectedButton?.role == ButtonRole.AIM_JOYSTICK }
     }
 }
