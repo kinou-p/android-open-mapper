@@ -5,6 +5,8 @@ import android.app.Instrumentation
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
@@ -38,6 +40,9 @@ class ImportFromFileE2eTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val repository = ProfileRepository.getInstance(context)
     private fun text(id: Int) = context.getString(id)
+
+    // the Profiles top bar shows icon-only buttons under 480 dp wide (phones in portrait)
+    private fun topBarButton(label: String) = hasText(label) or hasContentDescription(label)
     private val files = ArrayList<File>()
 
     @Before
@@ -69,7 +74,7 @@ class ImportFromFileE2eTest {
         intending(hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(Instrumentation.ActivityResult(Activity.RESULT_OK, result))
 
         rule.onAllNodesWithText(text(R.string.nav_profiles)).onFirst().performClick()
-        rule.onNodeWithText(text(R.string.btn_import)).performClick()
+        rule.onNode(topBarButton(text(R.string.btn_import))).performClick()
         rule.onNodeWithText(text(R.string.btn_import_from_file)).performClick()
     }
 
