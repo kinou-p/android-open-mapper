@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import com.kinou.gameassist.data.model.ButtonConfig
 import com.kinou.gameassist.data.model.ButtonMode
 import com.kinou.gameassist.data.model.ButtonRole
+import com.kinou.gameassist.data.model.CameraConfig
 import com.kinou.gameassist.data.model.GameProfile
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -146,6 +147,42 @@ class ProfileRepositoryTest {
         assertEquals(0.5f, btn.x, 0.001f) // NaN fallback
         assertEquals(-0.5f, btn.y, 0.001f) // Clamped to -0.5
         assertEquals(0.045f, btn.radius, 0.001f) // Negative fallback
+    }
+
+    @Test
+    fun testGyroSensitivityIsBoundedOnImport() {
+        fun sanitized(value: Float): Float {
+            val profile = GameProfile(
+                id = "gyro_sensitivity",
+                name = "Gyro",
+                camera = CameraConfig(gyroSensitivity = value)
+            )
+            ProfileRepository.validateAndSanitizeProfile(profile, "Custom Profile")
+            return profile.camera.gyroSensitivity
+        }
+
+        assertEquals("negative falls back to the default", 1.0f, sanitized(-2.0f), 0.001f)
+        assertEquals("zero falls back to the default", 1.0f, sanitized(0.0f), 0.001f)
+        assertEquals("NaN falls back to the default", 1.0f, sanitized(Float.NaN), 0.001f)
+        assertEquals("huge is clamped to the slider max", 5.0f, sanitized(100.0f), 0.001f)
+        assertEquals("below the slider min is clamped up", 0.2f, sanitized(0.05f), 0.001f)
+    }
+
+    @Test
+    fun testGyroSmoothingIsBoundedOnImport() {
+        fun sanitized(value: Float): Float {
+            val profile = GameProfile(
+                id = "gyro_smoothing",
+                name = "Gyro",
+                camera = CameraConfig(gyroSmoothing = value)
+            )
+            ProfileRepository.validateAndSanitizeProfile(profile, "Custom Profile")
+            return profile.camera.gyroSmoothing
+        }
+
+        assertEquals("negative is clamped to 0", 0.0f, sanitized(-1.0f), 0.001f)
+        assertEquals("above the slider max is clamped to 0.9", 0.9f, sanitized(2.0f), 0.001f)
+        assertEquals("NaN falls back to the default", 0.3f, sanitized(Float.NaN), 0.001f)
     }
 
     @Test

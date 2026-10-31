@@ -34,7 +34,11 @@ class CameraProcessor(
     @Volatile private var prevSmoothDx = 0.0f
     @Volatile private var prevSmoothDy = 0.0f
 
-    fun process(rx: Float, ry: Float, isAiming: Boolean = false, isFiring: Boolean = false) {
+    /** [gyroDx]/[gyroDy] are extra pixels of camera movement from the controller gyro this frame. */
+    fun process(
+        rx: Float, ry: Float, isAiming: Boolean = false, isFiring: Boolean = false,
+        gyroDx: Float = 0f, gyroDy: Float = 0f
+    ) {
         // Snapshot local immuable de la config pour toute la frame.
         val cfg = config
         if (!cfg.enabled) {
@@ -72,11 +76,13 @@ class CameraProcessor(
             0.0f
         }
 
-        if (mag > innerDeadzone || recoilDy > 0f) {
+        val gyroActive = gyroDx != 0f || gyroDy != 0f
+
+        if (mag > innerDeadzone || recoilDy > 0f || gyroActive) {
             val adsFactor = if (cfg.adsSensitivityEnabled && isAiming) cfg.adsSensitivityMultiplier.coerceIn(0.05f, 3.0f) else 1.0f
 
-            var targetDx = 0.0f
-            var targetDy = recoilDy
+            var targetDx = gyroDx * adsFactor
+            var targetDy = recoilDy + gyroDy * adsFactor
 
             if (mag > innerDeadzone) {
                 val normMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
@@ -124,7 +130,7 @@ class CameraProcessor(
                     }
                 }
 
-                targetDx = dirX * curvedMagX * cfg.sensitivityX * adsFactor * baseStep
+                targetDx += dirX * curvedMagX * cfg.sensitivityX * adsFactor * baseStep
                 targetDy += dirY * curvedMagY * cfg.sensitivityY * adsFactor * baseStep
             }
 

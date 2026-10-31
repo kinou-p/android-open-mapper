@@ -1,6 +1,8 @@
 package com.kinou.gameassist.e2e.app
 
 import android.os.SystemClock
+import android.view.InputDevice
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -19,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kinou.gameassist.MainActivity
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.model.ButtonMode
+import com.kinou.gameassist.data.model.ButtonRole
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.e2e.Profiles
 import com.kinou.gameassist.e2e.waitFor
@@ -27,6 +30,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -127,5 +131,43 @@ class HudEditorE2eTest {
         val moved = view.selectedButton!!
         assertEquals("x after the drag", 0.3f, moved.x, 0.06f)
         assertEquals("y after the drag", 0.7f, moved.y, 0.06f)
+    }
+
+    @Test
+    fun aGamepadKeyIsLearnedInsideTheApp() {
+        val view = editor()!!
+        tap(view, view.width * 0.5f, view.height * 0.5f)
+        waitFor("the button to be selected") { view.selectedButton?.id == "hud_a" }
+        instrumentation.runOnMainSync { view.isLearning = true }
+
+        // Through the activity's window, like a real controller (issue #29: MainActivity consumed it)
+        val now = SystemClock.uptimeMillis()
+        for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+            instrumentation.sendKeySync(
+                KeyEvent(now, now, action, KeyEvent.KEYCODE_BUTTON_B, 0, 0, 0, 0, 0, InputDevice.SOURCE_GAMEPAD)
+            )
+        }
+
+        waitFor("BUTTON_B to be assigned") { view.selectedButton?.gamepadButton == "BUTTON_B" }
+    }
+
+    @Test
+    fun everyRoleIsReachableInTheRoleMenu() {
+        val view = editor()!!
+        tap(view, view.width * 0.5f, view.height * 0.5f)
+        waitFor("the button to be selected") { view.selectedButton != null }
+        waitFor("the Role button to be drawn") { !view.btnRoleRect.isEmpty }
+
+        tap(view, view.btnRoleRect.centerX(), view.btnRoleRect.centerY())
+
+        waitFor("the role menu to open") { view.menuRowRects.size == ButtonRole.entries.size }
+        view.menuRowRects.forEachIndexed { i, row ->
+            assertTrue("role row $i is fully on screen: $row", row.left >= 0f && row.top >= 0f && row.right <= view.width && row.bottom <= view.height)
+            assertTrue("role row $i sits above the bottom bar: $row vs Role button ${view.btnRoleRect}", row.bottom <= view.btnRoleRect.top)
+        }
+        val aim = view.menuRowRects[ButtonRole.entries.indexOf(ButtonRole.AIM_JOYSTICK)]
+        tap(view, aim.centerX(), aim.centerY())
+
+        waitFor("the Aim role to be applied") { view.selectedButton?.role == ButtonRole.AIM_JOYSTICK }
     }
 }

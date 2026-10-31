@@ -235,6 +235,9 @@
     <string name="overlay_learning_banner">👉 PRESS A BUTTON ON GAMEPAD TO ASSIGN [%1$s]</string>
     <string name="overlay_hud_editor">HUD Editor</string>
     <string name="overlay_open_app">Open App</string>
+    <string name="overlay_handle_style_title">Quick menu</string>
+    <string name="overlay_handle_style_edge">Edge tab</string>
+    <string name="overlay_handle_style_bubble">Floating bubble</string>
     <string name="overlay_stop_mapping">Stop Mapping</string>
     <string name="overlay_notif_title">OpenMapper - Mapping Active</string>
     <string name="overlay_notif_text">Profile: %1$s • Tap to configure</string>
@@ -267,6 +270,13 @@
     <string name="invert_y_desc">Inverts Up / Down camera movements.</string>
     <string name="invert_x_title">↔️ Invert Horizontal Axis (X)</string>
     <string name="invert_x_desc">Inverts Left / Right camera movements.</string>
+    <string name="gyro_title">🎮 Controller Gyro Aim</string>
+    <string name="gyro_desc">Aim by tilting the controller (needs a controller with a gyro, Android 12+).</string>
+    <string name="gyro_activation_label">Activate with</string>
+    <string name="gyro_activation_lt">LT held</string>
+    <string name="gyro_activation_always">Always on</string>
+    <string name="gyro_sensitivity_label">Gyro sensitivity</string>
+    <string name="gyro_smoothing_label">Gyro smoothing</string>
     <string name="hot_switch_hint">💡 Hot-Switch Shortcut: Hold SELECT + D-Pad Up/Down to switch profiles mid-game!</string>
     <string name="tab_polling_rate">⚡ Polling &amp; Latency</string>
     <string name="polling_test_title">⚡ Polling Rate &amp; Latency Analyzer</string>

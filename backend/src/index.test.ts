@@ -355,6 +355,31 @@ describe('validateProfileStructure Strict Schema & Type Validation', () => {
     expect(resCam.error).toContain('hors limites');
   });
 
+  it('rejette les valeurs gyro hors limites', () => {
+    const badSensitivity = { ...validProfile, camera: { ...validProfile.camera, gyro_sensitivity: 100 } };
+    const resSensitivity = validateProfileStructure(badSensitivity);
+    expect(resSensitivity.valid).toBe(false);
+    expect(resSensitivity.error).toContain('Camera gyro_sensitivity');
+    expect(resSensitivity.error).toContain('hors limites');
+
+    const badSmoothing = { ...validProfile, camera: { ...validProfile.camera, gyro_smoothing: -0.5 } };
+    const resSmoothing = validateProfileStructure(badSmoothing);
+    expect(resSmoothing.valid).toBe(false);
+    expect(resSmoothing.error).toContain('Camera gyro_smoothing');
+    expect(resSmoothing.error).toContain('hors limites');
+
+    const badCamelCase = { ...validProfile, camera: { ...validProfile.camera, gyroSensitivity: 100 } };
+    expect(validateProfileStructure(badCamelCase).valid).toBe(false);
+  });
+
+  it('accepte des valeurs gyro dans les limites', () => {
+    const profile = {
+      ...validProfile,
+      camera: { ...validProfile.camera, gyro_sensitivity: 2.5, gyro_smoothing: 0.4 }
+    };
+    expect(validateProfileStructure(profile).valid).toBe(true);
+  });
+
   it('rejette les types non numériques injectés dans les boutons', () => {
     const badBtnX = {
       ...validProfile,

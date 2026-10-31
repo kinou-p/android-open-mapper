@@ -79,6 +79,10 @@ class OverlayService : LifecycleService() {
     // Overlay Views
     private var edgeHandleView: EdgeHandleOverlayView? = null
     private var edgeHandleParams: WindowManager.LayoutParams? = null
+    // Switching between edge tab and bubble in the app rebuilds the handle live
+    private val handleStyleListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == EdgeHandleOverlayView.KEY_BUBBLE) mainHandler.post { recreateEdgeHandle() }
+    }
 
     private var editorView: HudEditorOverlayView? = null
 
@@ -265,6 +269,8 @@ class OverlayService : LifecycleService() {
         }
 
         showEdgeHandle()
+        getSharedPreferences(EdgeHandleOverlayView.PREFS, Context.MODE_PRIVATE)
+            .registerOnSharedPreferenceChangeListener(handleStyleListener)
 
         return START_STICKY
     }
@@ -409,10 +415,26 @@ class OverlayService : LifecycleService() {
                         repository.saveProfileAsync(prof)
                     }
                 }
-            }
+            },
+            bubble = EdgeHandleOverlayView.isBubble(this)
         )
 
         windowManager.addView(edgeHandleView, edgeHandleParams)
+    }
+
+    private fun recreateEdgeHandle() {
+        val old = edgeHandleView ?: return
+        val visibility = old.visibility
+        safeRemoveView(old)
+        edgeHandleView = null
+        try {
+            showEdgeHandle()
+            edgeHandleView?.visibility = visibility
+        } catch (e: Exception) {
+            // e.g. overlay permission revoked meanwhile: keep the service alive without a handle
+            AppLog.w("Service", "quick menu handle could not be shown: ${e.message}")
+            edgeHandleView = null
+        }
     }
 
     private fun toggleHudEditor() {
@@ -659,6 +681,8 @@ class OverlayService : LifecycleService() {
             }
         }
         currentEditorBitmap = null
+        getSharedPreferences(EdgeHandleOverlayView.PREFS, Context.MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(handleStyleListener)
         safeRemoveView(edgeHandleView)
         edgeHandleView = null
         safeRemoveView(editorView)

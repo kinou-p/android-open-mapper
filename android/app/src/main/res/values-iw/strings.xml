@@ -222,6 +222,9 @@
     <string name="overlay_learning_banner">👉 לחץ על כפתור בבקר כדי להקצות את [%1$s]</string>
     <string name="overlay_hud_editor">עורך HUD</string>
     <string name="overlay_open_app">פתח אפליקציה</string>
+    <string name="overlay_handle_style_title">תפריט מהיר</string>
+    <string name="overlay_handle_style_edge">לשונית בצד</string>
+    <string name="overlay_handle_style_bubble">בועה צפה</string>
     <string name="overlay_stop_mapping">עצור מיפוי</string>
     <string name="overlay_notif_title">OpenMapper - המיפוי פעיל</string>
     <string name="overlay_notif_text">פרופיל: %1$s • הקש להגדרה</string>
@@ -250,6 +253,13 @@
     <string name="invert_y_desc">היפוך תנועות מצלמה למעלה/למטה.</string>
     <string name="invert_x_title">↔️ היפוך ציר אופקי (X)</string>
     <string name="invert_x_desc">היפוך תנועות מצלמה שמאלה/ימינה.</string>
+    <string name="gyro_title">🎮 כוונון בג׳ירו של הבקר</string>
+    <string name="gyro_desc">כוונו על ידי הטיית הבקר (נדרש בקר עם ג׳ירו, Android 12+).</string>
+    <string name="gyro_activation_label">הפעלה באמצעות</string>
+    <string name="gyro_activation_lt">LT לחוץ</string>
+    <string name="gyro_activation_always">תמיד פעיל</string>
+    <string name="gyro_sensitivity_label">רגישות ג׳ירו</string>
+    <string name="gyro_smoothing_label">החלקת ג׳ירו</string>
     <string name="hot_switch_hint">💡 קיצור דרך להחלפה מהירה: החזק את SELECT + חץ למעלה/למטה ב-D-Pad כדי להחליף פרופילים תוך כדי משחק!</string>
     <string name="tab_polling_rate">⚡ קצב דגימה והשהיה</string>
     <string name="polling_test_title">⚡ ניתוח קצב דגימה ושיהוי</string>

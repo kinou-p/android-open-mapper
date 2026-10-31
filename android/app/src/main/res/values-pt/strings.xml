@@ -224,6 +224,9 @@
     <string name="overlay_learning_banner">👉 PRESSIONE UM BOTÃO NO CONTROLE PARA ATRIBUIR [%1$s]</string>
     <string name="overlay_hud_editor">Editor HUD</string>
     <string name="overlay_open_app">Abrir App</string>
+    <string name="overlay_handle_style_title">Menu rápido</string>
+    <string name="overlay_handle_style_edge">Aba lateral</string>
+    <string name="overlay_handle_style_bubble">Bolha flutuante</string>
     <string name="overlay_stop_mapping">Parar Mapeamento</string>
     <string name="overlay_notif_title">OpenMapper - Mapeamento Ativo</string>
     <string name="overlay_notif_text">Perfil: %1$s • Toque para configurar</string>
@@ -256,6 +259,13 @@
     <string name="invert_y_desc">Inverte os movimentos Cima / Baixo do analógico de câmera.</string>
     <string name="invert_x_title">↔️ Inverter Eixo Horizontal (X)</string>
     <string name="invert_x_desc">Inverte os movimentos Esquerda / Direita do analógico de câmera.</string>
+    <string name="gyro_title">🎮 Mira com giroscópio do controle</string>
+    <string name="gyro_desc">Mire inclinando o controle (requer controle com giroscópio, Android 12+).</string>
+    <string name="gyro_activation_label">Ativar com</string>
+    <string name="gyro_activation_lt">LT segurado</string>
+    <string name="gyro_activation_always">Sempre ativo</string>
+    <string name="gyro_sensitivity_label">Sensibilidade do giroscópio</string>
+    <string name="gyro_smoothing_label">Suavização do giroscópio</string>
     <string name="hot_switch_hint">💡 Atalho Hot-Switch : Segure SELECT + D-Pad Cima/Baixo para trocar de perfil durante o jogo!</string>
     <string name="tab_polling_rate">⚡ Polling e Latência</string>
     <string name="polling_test_title">⚡ Analisador de Polling Rate e Latência</string>

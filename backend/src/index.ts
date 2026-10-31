@@ -459,6 +459,8 @@ function validateProfileStructure(obj: any): { valid: boolean; error?: string } 
       checkNumber(c.adsSensitivityMultiplier ?? c.ads_sensitivity_multiplier, 0.05, 5.0, 'Camera ads_sensitivity_multiplier') ||
       checkNumber(c.antiRecoilSpeed ?? c.anti_recoil_speed, 0.0, 50.0, 'Camera anti_recoil_speed') ||
       checkNumber(c.maxStepPixels ?? c.max_step_pixels, 1.0, 150.0, 'Camera max_step_pixels') ||
+      checkNumber(c.gyroSensitivity ?? c.gyro_sensitivity, 0.2, 5.0, 'Camera gyro_sensitivity') ||
+      checkNumber(c.gyroSmoothing ?? c.gyro_smoothing, 0.0, 0.9, 'Camera gyro_smoothing') ||
       checkBoolean(c.enabled, 'Camera enabled') ||
       checkBoolean(c.flickAdsSafety ?? c.flick_ads_safety, 'Camera flick_ads_safety') ||
       checkBoolean(c.adsSensitivityEnabled ?? c.ads_sensitivity_enabled, 'Camera ads_sensitivity_enabled') ||

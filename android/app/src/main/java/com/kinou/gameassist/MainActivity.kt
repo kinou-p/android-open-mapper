@@ -41,6 +41,14 @@ import com.kinou.gameassist.ui.screens.ProfileEditorScreen
 import com.kinou.gameassist.ui.screens.VisualHudEditorScreen
 import com.kinou.gameassist.ui.theme.*
 
+/** Who handles gamepad events in [MainActivity]: its visualizer, or the in-app HUD editor (#29). */
+internal object GamepadHandoff {
+    fun editorOwnsGamepad(screen: Screen): Boolean = screen == Screen.VISUAL_HUD_EDITOR
+
+    /** Live pressed/axis state is dropped only when the editor takes over. */
+    fun clearsLiveState(wasOwned: Boolean, nowOwned: Boolean): Boolean = nowOwned && !wasOwned
+}
+
 enum class Screen {
     HOME,
     PROFILES,
@@ -73,6 +81,19 @@ class MainActivity : AppCompatActivity() {
     private val liveJitterMs = mutableFloatStateOf(0f)
     private val liveSampleCount = mutableIntStateOf(0)
     private var lastEventNano: Long = 0L
+    // True while the in-app HUD editor is on screen: it learns gamepad keys itself, so the
+    // activity must not consume those events.
+    @Volatile private var editorOwnsGamepad = false
+        set(value) {
+            // Releases and neutral axes stop reaching this activity while the editor owns the
+            // gamepad, so drop the live state instead of leaving buttons stuck "pressed".
+            if (GamepadHandoff.clearsLiveState(field, value)) {
+                pressedButtons.clear()
+                pendingLx = 0f; pendingLy = 0f; pendingRx = 0f; pendingRy = 0f
+                flushUiStates()
+            }
+            field = value
+        }
     private val recentIntervalsNs = LongArray(INTERVAL_BUFFER_CAPACITY)
     private var intervalBufferHead = 0
     private var intervalBufferCount = 0
@@ -155,6 +176,9 @@ class MainActivity : AppCompatActivity() {
                 var editTargetProfile by remember { mutableStateOf<GameProfile?>(null) }
                 var visualEditorOrigin by remember { mutableStateOf(Screen.PROFILES) }
                 val isServiceRunning by OverlayService.isServiceRunningFlow.collectAsState()
+
+                LaunchedEffect(currentScreen) { editorOwnsGamepad = GamepadHandoff.editorOwnsGamepad(currentScreen) }
+                DisposableEffect(Unit) { onDispose { editorOwnsGamepad = false } }
 
                 LaunchedEffect(profiles) {
                     if (selectedProfile == null && profiles.isNotEmpty()) {
@@ -429,6 +453,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (editorOwnsGamepad) return super.dispatchKeyEvent(event)
         val btnName = when (event.keyCode) {
             KeyEvent.KEYCODE_BUTTON_A -> "BUTTON_A"
             KeyEvent.KEYCODE_BUTTON_B -> "BUTTON_B"
@@ -467,6 +492,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (editorOwnsGamepad) return super.dispatchGenericMotionEvent(event)
         if ((event.source and InputDevice.SOURCE_JOYSTICK) != 0 ||
             (event.source and InputDevice.SOURCE_GAMEPAD) != 0) {
 

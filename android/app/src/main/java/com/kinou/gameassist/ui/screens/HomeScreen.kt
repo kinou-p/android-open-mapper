@@ -38,6 +38,7 @@ import com.kinou.gameassist.data.updater.AppReleaseInfo
 import com.kinou.gameassist.data.updater.AppUpdateManager
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.injector.ShizukuStatus
+import com.kinou.gameassist.ui.overlay.EdgeHandleOverlayView
 import com.kinou.gameassist.ui.theme.*
 import java.io.File
 import kotlinx.coroutines.Job
@@ -421,6 +422,44 @@ fun HomeScreen(
                             fontSize = 16.sp
                         )
                     }
+                }
+
+                // Quick menu style: edge tab (swipe) or floating bubble (issue #30)
+                var bubbleHandle by remember { mutableStateOf(EdgeHandleOverlayView.isBubble(context)) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.overlay_handle_style_title),
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    listOf(false to R.string.overlay_handle_style_edge, true to R.string.overlay_handle_style_bubble)
+                        .forEach { (isBubble, label) ->
+                            val selected = bubbleHandle == isBubble
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    bubbleHandle = isBubble
+                                    EdgeHandleOverlayView.setBubble(context, isBubble)
+                                },
+                                label = { Text(stringResource(label), fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NeonCyan,
+                                    selectedLabelColor = DarkBackground,
+                                    containerColor = DarkSurface,
+                                    labelColor = TextSecondary
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = selected,
+                                    borderColor = if (selected) NeonCyan else DarkCardBorder
+                                )
+                            )
+                        }
                 }
 
                 // Actions secondaires : mises à jour + signaler un bug
