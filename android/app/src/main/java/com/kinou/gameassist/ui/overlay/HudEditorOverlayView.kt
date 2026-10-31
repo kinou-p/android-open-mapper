@@ -12,6 +12,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import com.kinou.gameassist.R
+import com.kinou.gameassist.data.model.CameraConfig
 import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.data.model.ButtonConfig
 import com.kinou.gameassist.data.model.ButtonMode
@@ -56,6 +57,7 @@ class HudEditorOverlayView(
     val selectedButton: ButtonConfig? get() = selectedItem as? ButtonConfig
     val isJoystickSelected: Boolean get() = selectedItem == "JOYSTICK"
     val isCameraSelected: Boolean get() = selectedItem == "CAMERA"
+    internal val camera: CameraConfig get() = profile.camera
 
     private enum class CamHandle { NONE, BODY, NW, NE, SW, SE }
     private var activeCamHandle = CamHandle.NONE
@@ -104,6 +106,11 @@ class HudEditorOverlayView(
                 }
                 "CAMERA" -> {
                     val cam = profile.camera
+                    if (RightStickCircle.shown(cam)) {
+                        RightStickCircle.scale(cam, factor)
+                        invalidate()
+                        return true
+                    }
                     val cx = (cam.rectX1 + cam.rectX2) / 2f
                     val cy = (cam.rectY1 + cam.rectY2) / 2f
                     val halfW = ((cam.rectX2 - cam.rectX1) / 2f * factor).coerceIn(0.06f, 0.48f)
@@ -468,7 +475,30 @@ class HudEditorOverlayView(
 
         // 3. Camera Zone
         val cam = profile.camera
-        if (cam.enabled) {
+        if (cam.enabled && RightStickCircle.shown(cam)) {
+            // Joystick right stick (#29): only the zone's center and the radius matter, drawn like the left stick
+            val rx = RightStickCircle.centerX(cam, w)
+            val ry = RightStickCircle.centerY(cam, h)
+            val rr = RightStickCircle.radius(cam, h)
+
+            canvas.drawCircle(rx, ry, rr, joyPaint)
+            canvas.drawCircle(rx, ry, rr, joyStroke)
+            if (isCameraSelected) {
+                canvas.drawCircle(rx, ry, rr + 10f, selectRingPaint)
+            }
+
+            canvas.drawText(context.getString(R.string.overlay_right_stick_zone), rx, ry + 10f, textPaint)
+
+            // Live Right Stick Feedback (thumbstick knob inside the stick)
+            if (hypot(liveRsX, liveRsY) > 0.08f) {
+                val thumbX = rx + liveRsX * rr * 0.75f
+                val thumbY = ry + liveRsY * rr * 0.75f
+
+                canvas.drawLine(rx, ry, thumbX, thumbY, stickLinePaint)
+                canvas.drawCircle(thumbX, thumbY, 18f * density, thumbPaint)
+                canvas.drawCircle(thumbX, thumbY, 18f * density, strokePaint)
+            }
+        } else if (cam.enabled) {
             val cx1 = cam.rectX1 * w
             val cy1 = cam.rectY1 * h
             val cx2 = cam.rectX2 * w
@@ -496,11 +526,6 @@ class HudEditorOverlayView(
 
             val camTitle = if (isCameraSelected) context.getString(R.string.overlay_camera_selected) else context.getString(R.string.overlay_camera_zone)
             canvas.drawText(camTitle, (cx1 + cx2) / 2f, cy1 + 35f, textPaint)
-
-            // Joystick right stick (#29): only the zone's center and the radius matter, show them
-            if (cam.mode == CameraMode.JOYSTICK) {
-                canvas.drawCircle((cx1 + cx2) / 2f, (cy1 + cy2) / 2f, cam.joystickRadius * h, camStroke)
-            }
 
             // Live Right Stick Feedback (Aiming reticle inside camera zone)
             if (hypot(liveRsX, liveRsY) > 0.08f) {
@@ -1002,7 +1027,9 @@ class HudEditorOverlayView(
             val title = when (val item = selectedItem) {
                 is ButtonConfig -> "🎯 ${item.label} [${item.gamepadButton.replace("BUTTON_", "")}]"
                 "JOYSTICK" -> context.getString(R.string.overlay_joystick_ls)
-                "CAMERA" -> context.getString(R.string.overlay_camera_zone_rs)
+                "CAMERA" -> context.getString(
+                    if (RightStickCircle.shown(profile.camera)) R.string.overlay_right_stick_zone else R.string.overlay_camera_zone_rs
+                )
                 else -> ""
             }
             val ellipTitle = android.text.TextUtils.ellipsize(
@@ -1432,8 +1459,8 @@ class HudEditorOverlayView(
                     }
                 }
 
-                // 3. Check Camera Corner Handles (if camera selected)
-                if (isCameraSelected) {
+                // 3. Check Camera Corner Handles (if camera selected; a joystick right stick has none)
+                if (isCameraSelected && !RightStickCircle.shown(profile.camera)) {
                     val cam = profile.camera
                     val cx1 = cam.rectX1 * w
                     val cy1 = cam.rectY1 * h
@@ -1499,7 +1526,9 @@ class HudEditorOverlayView(
                     val cy1 = cam.rectY1 * h
                     val cx2 = cam.rectX2 * w
                     val cy2 = cam.rectY2 * h
-                    if (tx in cx1..cx2 && ty in cy1..cy2) {
+                    val hit = if (RightStickCircle.shown(cam)) RightStickCircle.hit(cam, tx, ty, w, h)
+                              else tx in cx1..cx2 && ty in cy1..cy2
+                    if (hit) {
                         selectedItem = "CAMERA"
                         draggedItem = "CAMERA"
                         activeCamHandle = CamHandle.BODY
@@ -1635,6 +1664,12 @@ class HudEditorOverlayView(
             }
             "CAMERA" -> {
                 val c = profile.camera
+                if (RightStickCircle.shown(c)) {
+                    RightStickCircle.scale(c, factor)
+                    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    invalidate()
+                    return
+                }
                 val cx = (c.rectX1 + c.rectX2) / 2f
                 val cy = (c.rectY1 + c.rectY2) / 2f
                 val halfW = ((c.rectX2 - c.rectX1) / 2f * factor).coerceIn(0.06f, 0.48f)
@@ -1814,4 +1849,23 @@ internal fun menuLayout(entries: Int, available: Float, density: Float): MenuLay
         rowHeight = needed.coerceIn(20f * density, rowHeight)
     }
     return MenuLayout(columns, rowsPerColumn, rowHeight, heightFor(rowsPerColumn, rowHeight))
+}
+
+/** Right stick in joystick mode (#29): edited like the left stick, a circle at the camera zone's center. */
+internal object RightStickCircle {
+    // same range as the Right stick radius slider and the profile import sanitizer
+    private const val MIN_RADIUS = 0.04f
+    private const val MAX_RADIUS = 0.30f
+
+    fun shown(cam: CameraConfig): Boolean = cam.mode == CameraMode.JOYSTICK
+    fun centerX(cam: CameraConfig, w: Float): Float = (cam.rectX1 + cam.rectX2) / 2f * w
+    fun centerY(cam: CameraConfig, h: Float): Float = (cam.rectY1 + cam.rectY2) / 2f * h
+    fun radius(cam: CameraConfig, h: Float): Float = cam.joystickRadius * h
+
+    fun hit(cam: CameraConfig, x: Float, y: Float, w: Float, h: Float): Boolean =
+        hypot(x - centerX(cam, w), y - centerY(cam, h)) <= radius(cam, h)
+
+    fun scale(cam: CameraConfig, factor: Float) {
+        cam.joystickRadius = (cam.joystickRadius * factor).coerceIn(MIN_RADIUS, MAX_RADIUS)
+    }
 }
