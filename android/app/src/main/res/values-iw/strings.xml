@@ -216,6 +216,7 @@
     <string name="error_and_reach">שגיאה: %1$.1f%% (טווח: %2$.0f%%)</string>
     <string name="overlay_camera_zone">🎥 אזור מצלמה 360° (ג\'ויסטיק ימני)</string>
     <string name="overlay_joystick_zone">🕹️ LS (תנועה)</string>
+    <string name="overlay_right_stick_zone">🕹️ RS (כיוון)</string>
     <string name="overlay_editor_title">עורך HUD - %1$s</string>
     <string name="overlay_btn_add">➕ הוסף</string>
     <string name="overlay_btn_delete">🗑️ מחק</string>
