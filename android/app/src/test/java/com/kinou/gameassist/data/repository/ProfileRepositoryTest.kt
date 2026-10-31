@@ -131,6 +131,17 @@ class ProfileRepositoryTest {
         ProfileRepository.validateAndSanitizeProfile(badProfile, "Custom Profile")
         assertEquals(55.0f, badProfile.camera.maxStepPixels, 0.001f) // Reset to default for <= 0
 
+        // Right-stick joystick radius (#29): same range as its slider
+        badProfile.camera.joystickRadius = Float.NaN
+        ProfileRepository.validateAndSanitizeProfile(badProfile, "Custom Profile")
+        assertEquals(0.12f, badProfile.camera.joystickRadius, 0.001f) // NaN fallback
+        badProfile.camera.joystickRadius = 5f
+        ProfileRepository.validateAndSanitizeProfile(badProfile, "Custom Profile")
+        assertEquals(0.30f, badProfile.camera.joystickRadius, 0.001f) // Clamped to 0.30
+        badProfile.camera.joystickRadius = 0.01f
+        ProfileRepository.validateAndSanitizeProfile(badProfile, "Custom Profile")
+        assertEquals(0.04f, badProfile.camera.joystickRadius, 0.001f) // Clamped to 0.04
+
         val btn = badProfile.buttons.first()
         assertEquals(100, btn.label.length)
         assertEquals(0.5f, btn.x, 0.001f) // NaN fallback

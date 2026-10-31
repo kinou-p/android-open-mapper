@@ -106,6 +106,11 @@
     <string name="camera_section_title">Ajustes de Cámara</string>
     <string name="camera_section_desc">Sensibilidad, curva y asistencia de apuntado</string>
     <string name="response_curve_title">Curva de Respuesta Analógica</string>
+    <string name="right_stick_mode_title">🕹️ Stick derecho</string>
+    <string name="right_stick_mode_swipe">📷 Cámara (deslizar)</string>
+    <string name="right_stick_mode_joystick">🕹️ Joystick</string>
+    <string name="right_stick_joystick_desc">Se mueve como el stick izquierdo, para juegos twin-stick. Colócalo con la zona de cámara en el editor HUD: el joystick es el centro de esa zona.</string>
+    <string name="right_stick_joystick_radius">Radio del joystick</string>
     <string name="curve_dynamic_boost">🚀 180° Flick</string>
     <string name="curve_dynamic">⚡ Dinámica</string>
     <string name="curve_standard">🌊 Estándar</string>
@@ -256,6 +261,7 @@
     <string name="invert_x_desc">Invierte los movimientos Izquierda / Derecha del stick de cámara.</string>
     <string name="gyro_title">🎮 Apuntar con giroscopio del mando</string>
     <string name="gyro_desc">Apunta inclinando el mando (requiere un mando con giroscopio, Android 12+).</string>
+    <string name="gyro_swipe_only">La mira con giroscopio solo funciona con la cámara de deslizar.</string>
     <string name="gyro_activation_label">Activar con</string>
     <string name="gyro_activation_lt">LT mantenido</string>
     <string name="gyro_activation_always">Siempre activo</string>

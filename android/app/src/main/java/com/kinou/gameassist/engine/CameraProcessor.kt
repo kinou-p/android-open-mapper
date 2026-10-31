@@ -1,6 +1,7 @@
 package com.kinou.gameassist.engine
 
 import com.kinou.gameassist.data.model.CameraConfig
+import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.injector.ShizukuTouchInjector
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -9,8 +10,20 @@ import kotlin.math.sign
 
 class CameraProcessor(
     private val injector: ShizukuTouchInjector,
-    @Volatile var config: CameraConfig = CameraConfig()
+    config: CameraConfig = CameraConfig()
 ) {
+    @Volatile var config: CameraConfig = config
+        set(value) {
+            // The release and the publish are one transition: a frame that captured the old mode
+            // either finishes before it or sees the new one, never touches in between.
+            synchronized(this) {
+                // Switching swipe <-> joystick mid-press would turn the held finger into the other
+                // gesture (a swipe dragged to a joystick point, or back): lift it first.
+                if (value.mode != field.mode) release()
+                field = value
+            }
+        }
+
     companion object {
         const val POINTER_CAM_A = 1
         const val POINTER_CAM_B = 2
@@ -31,9 +44,20 @@ class CameraProcessor(
         gyroDx: Float = 0f, gyroDy: Float = 0f
     ) {
         // Snapshot local immuable de la config pour toute la frame.
-        val cfg = config
+        processFrame(config, rx, ry, isAiming, isFiring, gyroDx, gyroDy)
+    }
+
+    /** One frame with the [cfg] it started with; a mode change mid-frame must not touch with it. */
+    internal fun processFrame(
+        cfg: CameraConfig, rx: Float, ry: Float, isAiming: Boolean = false, isFiring: Boolean = false,
+        gyroDx: Float = 0f, gyroDy: Float = 0f
+    ) {
         if (!cfg.enabled) {
             if (isActive) release()
+            return
+        }
+        if (cfg.mode == CameraMode.JOYSTICK) {
+            processJoystick(rx, ry, cfg)
             return
         }
 
@@ -128,34 +152,40 @@ class CameraProcessor(
             prevSmoothDx = smoothDx
             prevSmoothDy = smoothDy
 
-            if (!isActive) {
-                activePointerId = POINTER_CAM_A
-                currentX = origX
-                currentY = origY
-                injector.touchDown(activePointerId, currentX, currentY)
-                isActive = true
-            }
+            // Same lock as the config transition and release(): a mode change either happens
+            // before this block (we must not press with the stale swipe) or after it (it lifts).
+            synchronized(this) {
+                if (config.mode != CameraMode.SWIPE) return
 
-            currentX += smoothDx
-            currentY += smoothDy
+                if (!isActive) {
+                    activePointerId = POINTER_CAM_A
+                    currentX = origX
+                    currentY = origY
+                    injector.touchDown(activePointerId, currentX, currentY)
+                    isActive = true
+                }
 
-            val marginX = (x2 - x1) * 0.15f
-            val marginY = (y2 - y1) * 0.15f
+                currentX += smoothDx
+                currentY += smoothDy
 
-            val hitBorder = (currentX <= x1 + marginX || currentX >= x2 - marginX ||
-                             currentY <= y1 + marginY || currentY >= y2 - marginY)
+                val marginX = (x2 - x1) * 0.15f
+                val marginY = (y2 - y1) * 0.15f
 
-            if (hitBorder) {
-                // Dual-Pointer Interlaced Handoff for 100% stutter-free 360° rotation (Atomic Transaction)
-                val nextPointerId = if (activePointerId == POINTER_CAM_A) POINTER_CAM_B else POINTER_CAM_A
+                val hitBorder = (currentX <= x1 + marginX || currentX >= x2 - marginX ||
+                                 currentY <= y1 + marginY || currentY >= y2 - marginY)
 
-                injector.handoff(nextPointerId, origX, origY, activePointerId, currentX, currentY)
+                if (hitBorder) {
+                    // Dual-Pointer Interlaced Handoff for 100% stutter-free 360° rotation (Atomic Transaction)
+                    val nextPointerId = if (activePointerId == POINTER_CAM_A) POINTER_CAM_B else POINTER_CAM_A
 
-                activePointerId = nextPointerId
-                currentX = origX
-                currentY = origY
-            } else {
-                injector.touchMove(activePointerId, currentX, currentY)
+                    injector.handoff(nextPointerId, origX, origY, activePointerId, currentX, currentY)
+
+                    activePointerId = nextPointerId
+                    currentX = origX
+                    currentY = origY
+                } else {
+                    injector.touchMove(activePointerId, currentX, currentY)
+                }
             }
         } else {
             prevSmoothDx = 0.0f
@@ -163,6 +193,43 @@ class CameraProcessor(
             if (isActive) {
                 release()
             }
+        }
+    }
+
+    /**
+     * Right stick as a second joystick (twin-stick games): press the center of the camera zone,
+     * hold the finger at stick direction x deflection x radius, lift when the stick is centered.
+     */
+    private fun processJoystick(rx: Float, ry: Float, cfg: CameraConfig) {
+        val screenW = injector.screenWidth
+        val screenH = injector.screenHeight
+        val centerX = (cfg.rectX1 + cfg.rectX2) / 2f * screenW
+        val centerY = (cfg.rectY1 + cfg.rectY2) / 2f * screenH
+        val radiusPx = cfg.joystickRadius * screenH
+
+        val mag = hypot(rx, ry)
+        val innerDeadzone = cfg.deadzone
+        val outerDeadzone = cfg.outerDeadzone.coerceIn(innerDeadzone + 0.05f, 1.0f)
+        if (mag <= innerDeadzone) {
+            if (isActive) release()
+            return
+        }
+
+        val normMag = ((mag - innerDeadzone) / (outerDeadzone - innerDeadzone)).coerceIn(0f, 1f)
+        val dirX = if (cfg.invertX) -rx / mag else rx / mag
+        val dirY = if (cfg.invertY) -ry / mag else ry / mag
+
+        // Same lock as release(): a concurrent reset can't strand the finger between down and move
+        synchronized(this) {
+            if (config.mode != CameraMode.JOYSTICK) return
+            if (!isActive) {
+                activePointerId = POINTER_CAM_A
+                injector.touchDown(activePointerId, centerX, centerY)
+                isActive = true
+            }
+            currentX = centerX + dirX * normMag * radiusPx
+            currentY = centerY + dirY * normMag * radiusPx
+            injector.touchMove(activePointerId, currentX, currentY)
         }
     }
 

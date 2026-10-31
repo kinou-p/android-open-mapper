@@ -12,6 +12,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import com.kinou.gameassist.R
+import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.data.model.ButtonConfig
 import com.kinou.gameassist.data.model.ButtonMode
 import com.kinou.gameassist.data.model.ButtonRole
@@ -495,6 +496,11 @@ class HudEditorOverlayView(
 
             val camTitle = if (isCameraSelected) context.getString(R.string.overlay_camera_selected) else context.getString(R.string.overlay_camera_zone)
             canvas.drawText(camTitle, (cx1 + cx2) / 2f, cy1 + 35f, textPaint)
+
+            // Joystick right stick (#29): only the zone's center and the radius matter, show them
+            if (cam.mode == CameraMode.JOYSTICK) {
+                canvas.drawCircle((cx1 + cx2) / 2f, (cy1 + cy2) / 2f, cam.joystickRadius * h, camStroke)
+            }
 
             // Live Right Stick Feedback (Aiming reticle inside camera zone)
             if (hypot(liveRsX, liveRsY) > 0.08f) {

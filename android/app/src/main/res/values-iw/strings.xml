@@ -97,6 +97,11 @@
     <string name="camera_section_title">הגדרות מצלמה</string>
     <string name="camera_section_desc">רגישות, עקומת תגובה וסיוע בכוונת</string>
     <string name="response_curve_title">עקומת תגובה אנלוגית</string>
+    <string name="right_stick_mode_title">🕹️ סטיק ימני</string>
+    <string name="right_stick_mode_swipe">📷 מצלמה (החלקה)</string>
+    <string name="right_stick_mode_joystick">🕹️ ג׳ויסטיק</string>
+    <string name="right_stick_joystick_desc">זז כמו הסטיק השמאלי, למשחקי twin-stick. מקמו אותו עם אזור המצלמה בעורך ה-HUD: הג׳ויסטיק הוא מרכז האזור.</string>
+    <string name="right_stick_joystick_radius">רדיוס הג׳ויסטיק</string>
     <string name="curve_dynamic_boost">🚀 סיבוב מהיר (Flick) של 180 מעלות</string>
     <string name="curve_dynamic">⚡ דינמי</string>
     <string name="curve_standard">🌊 סטנדרטי</string>
@@ -250,6 +255,7 @@
     <string name="invert_x_desc">היפוך תנועות מצלמה שמאלה/ימינה.</string>
     <string name="gyro_title">🎮 כוונון בג׳ירו של הבקר</string>
     <string name="gyro_desc">כוונו על ידי הטיית הבקר (נדרש בקר עם ג׳ירו, Android 12+).</string>
+    <string name="gyro_swipe_only">כוונון הג׳ירו עובד רק עם מצלמת ההחלקה.</string>
     <string name="gyro_activation_label">הפעלה באמצעות</string>
     <string name="gyro_activation_lt">LT לחוץ</string>
     <string name="gyro_activation_always">תמיד פעיל</string>

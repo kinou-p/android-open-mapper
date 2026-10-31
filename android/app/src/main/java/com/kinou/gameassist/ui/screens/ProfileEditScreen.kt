@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
+import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.GyroActivation
 import com.kinou.gameassist.data.model.ResponseCurve
@@ -90,6 +91,8 @@ fun ProfileEditScreen(
     var aimRadius by remember(profile.id) { mutableFloatStateOf(AimSettings.coerceRadius(profile.settings.aimRadius)) }
     var aimDeadzone by remember(profile.id) { mutableFloatStateOf(AimSettings.coerceDeadzone(profile.settings.aimDeadzone)) }
     var responseCurve by remember(profile.id) { mutableStateOf(profile.camera.responseCurve) }
+    var cameraMode by remember(profile.id) { mutableStateOf(profile.camera.mode) }
+    var joystickRadius by remember(profile.id) { mutableFloatStateOf(profile.camera.joystickRadius) }
 
     // Haptic Feedback States
     var hapticFeedback by remember(profile.id) { mutableStateOf(profile.settings.hapticFeedback) }
@@ -256,6 +259,56 @@ fun ProfileEditScreen(
                 // ==========================================
                 if (selectedTab == 0) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Right stick: swipe camera or second joystick (twin-stick games, issue #29)
+                        Text(stringResource(R.string.right_stick_mode_title), color = TextSecondary, fontSize = 13.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                CameraMode.SWIPE to stringResource(R.string.right_stick_mode_swipe),
+                                CameraMode.JOYSTICK to stringResource(R.string.right_stick_mode_joystick)
+                            ).forEach { (m, title) ->
+                                val active = cameraMode == m
+                                Button(
+                                    onClick = {
+                                        cameraMode = m
+                                        profile.camera.mode = m
+                                        onSave()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (active) NeonCyan else DarkCardBorder
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        title,
+                                        color = if (active) DarkBackground else TextPrimary,
+                                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                        if (cameraMode == CameraMode.JOYSTICK) {
+                            Text(stringResource(R.string.right_stick_joystick_desc), color = TextSecondary, fontSize = 11.sp)
+                            SliderSetting(
+                                label = stringResource(R.string.right_stick_joystick_radius),
+                                value = joystickRadius,
+                                range = 0.04f..0.30f,
+                                displayText = "%.0f%%".format(joystickRadius * 100),
+                                onValueChange = {
+                                    joystickRadius = it
+                                    profile.camera.joystickRadius = it
+                                },
+                                onValueChangeFinished = { onSave() }
+                            )
+                        }
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
                         Text(stringResource(R.string.response_curve_title), color = TextSecondary, fontSize = 13.sp)
 
                         // Selectors
@@ -681,7 +734,8 @@ fun ProfileEditScreen(
 
                         HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
 
-                        // --- Controller gyro aim ---
+                        // --- Controller gyro aim (swipe camera only) ---
+                        if (cameraMode == CameraMode.SWIPE) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -777,6 +831,13 @@ fun ProfileEditScreen(
                                     )
                                 }
                             }
+                        }
+                        } else {
+                            Text(
+                                stringResource(R.string.gyro_swipe_only),
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
                         }
 
                         // --- Raccourci Hot-Switch Info Banner ---
