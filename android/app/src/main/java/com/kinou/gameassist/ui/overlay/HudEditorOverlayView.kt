@@ -431,6 +431,8 @@ class HudEditorOverlayView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        // Gamepad key events are delivered to the focused view
+        requestFocus()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             windowInsetsController?.let { controller ->
                 controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
