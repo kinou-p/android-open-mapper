@@ -217,6 +217,9 @@
     <string name="overlay_learning_banner">👉 לחץ על כפתור בבקר כדי להקצות את [%1$s]</string>
     <string name="overlay_hud_editor">עורך HUD</string>
     <string name="overlay_open_app">פתח אפליקציה</string>
+    <string name="overlay_handle_style_title">תפריט מהיר</string>
+    <string name="overlay_handle_style_edge">לשונית בצד</string>
+    <string name="overlay_handle_style_bubble">בועה צפה</string>
     <string name="overlay_stop_mapping">עצור מיפוי</string>
     <string name="overlay_notif_title">OpenMapper - המיפוי פעיל</string>
     <string name="overlay_notif_text">פרופיל: %1$s • הקש להגדרה</string>

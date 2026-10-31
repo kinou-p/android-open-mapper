@@ -230,6 +230,9 @@
     <string name="overlay_learning_banner">👉 APPUYEZ SUR UNE TOUCHE DE LA MANETTE POUR ASSIGNER [%1$s]</string>
     <string name="overlay_hud_editor">Éditeur HUD</string>
     <string name="overlay_open_app">Ouvrir l\'App</string>
+    <string name="overlay_handle_style_title">Menu rapide</string>
+    <string name="overlay_handle_style_edge">Onglet latéral</string>
+    <string name="overlay_handle_style_bubble">Bulle flottante</string>
     <string name="overlay_stop_mapping">Arrêter Mapping</string>
     <string name="overlay_notif_title">OpenMapper - Mapping Actif</string>
     <string name="overlay_notif_text">Profil: %1$s • Touchez pour configurer</string>
