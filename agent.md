@@ -283,6 +283,9 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
 
 #### 1. `LinuxInputReader.kt`
 - **Mécanisme** : Spawne un sous-processus `cat /dev/input/eventX` par nœud manette via le binder Shizuku (UID 2000).
+- **Lecture exclusive optionnelle (#28)** : quand le profil l'active et que l'éditeur HUD est fermé, le nœud est lu par `ExclusiveInputReader`, lancé via `sh -c "CLASSPATH='<apk>' exec app_process …"` sous Shizuku. Il pose `EVIOCGRAB` pour cacher la manette au jeu. `nodeReadCommand()` construit la commande et retombe sur `cat` si un chemin contient une quote (la commande shell serait cassée).
+- **Fallback sûr** : si le lecteur exclusif se termine alors qu'il est toujours courant (`shouldFallBackToCat(exclusive, stillCurrent)`), le nœud repasse en lecture `cat` — la mort du processus a relâché le grab. Un échec de spawn, lui, signifie que le pont Shizuku est indisponible : `cat` passe par le même pont, donc aucun fallback n'est tenté (le prochain hotplug ou la reconnexion Shizuku, moteur actif, relance le lecteur).
+- **Cycle de vie start/stop/restart** : les trois sont sérialisés par `lifecycleLock`, et `startLocked()` refuse de démarrer si `engine.isEngineRunning` est faux. Un restart en attente (changement de profil, hotplug, reconnexion Shizuku) ne peut donc pas ressusciter le lecteur après l'arrêt du moteur et garder la manette capturée. `generation`, incrémenté par `stop()`, invalide les lecteurs de nœuds déjà lancés.
 - **Découverte dynamique & Filtrage Strict** : Analyse `getevent -p` ou `/proc/bus/input/devices` et filtre rigoureusement les composants internes (`touchscreen`, `sensor`, `keypad`, `gpio-keypad`, `kpd`, `pmic`, etc.) avec une regex à frontière de mot `\bpad\b` pour éliminer tout faux positif sur les boutons de volume/power du téléphone.
 - **Classification Précise des Manettes** :
   - Manettes Xbox officielles (`vendor == "045e"` ou présence de "xbox"/"microsoft") : distinction filaire USB (`XBOX_WIRED_USB` en `SIGNED_16BIT`) vs Bluetooth (`XBOX_BLUETOOTH` en `UNSIGNED_16BIT`).
@@ -306,6 +309,8 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
 
 #### 3. `GamepadEngine.kt`
 - **Boucle haute priorité** : S'exécute sur un `Thread` dédié avec priorité `THREAD_PRIORITY_URGENT_DISPLAY` pour ne jamais subir de préemption par le jeu à 120 FPS.
+- **Capture exclusive (#28)** : `setProfile()` mémorise `exclusiveController` puis `applyExclusiveInput()` calcule le chemin APK voulu (actif hors éditeur HUD) et redémarre le lecteur sur un thread IO, sérialisé par `exclusiveLock`. Le grab est ainsi libéré quand l'éditeur s'ouvre et repris à sa fermeture.
+- **Gyro** : `gyroSource` (voir § 8) n'est lu que si `CameraConfig.gyroApplies` est vrai, c'est-à-dire en mode caméra par balayage ; les deltas sont lissés puis passés à `CameraProcessor.process(gyroDx, gyroDy)`.
 - **Sommeil hybride à 2 phases (`highPrecisionSleep`)** :
   1. `LockSupport.parkNanos(target - 50µs)` : Veille système sans surconsommation CPU (Linux `clock_nanosleep`).
   2. `Thread.onSpinWait()` (< 50µs) : Micro-spinlock final garantissant une précision sub-microseconde sans gigue de scheduling.
@@ -319,6 +324,8 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
   3. Le moteur injecte immédiatement un `ACTION_UP` pour le pointeur A au **bord**.
   4. Le pointeur B devient actif et continue le mouvement de manière totalement transparente pour le moteur du jeu (rotation 360° infinie et sans à-coups).
 - **Anti-Recul Vertical Actif** : Descente continue automatique de la caméra pendant les phases de tir (`antiRecoilEnabled`) avec coefficient de vitesse configurable (`antiRecoilSpeed` 0.1x à 20.0x), ajustable à la volée depuis l'overlay latéral.
+- **Modes du stick droit (`CameraMode`)** : `SWIPE` (comportement historique, handoff ci-dessus) ou `JOYSTICK` (twin-stick, #29) — le processeur presse le centre de la zone caméra et maintient le doigt à `direction × déflection × joystickRadius`, puis le relâche quand le stick revient au repos.
+- **Transition de mode atomique** : le setter de `config` exécute `release()` et la publication de la nouvelle config sous le même verrou ; la branche swipe et `processJoystick()` revérifient `config.mode` dans le verrou qui presse/déplace/lâche. Une frame partie avec l'ancienne config ne peut donc pas recréer un contact après le changement de mode. `processFrame(cfg, …)` isole justement ce cas pour les tests.
 - **Courbes de visée** :
   - `LINEAR` : Réponse directe 1:1.
   - `STANDARD` : Accélération exponentielle ($y = x^\gamma$).
@@ -346,6 +353,11 @@ Le moteur d'entrées résout le problème fondamental d'Android : **les applicat
 - **Suivi des combos actifs** : table `déclencheur ➔ clé combo` (`ConcurrentHashMap`) alimentée à l'appui par `GamepadEngine` et consommée au relâchement.
 - **Remise à zéro obligatoire** : `clear()` est appelé par `resetAllInputs()` (déconnexion manette, reset Shizuku), `setInjectionSuspended()` (éditeur HUD) et `setCursorMode()` (curseur). Sans cela, une entrée périmée détourne le relâchement suivant du même déclencheur vers un combo inactif et le bouton du profil **reste enfoncé** (touche fantôme).
 - **Testable en JVM** : aucune dépendance Android, contrairement à `GamepadEngine` (`ComboRouterTest`).
+
+#### 8. `GyroSource.kt` (#22)
+- **Capteur de la manette, pas du téléphone** : `InputDevice.sensorManager` + `Sensor.TYPE_GYROSCOPE`, Android 12+ ; `ensureStarted()` réessaie toutes les 2 s et se rattache à la manette courante.
+- **Intégration au frame rate** : accumule yaw/pitch entre deux frames (`consumeDelta`) pour ne perdre aucun échantillon ; `denoise()` coupe la dérive sous 0.02 rad/s et `smooth()` applique un passe-bas borné à 0.95.
+- **Portée** : uniquement avec la caméra par balayage (`CameraConfig.gyroApplies = gyroEnabled && mode == SWIPE`). En mode joystick, le stick droit possède le contact caméra : l'éditeur masque le bloc gyro et le moteur ne lit pas le capteur.
 
 ---
 
@@ -604,24 +616,24 @@ Lors de toute intervention future sur ce codebase, **chaque agent ou développeu
 - 📁 **Validation Anti-Path Traversal** : Tout accès fichier basé sur un identifiant externe (profil, image) doit valider l'ID avec `SAFE_ID_REGEX` (`^[a-zA-Z0-9_-]{1,64}$`) et vérifier canoniquement que le chemin résolu se situe dans le répertoire autorisé (`target.canonicalPath.startsWith(allowedDir)`).
 - 🔑 **Secrets & Signature** : Ne jamais hardcoder de secret dans le code source. Toute communication d'écriture avec l'API backend doit être signée par `CommunityApiClient` avec l'en-tête `X-Timestamp` et `X-Signature` calculé via HMAC-SHA256.
 
-### 🧪 3. Validation & Commandes de Test (182 Tests Automatisés)
+### 🧪 3. Validation & Commandes de Test (353 Tests Automatisés)
 Avant de soumettre des modifications, exécuter obligatoirement les suites de tests automatisés :
 
 ```bash
-# 1. Tests Unitaires Backend (Vitest - 38 tests)
+# 1. Tests Unitaires Backend (Vitest - 47 tests)
 npm --prefix backend test
 
-# 2. Tests Unitaires Android (JUnit avec JDK 17 - 144 tests)
+# 2. Tests Unitaires Android (JUnit avec JDK 17 - 306 tests)
 cd android
 JAVA_HOME=/usr/lib/jvm/java-1.17.0-openjdk-amd64 ./gradlew testDebugUnitTest
 
-# 3. Compilation Debug de l'APK (Validation de l'assemblage Dex)
-./gradlew assembleDebug
+# 3. Compilation des tests instrumentés (e2e) et de l'APK
+./gradlew compileDebugAndroidTestKotlin assembleDebug
 ```
 
 ### 🌍 4. Internationalisation & Chaînes de Caractères (i18n)
 - 🌐 **Aucune chaîne visible en dur** : tout texte affiché à l'utilisateur (écrans Compose, overlays, toasts, dialogues, messages d'erreur, libellés de rôles) DOIT passer par une ressource `strings.xml` via `stringResource(...)` / `context.getString(...)`. Ne jamais écrire un littéral affiché directement dans le code Kotlin.
-- 🗂️ **Cinq dossiers de ressources** : toute chaîne ajoutée ou modifiée est répercutée dans `res/values` (anglais — ressource par défaut) **et** `values-en`, `values-fr`, `values-es`, `values-pt`.
+- 🗂️ **Six dossiers de ressources** : toute chaîne ajoutée ou modifiée est répercutée dans `res/values` (anglais — ressource par défaut) **et** `values-en`, `values-fr`, `values-es`, `values-pt` **et** `values-iw` (hébreu).
 - ✅ **Exceptions volontaires** : matchers de mots-clés (ex. `"visée"`), profils par défaut par langue, noms natifs des langues dans le sélecteur, et lignes de log développeur (jamais affichées).
 
 ---
@@ -705,9 +717,9 @@ En cas de dysfonctionnement signalé lors de modifications, consulter cet arbre 
 
 ## 11. Roadmap Technique & Prochains Chantiers (`TODO.md`)
 
-Les prochaines évolutions architecturales planifiées pour OpenMapper s'articulent autour de 6 axes stratégiques :
+Les prochaines évolutions architecturales planifiées pour OpenMapper s'articulent autour de 8 axes stratégiques :
 
-*Déjà livré depuis la roadmap initiale* : les **combos 2 boutons** (`BUTTON_R1+BUTTON_X`) assignables depuis l'éditeur HUD (index précalculé dans `ButtonProcessor`, lookup sans allocation) et le **mode curseur virtuel** (ci-dessous).
+*Déjà livré depuis la roadmap initiale* : les **combos 2 boutons** (`BUTTON_R1+BUTTON_X`) assignables depuis l'éditeur HUD (index précalculé dans `ButtonProcessor`, lookup sans allocation), le **mode curseur virtuel** (`L3+R3`) et les **contrôles MOBA / visée joystick virtuel** (`ButtonRole.AIM_JOYSTICK`).
 
 1. **🖱️ Mode Souris / Curseur Virtuel — ✅ LIVRÉ** :
    - `L3+R3` bascule le mode ; le stick le plus incliné (gauche ou droit) déplace un curseur à courbe quadratique, `A` tape (maintenu = glisser), `B` quitte, D-pad haut/droite et bas/gauche règlent la vitesse de 0.25x à 5x avec libellé à l'écran, vitesse persistée dans `cursor_speed`.
@@ -728,10 +740,15 @@ Les prochaines évolutions architecturales planifiées pour OpenMapper s'articul
 5. **💤 Standby Intelligent & Polling Adaptatif** :
    - Réduction dynamique de la fréquence d'interrogation (de 240 Hz à 30 Hz) en cas d'absence d'action pendant plus de 2 secondes, avec reprise instantanée à la première pression, pour préserver la batterie pendant les cinématiques.
    - *Composants cibles* : [`GamepadEngine.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/GamepadEngine.kt).
-6. **🎯 MOBA-Style Controls (Visée par Joystick Virtuel)** :
-   - Alternative « MOBA » à la visée caméra FPS : un bouton physique (ex. `R1`) devient un modificateur qui ouvre un joystick virtuel à position fixe ; tant qu'il est maintenu, le stick droit pilote ce joystick (au lieu de la caméra) et le relâchement déclenche l'action dans la direction courante. Cible les jeux à visée par joystick virtuel (*Brawl Stars*, twin-stick/MOBA).
-   - *Origine* : issue GitHub [#7 — MOBA-Style Controls](https://github.com/kinou-p/android-open-mapper/issues/7).
-   - *Composants cibles* : [`GamepadEngine.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/GamepadEngine.kt), [`MovementProcessor.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/MovementProcessor.kt), [`CameraProcessor.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/CameraProcessor.kt), [`ShizukuTouchInjector.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/injector/ShizukuTouchInjector.kt), [`JoystickConfig.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/data/model/JoystickConfig.kt).
+6. **🎯 MOBA-Style Controls (Visée par Joystick Virtuel) — ✅ LIVRÉ** :
+   - Alternative « MOBA » à la visée caméra FPS : le rôle de bouton [`ButtonRole.AIM_JOYSTICK`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/data/model/ButtonRole.kt) ouvre un joystick virtuel à position fixe lorsqu'un bouton modificateur physique (ex. `R1`) est maintenu. Le stick droit oriente et dose ce joystick, et le relâchement de la touche déclenche le tir/sort dans la direction visée.
+   - *Composants livrés* : [`ButtonProcessor.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/ButtonProcessor.kt), [`GamepadEngine.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/GamepadEngine.kt), [`ButtonRole.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/data/model/ButtonRole.kt), suite de tests [`AimJoystickTest.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/test/java/com/kinou/gameassist/engine/AimJoystickTest.kt).
+7. **🧪 Canal de Mises à Jour Bêta / Prerelease (Opt-In)** :
+   - Toggle dans les réglages/écran d'accueil permettant aux testeurs et utilisateurs avancés de recevoir les versions pré-publiées (releases GitHub avec le flag `prerelease: true`).
+   - *Composants cibles* : [`AppUpdateManager.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/data/updater/AppUpdateManager.kt), [`HomeScreen.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/ui/screens/HomeScreen.kt), [`SettingsRepository.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/data/repository/SettingsRepository.kt).
+8. **🧩 Refactorisation & Découpage des « God Components »** :
+   - Décomposition des écrans Compose et vues de surcouche volumineux (ex. [`GamepadTestScreen.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/ui/screens/GamepadTestScreen.kt) ~1 840 lignes, [`HudEditorOverlayView.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/ui/overlay/HudEditorOverlayView.kt) ~1 780 lignes, [`ProfileEditScreen.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/ui/screens/ProfileEditScreen.kt) & [`ProfileEditorScreen.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/ui/screens/ProfileEditorScreen.kt) ~1 100+ lignes, [`HomeScreen.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/ui/screens/HomeScreen.kt) ~860 lignes, [`LinuxInputReader.kt`](file:///home/kinou/Documents/Code/codm_manette/android/app/src/main/java/com/kinou/gameassist/engine/LinuxInputReader.kt) ~865 lignes) en sous-composants modulaires, canvas dédiés et contrôleurs d'état isolés.
+   - *Bénéfice* : Améliore la lisibilité, réduit drastiquement les risques de régression et accélère les temps de compilation.
 
 ---
 

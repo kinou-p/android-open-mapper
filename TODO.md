@@ -13,14 +13,25 @@ This document tracks planned features, technical enhancements, and upcoming mile
 - [x] **🧩 Two-Button Combos** (`R1+X`) — ✅ **Shipped**, assignable from the HUD editor (hold the modifier, press the trigger, release).
   - Target Components: `engine/ButtonProcessor.kt`, `ui/overlay/HudEditorOverlayView.kt`.
 
-- [ ] **🎯 MOBA-Style Controls (Virtual Joystick Aim)**
-  - **Description**: Add a MOBA-style alternative to the FPS camera aiming. A physical button (e.g. `R1`) becomes a *modifier* that opens a virtual on-screen joystick at a fixed position; while it is held, the right stick steers that joystick instead of the camera, and releasing the modifier casts the stick at its current direction (touch-style tap-and-drag aiming).
-  - **Benefit**: Makes games whose attacks are aimed through a virtual joystick (*Brawl Stars* and other MOBA / twin-stick titles) playable, instead of only free-camera shooters.
-  - **Use Cases**:
-    - *Aim attack*: hold the modifier → the joystick opens at its HUD position → steer with the right stick → release to cast.
-    - *Variable range*: the further the stick is pushed, the further the aim reaches.
-  - **Target Components**: `engine/GamepadEngine.kt`, `engine/MovementProcessor.kt`, `engine/CameraProcessor.kt`, `injector/ShizukuTouchInjector.kt`, `data/model/JoystickConfig.kt`, `ui/overlay/HudEditorOverlayView.kt`.
-  - **Origin**: GitHub issue [#7 — MOBA-Style Controls](https://github.com/kinou-p/android-open-mapper/issues/7) (*enhancement*, by @MrAnarE8).
+- [x] **🎯 MOBA-Style Controls (Virtual Joystick Aim)** — ✅ **Shipped** (`ButtonRole.AIM_JOYSTICK` allows holding a physical button like `R1` to open a virtual aim joystick at a fixed position, steer with the stick, and release to cast).
+  - Target Components: `engine/ButtonProcessor.kt`, `engine/GamepadEngine.kt`, `data/model/ButtonRole.kt`, `data/model/ButtonConfig.kt`.
+  - Origin: GitHub issue [#7 — MOBA-Style Controls](https://github.com/kinou-p/android-open-mapper/issues/7) (*enhancement*, by @MrAnarE8).
+
+- [x] **🎮 Gyro Aim (Controller Motion)** — ✅ **Shipped** (uses the controller's own gyroscope on Android 12+, with LT-hold or always-on activation, 0.2x–5x sensitivity and smoothing; swipe camera only).
+  - Target Components: `engine/GyroSource.kt`, `engine/GamepadEngine.kt`, `engine/CameraProcessor.kt`, `data/model/CameraConfig.kt`.
+  - Origin: GitHub issue [#22 — Gyroscope mode](https://github.com/kinou-p/android-open-mapper/issues/22).
+
+- [x] **🕹️ Twin-Stick Right Joystick Mode** — ✅ **Shipped** (per-profile `CameraMode.JOYSTICK`: the right stick holds a second on-screen joystick at direction × deflection × radius instead of swiping the camera).
+  - Target Components: `engine/CameraProcessor.kt`, `data/model/CameraConfig.kt`, `ui/screens/ProfileEditScreen.kt`.
+  - Origin: GitHub issue [#29 — Unable to use gamepad](https://github.com/kinou-p/android-open-mapper/issues/29) (right-stick part).
+
+- [x] **🙈 Hide Controller from the Game (Exclusive Capture)** — ✅ **Shipped** (per-profile option; a dedicated `app_process` reader grabs the evdev node with `EVIOCGRAB` through Shizuku, and releases it while the HUD editor is open).
+  - Target Components: `engine/ExclusiveInputReader.kt`, `engine/LinuxInputReader.kt`, `engine/GamepadEngine.kt`, `data/model/GameProfile.kt`.
+  - Origin: GitHub issue [#28 — Right stick is inverted while the option to invert it is OFF](https://github.com/kinou-p/android-open-mapper/issues/28).
+
+- [x] **💬 Floating Quick-Menu Bubble** — ✅ **Shipped** (optional draggable bubble that opens the quick menu when the edge handle is hard to reach with gesture navigation).
+  - Target Components: `ui/overlay/EdgeHandleOverlayView.kt`, `service/OverlayService.kt`, `ui/screens/HomeScreen.kt`.
+  - Origin: GitHub issue [#30 — Quick settings as a bubble](https://github.com/kinou-p/android-open-mapper/issues/30).
 
 - [ ] **⚡ e-Sport Macros & Combos**
   - **Description**: Record or configure multi-action button sequences with customizable millisecond delays and execution order.
@@ -84,4 +95,26 @@ This document tracks planned features, technical enhancements, and upcoming mile
     - Unlocks individual **Impulse Trigger Motors** (independent LT / RT trigger vibration) on Xbox Elite & Series controllers during aiming/shooting.
     - Automatic hybrid fallback: Bluetooth native framework vibrator when connected wirelessly, direct USB Host driver when plugged via USB-C OTG cable.
   - **Target Components**: `engine/HapticManager.kt`, `engine/UsbHapticDriver.kt`, `data/model/GamepadDetector.kt`, `AndroidManifest.xml`.
+
+---
+
+## 🔄 App Distribution & Release Channels
+
+- [ ] **🧪 Beta / Prerelease Channel Opt-In**
+  - **Description**: Add an opt-in toggle in the application settings / about section allowing users to choose between the Stable update channel and the Beta/Prerelease channel. Update `AppUpdateManager` to query the GitHub releases API endpoint (including releases tagged as `prerelease: true`) when the beta channel is enabled.
+  - **Benefit**: Allows power users and community testers to receive and test experimental features, bugfixes, and cutting-edge engine adjustments early, creating a fast feedback loop without impacting general users.
+  - **Target Components**: `data/updater/AppUpdateManager.kt`, `ui/screens/HomeScreen.kt`, `data/repository/SettingsRepository.kt`.
+
+---
+
+## 🏗️ Architecture & Code Health
+
+- [ ] **🧩 Deconstruct Monolithic "God Components" & Massive Files**
+  - **Description**: Break down oversized, monolithic UI screens, overlay views, and engine classes into smaller, decoupled single-responsibility modules, sub-composables, and dedicated state holders.
+  - **Key Target Areas**:
+    - `ui/screens/GamepadTestScreen.kt` (~1,840 lines) & `ui/overlay/HudEditorOverlayView.kt` (~1,780 lines): extract canvas rendering, control palettes, dialogs, and gesture listeners into modular sub-components.
+    - `ui/screens/ProfileEditScreen.kt` (~1,180 lines) & `ProfileEditorScreen.kt` (~1,090 lines): separate button configuration sheets, stick calibration panels, and macro builders.
+    - `ui/screens/HomeScreen.kt` (~860 lines) & `engine/LinuxInputReader.kt` (~865 lines): isolate device discovery cards, update dialogs, and evdev byte packet parsers.
+  - **Benefit**: Greatly improves code readability, maintainability, compilation speed, and testability while drastically reducing the risk of regressions during feature development.
+  - **Target Components**: `ui/screens/GamepadTestScreen.kt`, `ui/overlay/HudEditorOverlayView.kt`, `ui/screens/ProfileEditScreen.kt`, `ui/screens/ProfileEditorScreen.kt`, `ui/screens/HomeScreen.kt`, `engine/LinuxInputReader.kt`.
 

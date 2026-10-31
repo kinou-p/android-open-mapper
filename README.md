@@ -87,21 +87,25 @@ OpenMapper requires **Shizuku** to inject touch events into games with high-spee
   - **120 Hz – 240 Hz Real-Time Loop**: High-priority dedicated engine thread synchronized with modern high-refresh-rate gaming screens.
   - **Seamless 360° Camera**: Dual-pointer handoff technology eliminating screen edge locks and angle snapping during continuous 360° rotations.
   - **Dynamic Flick & Boost Curve**: Micro-precision center deadzone combined with instant 180° turn acceleration at outer stick reach.
+  - **Twin-Stick Right Stick Mode**: Turn the right stick into a second on-screen joystick (direction × deflection × radius) instead of a swipe camera, for twin-stick and MOBA-style games.
+  - **Hide Controller from the Game**: Optionally grab the physical controller exclusively over Shizuku, so games with partial native controller support cannot fight the mapping.
 
 ### 🎯 Tactical Assists & Aim Enhancements
   - **Organic Jiggle Strafe**: Automated left/right dodge patterns during weapon fire with randomized feints and humanized timing variations.
   - **Vertical Anti-Recoil**: Smooth automated pull-down compensation with configurable speed (0.1x – 10.0x) and dedicated ADS-Only mode.
   - **Rotational Aim Assist (RAA) Keep-Alive**: Micro-dithering ensures in-game aim assist rotational tracking remains active even when stationary.
   - **Controller Rumble & Recoil**: Dynamic physical gamepad vibration with continuous firing recoil pulses and mechanical reload double-pulses.
+  - **Controller Gyro Aim**: Tilt a DualSense, Switch Pro or similar controller to fine-tune the camera (Android 12+), with LT-hold or always-on activation, sensitivity and smoothing.
 
 ### 🪟 In-Game HUD & Key Customization
-  - **In-Game Floating HUD Editor**: Retractable side-drawer to drag, scale, and test button mappings live without leaving your match.
+  - **In-Game Floating HUD Editor**: Retractable side-drawer to drag, scale, and test button mappings live without leaving your match — press a physical button in the editor to learn it.
+  - **Floating Quick-Menu Bubble**: Optional draggable bubble that opens the quick menu without the edge handle, handy with gesture navigation.
   - **Two-Button Combos**: Bind a HUD action to a chord such as `R1+X` right from the editor — more on-screen actions than the controller has buttons.
   - **Virtual Cursor Mode (`L3+R3`)**: Drive an on-screen pointer with either stick and tap with `A` to use menus, shops and dialogs without placing a HUD button on every item. Speed is adjustable in game with the D-pad or from the profile editor (0.25x – 5x) and saved per profile.
   - **Special Button Roles**: One-tap assignment for *Primary Fire*, *Reload Magazine*, and *ADS Scope* with dedicated sensitivities.
   - **Multi-Profile Management**: Create, duplicate, rename, backup, and export custom mappings for any game.
   - **Per-Profile Game Package**: Tag a profile with a game's package from a built-in app picker, so it is obvious which mapping belongs to which game.
-  - **Multi-Language UI**: Full English, French, Spanish and Portuguese translations, switchable from the home screen.
+  - **Multi-Language UI**: Full English, French, Spanish, Portuguese and Hebrew translations, switchable from the home screen.
 
 ### 🌐 Cloud Community & Hardware Diagnostic
   - **1-Click Community Hub**: Search, download, and vote on community-made game presets backed by Cloudflare D1 edge database.
