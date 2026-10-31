@@ -108,6 +108,11 @@
     <string name="camera_section_title">Réglages de Caméra</string>
     <string name="camera_section_desc">Sensibilité, courbe et assistance de visée</string>
     <string name="response_curve_title">Courbe de Réponse Analogique</string>
+    <string name="right_stick_mode_title">🕹️ Stick droit</string>
+    <string name="right_stick_mode_swipe">📷 Caméra (glisser)</string>
+    <string name="right_stick_mode_joystick">🕹️ Joystick</string>
+    <string name="right_stick_joystick_desc">Se déplace comme le stick gauche, pour les jeux twin-stick. Placez-le avec la zone caméra dans l’éditeur HUD : le joystick est le centre de cette zone.</string>
+    <string name="right_stick_joystick_radius">Rayon du joystick</string>
     <string name="curve_dynamic_boost">🚀 Flick 180°</string>
     <string name="curve_dynamic">⚡ Dynamique</string>
     <string name="curve_standard">🌊 Standard</string>
@@ -232,6 +237,9 @@
     <string name="overlay_learning_banner">👉 APPUYEZ SUR UNE TOUCHE DE LA MANETTE POUR ASSIGNER [%1$s]</string>
     <string name="overlay_hud_editor">Éditeur HUD</string>
     <string name="overlay_open_app">Ouvrir l\'App</string>
+    <string name="overlay_handle_style_title">Menu rapide</string>
+    <string name="overlay_handle_style_edge">Onglet latéral</string>
+    <string name="overlay_handle_style_bubble">Bulle flottante</string>
     <string name="overlay_stop_mapping">Arrêter Mapping</string>
     <string name="overlay_notif_title">OpenMapper - Mapping Actif</string>
     <string name="overlay_notif_text">Profil: %1$s • Touchez pour configurer</string>
@@ -264,6 +272,14 @@
     <string name="invert_y_desc">Inverse les mouvements Haut / Bas du stick caméra.</string>
     <string name="invert_x_title">↔️ Inverser l\'Axe Horizontal (X)</string>
     <string name="invert_x_desc">Inverse les mouvements Gauche / Droite du stick caméra.</string>
+    <string name="gyro_title">🎮 Visée au gyroscope de la manette</string>
+    <string name="gyro_desc">Visez en inclinant la manette (manette avec gyroscope requise, Android 12+).</string>
+    <string name="gyro_swipe_only">La visée au gyroscope ne fonctionne qu\'avec la caméra par balayage.</string>
+    <string name="gyro_activation_label">Activer avec</string>
+    <string name="gyro_activation_lt">LT maintenu</string>
+    <string name="gyro_activation_always">Toujours actif</string>
+    <string name="gyro_sensitivity_label">Sensibilité du gyroscope</string>
+    <string name="gyro_smoothing_label">Lissage du gyroscope</string>
     <string name="hot_switch_hint">💡 Raccourci Hot-Switch : Maintenez SELECT + D-Pad Haut/Bas pour changer de profil en plein jeu !</string>
     <string name="tab_polling_rate">⚡ Polling &amp; Latence</string>
     <string name="polling_test_title">⚡ Analyseur de Polling Rate &amp; Latence</string>

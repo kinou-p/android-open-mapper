@@ -12,6 +12,7 @@ import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import com.kinou.gameassist.R
+import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.data.model.ButtonConfig
 import com.kinou.gameassist.data.model.ButtonMode
 import com.kinou.gameassist.data.model.ButtonRole
@@ -68,7 +69,7 @@ class HudEditorOverlayView(
     private enum class EditorMenu { NONE, ROLE, MODE }
     private var openMenu = EditorMenu.NONE
     private val menuPanelRect = RectF()
-    private val menuRowRects = ArrayList<RectF>(8)
+    internal val menuRowRects = ArrayList<RectF>(8) // internal: read by the e2e tests
 
     // Opacity & Details Bar
     private val opacitySteps = floatArrayOf(0.40f, 0.65f, 0.15f, 0.0f)
@@ -397,7 +398,7 @@ class HudEditorOverlayView(
     private val btnNudgeLeftRect = RectF()
     private val btnSizeIncRect = RectF()
     private val btnSizeDecRect = RectF()
-    private val btnRoleRect = RectF()
+    internal val btnRoleRect = RectF() // internal: read by the e2e tests
     private val btnModeRect = RectF()
     private val btnJitterRect = RectF()
     private val btnCamRecoilSpdRect = RectF()
@@ -431,6 +432,8 @@ class HudEditorOverlayView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        // Gamepad key events are delivered to the focused view
+        requestFocus()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             windowInsetsController?.let { controller ->
                 controller.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
@@ -493,6 +496,11 @@ class HudEditorOverlayView(
 
             val camTitle = if (isCameraSelected) context.getString(R.string.overlay_camera_selected) else context.getString(R.string.overlay_camera_zone)
             canvas.drawText(camTitle, (cx1 + cx2) / 2f, cy1 + 35f, textPaint)
+
+            // Joystick right stick (#29): only the zone's center and the radius matter, show them
+            if (cam.mode == CameraMode.JOYSTICK) {
+                canvas.drawCircle((cx1 + cx2) / 2f, (cy1 + cy2) / 2f, cam.joystickRadius * h, camStroke)
+            }
 
             // Live Right Stick Feedback (Aiming reticle inside camera zone)
             if (hypot(liveRsX, liveRsY) > 0.08f) {
@@ -1115,20 +1123,22 @@ class HudEditorOverlayView(
         }
 
         val sideMargin = 16f * density
-        val panelWidth = (300f * density).coerceAtMost(w - 2f * sideMargin)
         val gap = 4f * density
         val padding = 10f * density
         val barTop = h - bottomBarHeight - 12f * density
         val minTop = topBarHeight + 8f * density
         val available = (barTop - 10f * density - minTop).coerceAtLeast(120f * density)
 
-        var rowHeight = 46f * density
-        var total = entries.size * rowHeight + (entries.size - 1) * gap + 2f * padding
-        if (total > available) {
-            val needed = (available - 2f * padding - (entries.size - 1) * gap) / entries.size
-            rowHeight = needed.coerceIn(30f * density, rowHeight)
-            total = entries.size * rowHeight + (entries.size - 1) * gap + 2f * padding
-        }
+        val layout = menuLayout(entries.size, available, density)
+        val columns = layout.columns
+        val rowsPerColumn = layout.rowsPerColumn
+        val rowHeight = layout.rowHeight
+        val total = layout.height
+        val columnWidth = 300f * density
+        val panelWidth = (columnWidth * columns + (columns - 1) * gap)
+            .coerceAtMost(w - 2f * sideMargin)
+        val rowWidth = (panelWidth - 2f * padding - (columns - 1) * gap) / columns
+
 
         val anchorRect = if (openMenu == EditorMenu.ROLE) btnRoleRect else btnModeRect
         val panelLeft = (anchorRect.centerX() - panelWidth / 2f)
@@ -1143,9 +1153,12 @@ class HudEditorOverlayView(
         val currentRole = btn.role
         val currentModes = ButtonConfig.modesForRole(btn.role)
         menuTextPaint.textSize = (rowHeight * 0.42f).coerceIn(12f * density, 17f * density)
-        var rowTop = panelTop + padding
         entries.forEachIndexed { index, entry ->
-            val row = RectF(panelLeft + padding, rowTop, panelLeft + panelWidth - padding, rowTop + rowHeight)
+            val column = index / rowsPerColumn
+            val rowInColumn = index % rowsPerColumn
+            val rowLeft = panelLeft + padding + column * (rowWidth + gap)
+            val rowTop = panelTop + padding + rowInColumn * (rowHeight + gap)
+            val row = RectF(rowLeft, rowTop, rowLeft + rowWidth, rowTop + rowHeight)
             menuRowRects.add(row)
 
             val isCurrent = if (openMenu == EditorMenu.ROLE) {
@@ -1168,7 +1181,6 @@ class HudEditorOverlayView(
                 row.centerY() + menuTextPaint.textSize * 0.35f,
                 menuTextPaint
             )
-            rowTop += rowHeight + gap
         }
     }
 
@@ -1780,4 +1792,26 @@ class HudEditorOverlayView(
         // Do not recycle bitmap on detach; ownership is managed by parent container
         screenshotBitmap = null
     }
+}
+
+/** Size of the role / mode selection menu, in px. */
+internal data class MenuLayout(val columns: Int, val rowsPerColumn: Int, val rowHeight: Float, val height: Float)
+
+/**
+ * Lays out [entries] menu rows in [available] px of height (issue #25): one column when every row
+ * fits at the 36 dp minimum, otherwise two columns (short landscape screens), with rows shrunk
+ * from 46 dp down to a 20 dp floor, so 4 rows per column always fit the 120 dp minimum area.
+ */
+internal fun menuLayout(entries: Int, available: Float, density: Float): MenuLayout {
+    val gap = 4f * density
+    val padding = 10f * density
+    fun heightFor(rows: Int, rowH: Float) = rows * rowH + (rows - 1) * gap + 2f * padding
+    val columns = if (heightFor(entries, 36f * density) > available) 2 else 1
+    val rowsPerColumn = (entries + columns - 1) / columns
+    var rowHeight = 46f * density
+    if (heightFor(rowsPerColumn, rowHeight) > available) {
+        val needed = (available - 2f * padding - (rowsPerColumn - 1) * gap) / rowsPerColumn
+        rowHeight = needed.coerceIn(20f * density, rowHeight)
+    }
+    return MenuLayout(columns, rowsPerColumn, rowHeight, heightFor(rowsPerColumn, rowHeight))
 }

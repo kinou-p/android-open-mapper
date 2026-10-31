@@ -25,7 +25,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kinou.gameassist.R
+import com.kinou.gameassist.data.model.CameraMode
 import com.kinou.gameassist.data.model.GameProfile
+import com.kinou.gameassist.data.model.GyroActivation
 import com.kinou.gameassist.data.model.ResponseCurve
 import com.kinou.gameassist.engine.AimSettings
 import com.kinou.gameassist.engine.CursorSpeed
@@ -73,6 +75,10 @@ fun ProfileEditScreen(
     var antiRecoilAdsOnly by remember(profile.id) { mutableStateOf(profile.camera.antiRecoilAdsOnly) }
     var invertX by remember(profile.id) { mutableStateOf(profile.camera.invertX) }
     var invertY by remember(profile.id) { mutableStateOf(profile.camera.invertY) }
+    var gyroEnabled by remember(profile.id) { mutableStateOf(profile.camera.gyroEnabled) }
+    var gyroActivation by remember(profile.id) { mutableStateOf(profile.camera.gyroActivation) }
+    var gyroSensitivity by remember(profile.id) { mutableFloatStateOf(profile.camera.gyroSensitivity) }
+    var gyroSmoothing by remember(profile.id) { mutableFloatStateOf(profile.camera.gyroSmoothing) }
     var deadzoneJoy by remember(profile.id) { mutableFloatStateOf(profile.joystick.deadzone) }
     var raaKeepAlive by remember(profile.id) { mutableStateOf(profile.joystick.raaKeepAlive) }
     var jiggleStrafe by remember(profile.id) { mutableStateOf(profile.joystick.jiggleStrafe) }
@@ -86,6 +92,8 @@ fun ProfileEditScreen(
     var aimDeadzone by remember(profile.id) { mutableFloatStateOf(AimSettings.coerceDeadzone(profile.settings.aimDeadzone)) }
     var responseCurve by remember(profile.id) { mutableStateOf(profile.camera.responseCurve) }
     var exclusiveController by remember(profile.id) { mutableStateOf(profile.settings.exclusiveController) }
+    var cameraMode by remember(profile.id) { mutableStateOf(profile.camera.mode) }
+    var joystickRadius by remember(profile.id) { mutableFloatStateOf(profile.camera.joystickRadius) }
 
     // Haptic Feedback States
     var hapticFeedback by remember(profile.id) { mutableStateOf(profile.settings.hapticFeedback) }
@@ -252,6 +260,56 @@ fun ProfileEditScreen(
                 // ==========================================
                 if (selectedTab == 0) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Right stick: swipe camera or second joystick (twin-stick games, issue #29)
+                        Text(stringResource(R.string.right_stick_mode_title), color = TextSecondary, fontSize = 13.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                CameraMode.SWIPE to stringResource(R.string.right_stick_mode_swipe),
+                                CameraMode.JOYSTICK to stringResource(R.string.right_stick_mode_joystick)
+                            ).forEach { (m, title) ->
+                                val active = cameraMode == m
+                                Button(
+                                    onClick = {
+                                        cameraMode = m
+                                        profile.camera.mode = m
+                                        onSave()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (active) NeonCyan else DarkCardBorder
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        title,
+                                        color = if (active) DarkBackground else TextPrimary,
+                                        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                        if (cameraMode == CameraMode.JOYSTICK) {
+                            Text(stringResource(R.string.right_stick_joystick_desc), color = TextSecondary, fontSize = 11.sp)
+                            SliderSetting(
+                                label = stringResource(R.string.right_stick_joystick_radius),
+                                value = joystickRadius,
+                                range = 0.04f..0.30f,
+                                displayText = "%.0f%%".format(joystickRadius * 100),
+                                onValueChange = {
+                                    joystickRadius = it
+                                    profile.camera.joystickRadius = it
+                                },
+                                onValueChangeFinished = { onSave() }
+                            )
+                        }
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
                         Text(stringResource(R.string.response_curve_title), color = TextSecondary, fontSize = 13.sp)
 
                         // Selectors
@@ -673,6 +731,114 @@ fun ProfileEditScreen(
                                     )
                                 )
                             }
+                        }
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
+                        // --- Controller gyro aim (swipe camera only) ---
+                        if (cameraMode == CameraMode.SWIPE) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        stringResource(R.string.gyro_title),
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        stringResource(R.string.gyro_desc),
+                                        color = TextSecondary,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Switch(
+                                    checked = gyroEnabled,
+                                    onCheckedChange = {
+                                        gyroEnabled = it
+                                        profile.camera.gyroEnabled = it
+                                        onSave()
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = DarkBackground,
+                                        checkedTrackColor = NeonCyan,
+                                        uncheckedThumbColor = TextSecondary,
+                                        uncheckedTrackColor = DarkSurface
+                                    )
+                                )
+                            }
+
+                            AnimatedVisibility(visible = gyroEnabled) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(stringResource(R.string.gyro_activation_label), color = TextSecondary, fontSize = 12.sp)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        listOf(
+                                            GyroActivation.LT to stringResource(R.string.gyro_activation_lt),
+                                            GyroActivation.ALWAYS to stringResource(R.string.gyro_activation_always)
+                                        ).forEach { (mode, title) ->
+                                            val active = gyroActivation == mode
+                                            Button(
+                                                onClick = {
+                                                    gyroActivation = mode
+                                                    profile.camera.gyroActivation = mode
+                                                    onSave()
+                                                },
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = if (active) NeonCyan else DarkCardBorder
+                                                ),
+                                                shape = RoundedCornerShape(8.dp),
+                                                modifier = Modifier.weight(1f),
+                                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                                            ) {
+                                                Text(
+                                                    title,
+                                                    color = if (active) DarkBackground else TextPrimary,
+                                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    SliderSetting(
+                                        label = stringResource(R.string.gyro_sensitivity_label),
+                                        value = gyroSensitivity,
+                                        range = 0.2f..5.0f,
+                                        displayText = "%.1fx".format(gyroSensitivity),
+                                        onValueChange = {
+                                            gyroSensitivity = it
+                                            profile.camera.gyroSensitivity = it
+                                        },
+                                        onValueChangeFinished = { onSave() }
+                                    )
+
+                                    SliderSetting(
+                                        label = stringResource(R.string.gyro_smoothing_label),
+                                        value = gyroSmoothing,
+                                        range = 0f..0.9f,
+                                        displayText = "${(gyroSmoothing * 100).toInt()}%",
+                                        onValueChange = {
+                                            gyroSmoothing = it
+                                            profile.camera.gyroSmoothing = it
+                                        },
+                                        onValueChangeFinished = { onSave() }
+                                    )
+                                }
+                            }
+                        }
+                        } else {
+                            Text(
+                                stringResource(R.string.gyro_swipe_only),
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
                         }
 
                         // --- Raccourci Hot-Switch Info Banner ---

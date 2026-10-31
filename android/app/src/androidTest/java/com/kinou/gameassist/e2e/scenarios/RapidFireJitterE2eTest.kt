@@ -24,7 +24,12 @@ class RapidFireJitterE2eTest : GameE2eTest<FpsGameActivity, FpsGameView>(FpsGame
     private fun holdFireAndCollectTaps(jitter: Float): List<Pair<Float, Float>> {
         val rig = startEngine(Profiles.profile("rapid", listOf(fireButton(jitter))))
         rig.press("BUTTON_R2")
-        waitFor("several rapid-fire taps") { game.snapshotState().fireCount >= 6 }
+        try {
+            waitFor("several rapid-fire taps") { game.snapshotState().fireCount >= 6 }
+        } catch (e: AssertionError) {
+            val s = game.snapshotState()
+            throw AssertionError("${e.message} (saw ${s.fireCount} taps, ${s.pointersDown} fingers down)", e)
+        }
         Thread.sleep(2000)
         rig.release("BUTTON_R2")
         return game.snapshotState().fireTaps

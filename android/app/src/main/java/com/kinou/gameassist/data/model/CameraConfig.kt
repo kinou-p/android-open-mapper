@@ -11,10 +11,30 @@ enum class ResponseCurve {
     @SerialName("LINEAR") LINEAR
 }
 
+/** What the right stick does: swipe the camera, or act as a second joystick (twin-stick games). */
+@Serializable
+enum class CameraMode {
+    @SerialName("swipe") SWIPE,
+    @SerialName("joystick") JOYSTICK
+}
+
+@Serializable
+enum class GyroActivation {
+    @SerialName("lt") LT,
+    @SerialName("always") ALWAYS
+}
+
 @Serializable
 data class CameraConfig(
     @SerialName("enabled")
     var enabled: Boolean = true,
+
+    @SerialName("mode")
+    var mode: CameraMode = CameraMode.SWIPE,
+
+    // Joystick mode: drag radius around the center of the camera zone, normalized to screen height
+    @SerialName("joystick_radius")
+    var joystickRadius: Float = 0.12f,
 
     @SerialName("rect_x1")
     var rectX1: Float = 0.50f,
@@ -80,5 +100,21 @@ data class CameraConfig(
     var antiRecoilAdsOnly: Boolean = false,
 
     @SerialName("max_step_pixels")
-    var maxStepPixels: Float = 55.0f
-)
+    var maxStepPixels: Float = 55.0f,
+
+    // Aim with the gamepad's own gyroscope (DualSense, Switch Pro...), Android 12+.
+    @SerialName("gyro_enabled")
+    var gyroEnabled: Boolean = false,
+
+    @SerialName("gyro_activation")
+    var gyroActivation: GyroActivation = GyroActivation.LT,
+
+    @SerialName("gyro_sensitivity")
+    var gyroSensitivity: Float = 1.0f,
+
+    @SerialName("gyro_smoothing")
+    var gyroSmoothing: Float = 0.3f
+) {
+    /** Gyro aim drives the swipe camera; in joystick mode the right stick owns the camera contact. */
+    val gyroApplies: Boolean get() = gyroEnabled && mode == CameraMode.SWIPE
+}

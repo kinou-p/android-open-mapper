@@ -108,6 +108,11 @@
     <string name="camera_section_title">Ajustes de Cámara</string>
     <string name="camera_section_desc">Sensibilidad, curva y asistencia de apuntado</string>
     <string name="response_curve_title">Curva de Respuesta Analógica</string>
+    <string name="right_stick_mode_title">🕹️ Stick derecho</string>
+    <string name="right_stick_mode_swipe">📷 Cámara (deslizar)</string>
+    <string name="right_stick_mode_joystick">🕹️ Joystick</string>
+    <string name="right_stick_joystick_desc">Se mueve como el stick izquierdo, para juegos twin-stick. Colócalo con la zona de cámara en el editor HUD: el joystick es el centro de esa zona.</string>
+    <string name="right_stick_joystick_radius">Radio del joystick</string>
     <string name="curve_dynamic_boost">🚀 180° Flick</string>
     <string name="curve_dynamic">⚡ Dinámica</string>
     <string name="curve_standard">🌊 Estándar</string>
@@ -221,6 +226,9 @@
     <string name="overlay_learning_banner">👉 PULSA UN BOTÓN DEL MANDO PARA ASIGNAR [%1$s]</string>
     <string name="overlay_hud_editor">Editor HUD</string>
     <string name="overlay_open_app">Abrir App</string>
+    <string name="overlay_handle_style_title">Menú rápido</string>
+    <string name="overlay_handle_style_edge">Pestaña lateral</string>
+    <string name="overlay_handle_style_bubble">Burbuja flotante</string>
     <string name="overlay_stop_mapping">Detener Mapeo</string>
     <string name="overlay_notif_title">OpenMapper - Mapeo Activo</string>
     <string name="overlay_notif_text">Perfil: %1$s • Toca para configurar</string>
@@ -253,6 +261,14 @@
     <string name="invert_y_desc">Invierte los movimientos Arriba / Abajo del stick de cámara.</string>
     <string name="invert_x_title">↔️ Invertir Eje Horizontal (X)</string>
     <string name="invert_x_desc">Invierte los movimientos Izquierda / Derecha del stick de cámara.</string>
+    <string name="gyro_title">🎮 Apuntar con giroscopio del mando</string>
+    <string name="gyro_desc">Apunta inclinando el mando (requiere un mando con giroscopio, Android 12+).</string>
+    <string name="gyro_swipe_only">La mira con giroscopio solo funciona con la cámara de deslizar.</string>
+    <string name="gyro_activation_label">Activar con</string>
+    <string name="gyro_activation_lt">LT mantenido</string>
+    <string name="gyro_activation_always">Siempre activo</string>
+    <string name="gyro_sensitivity_label">Sensibilidad del giroscopio</string>
+    <string name="gyro_smoothing_label">Suavizado del giroscopio</string>
     <string name="hot_switch_hint">💡 Atajo Hot-Switch : ¡Mantén SELECT + D-Pad Arriba/Abajo para cambiar de perfil en partida!</string>
     <string name="tab_polling_rate">⚡ Polling y Latencia</string>
     <string name="polling_test_title">⚡ Analizador de Polling Rate y Latencia</string>
