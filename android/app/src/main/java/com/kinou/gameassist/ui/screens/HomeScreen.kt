@@ -120,22 +120,24 @@ fun HomeScreen(
         }
         isCheckingUpdate = true
         try {
-            val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
+            val result = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
             if (generation != updateCheckGeneration) return@LaunchedEffect
             if (isDownloadingUpdate) return@LaunchedEffect
+            // A failed request proves nothing about the current offer: keep it.
+            if (result.isFailure) return@LaunchedEffect
+            val release = result.getOrNull()
             val newer = release?.takeIf { it.isNewer }
             if (newer != null) {
                 updateInfo = newer
                 AppUpdateManager.cleanupOldApks(context, newer.apkFileName)
                 downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, newer)
                 showUpdateDialog = true
-            } else if (release != null) {
+            } else {
                 // A successful check says the current channel is up to date.
                 updateInfo = null
                 downloadedApkFile = null
                 showUpdateDialog = false
             }
-            // release == null means the request failed: keep the current offer.
         } finally {
             if (generation == updateCheckGeneration) isCheckingUpdate = false
         }
@@ -503,26 +505,27 @@ fun HomeScreen(
                                 isCheckingUpdate = true
                                 try {
                                     val requestedBeta = betaChannel
-                                    val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = requestedBeta)
+                                    val result = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = requestedBeta)
                                     if (generation != updateCheckGeneration) return@launch
                                     // The user may have flipped the channel while this request was in flight.
                                     if (requestedBeta != betaChannel) return@launch
-                                    if (release != null) {
-                                        if (release.isNewer) {
-                                            if (isDownloadingUpdate) return@launch
-                                            updateInfo = release
-                                            AppUpdateManager.cleanupOldApks(context, release.apkFileName)
-                                            downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
-                                            showUpdateDialog = true
-                                        } else {
-                                            if (!isDownloadingUpdate) {
-                                                updateInfo = null
-                                                downloadedApkFile = null
-                                            }
-                                            Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
-                                        }
-                                    } else {
+                                    if (result.isFailure) {
                                         Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
+                                        return@launch
+                                    }
+                                    val release = result.getOrNull()
+                                    if (release != null && release.isNewer) {
+                                        if (isDownloadingUpdate) return@launch
+                                        updateInfo = release
+                                        AppUpdateManager.cleanupOldApks(context, release.apkFileName)
+                                        downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
+                                        showUpdateDialog = true
+                                    } else {
+                                        if (!isDownloadingUpdate) {
+                                            updateInfo = null
+                                            downloadedApkFile = null
+                                        }
+                                        Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
                                     }
                                 } finally {
                                     if (generation == updateCheckGeneration) isCheckingUpdate = false
@@ -584,6 +587,16 @@ fun HomeScreen(
                         onCheckedChange = {
                             betaChannel = it
                             UpdatePreferences.setBetaEnabled(context, it)
+                            // Opting out must also retire a prerelease offer that is already
+                            // downloading; the cancelled job deletes its partial APK.
+                            if (!it && updateInfo?.isPrerelease == true) {
+                                downloadJob?.cancel()
+                                isDownloadingUpdate = false
+                                downloadedApkFile?.delete()
+                                downloadedApkFile = null
+                                updateInfo = null
+                                showUpdateDialog = false
+                            }
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = DarkBackground,

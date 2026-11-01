@@ -24,6 +24,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -56,12 +57,14 @@ object AppUpdateManager {
     /**
      * Checks for the latest release on GitHub asynchronously.
      * [includeBeta] also considers prerelease builds and keeps the highest version overall.
+     * A successful response with no eligible release is `success(null)`; a network or parsing
+     * failure is a failed [Result], so callers can keep a still-valid offer.
      */
     suspend fun checkForUpdate(
         context: Context,
         currentVersion: String,
         includeBeta: Boolean = false
-    ): AppReleaseInfo? = withContext(Dispatchers.IO) {
+    ): Result<AppReleaseInfo?> = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
         try {
             val url = URL(if (includeBeta) RELEASES_URL else API_URL)
@@ -73,21 +76,23 @@ object AppUpdateManager {
             connection.readTimeout = 8000
 
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                return@withContext null
+                return@withContext Result.failure(IOException("HTTP ${connection.responseCode}"))
             }
 
             val reader = BufferedReader(InputStreamReader(connection.inputStream))
             val responseText = reader.use { it.readText() }
 
             val json = if (includeBeta) {
-                bestReleaseJson(responseText) ?: return@withContext null
+                bestReleaseJson(responseText)
             } else {
                 Json.parseToJsonElement(responseText).jsonObject
             }
-            buildReleaseInfo(context, json, currentVersion)
+            Result.success(json?.let { buildReleaseInfo(context, it, currentVersion) })
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext null
+            Result.failure(e)
         } finally {
             connection?.disconnect()
         }
@@ -293,6 +298,12 @@ object AppUpdateManager {
 
             outputStream.flush()
             outputStream.close()
+
+            // A successful HTTP status does not guarantee a complete body: reject a short read.
+            if (totalBytes > 0 && downloadedBytes != totalBytes) {
+                outputFile.delete()
+                return@withContext Result.failure(Exception(context.getString(com.kinou.gameassist.R.string.err_apk_corrupt)))
+            }
 
             // Vérification d'intégrité du fichier téléchargé (si un checksum est fourni par la release)
             if (expectedSha256 != null) {
