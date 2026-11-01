@@ -772,35 +772,39 @@ fun HomeScreen(
                 } else {
                     Button(
                         onClick = {
-                            downloadJob = coroutineScope.launch {
+                            if (!isDownloadingUpdate) {
+                                // Set synchronously so a double tap cannot start two downloads.
                                 isDownloadingUpdate = true
-                                downloadProgress = 0f
-                                downloadedBytes = 0L
-                                totalBytes = release.apkFileSize
-                                downloadError = null
+                                downloadJob = coroutineScope.launch {
+                                    downloadProgress = 0f
+                                    downloadedBytes = 0L
+                                    totalBytes = release.apkFileSize
+                                    downloadError = null
 
-                                val res = AppUpdateManager.downloadApk(
-                                    context = context,
-                                    downloadUrl = release.downloadUrl,
-                                    targetFileName = release.apkFileName,
-                                    expectedSha256 = release.expectedSha256
-                                ) { progress, dBytes, tBytes ->
-                                    downloadProgress = progress
-                                    downloadedBytes = dBytes
-                                    totalBytes = tBytes
-                                }
-                                isDownloadingUpdate = false
-
-                                res.onSuccess { apkFile ->
-                                    downloadedApkFile = apkFile
-                                    if (AppUpdateManager.canInstallPackages(context)) {
-                                        AppUpdateManager.installApk(context, apkFile)
+                                    val res = AppUpdateManager.downloadApk(
+                                        context = context,
+                                        downloadUrl = release.downloadUrl,
+                                        targetFileName = release.apkFileName,
+                                        expectedSha256 = release.expectedSha256
+                                    ) { progress, dBytes, tBytes ->
+                                        downloadProgress = progress
+                                        downloadedBytes = dBytes
+                                        totalBytes = tBytes
                                     }
-                                }.onFailure { err ->
-                                    downloadError = err.localizedMessage ?: err.message ?: "Erreur"
+                                    isDownloadingUpdate = false
+
+                                    res.onSuccess { apkFile ->
+                                        downloadedApkFile = apkFile
+                                        if (AppUpdateManager.canInstallPackages(context)) {
+                                            AppUpdateManager.installApk(context, apkFile)
+                                        }
+                                    }.onFailure { err ->
+                                        downloadError = err.localizedMessage ?: err.message ?: "Erreur"
+                                    }
                                 }
                             }
                         },
+                        enabled = !isDownloadingUpdate,
                         colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                     ) {
                         Icon(Icons.Default.Download, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(16.dp))

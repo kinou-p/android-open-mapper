@@ -54,6 +54,9 @@ object AppUpdateManager {
     private const val API_URL = "$API_BASE/releases/latest"
     private const val RELEASES_URL = "$API_BASE/releases?per_page=100"
 
+    /** Upper bound for a release feed, so a hostile/huge body cannot exhaust the heap. */
+    private const val MAX_FEED_CHARS = 4 * 1024 * 1024
+
     /**
      * Checks for the latest release on GitHub asynchronously.
      * [includeBeta] also considers prerelease builds and keeps the highest version overall.
@@ -80,7 +83,18 @@ object AppUpdateManager {
             }
 
             val reader = BufferedReader(InputStreamReader(connection.inputStream))
-            val responseText = reader.use { it.readText() }
+            val responseText = reader.use { input ->
+                val builder = StringBuilder()
+                val buffer = CharArray(8 * 1024)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    builder.append(buffer, 0, read)
+                    if (builder.length > MAX_FEED_CHARS) {
+                        throw IOException("Release feed exceeds $MAX_FEED_CHARS characters")
+                    }
+                }
+                builder.toString()
+            }
 
             val json = if (includeBeta) {
                 bestReleaseJson(responseText)
