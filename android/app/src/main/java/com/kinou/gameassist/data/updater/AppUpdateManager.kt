@@ -51,7 +51,7 @@ object AppUpdateManager {
     private const val GITHUB_REPO = "android-open-mapper"
     private const val API_BASE = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO"
     private const val API_URL = "$API_BASE/releases/latest"
-    private const val RELEASES_URL = "$API_BASE/releases?per_page=20"
+    private const val RELEASES_URL = "$API_BASE/releases?per_page=100"
 
     /**
      * Checks for the latest release on GitHub asynchronously.
@@ -328,7 +328,11 @@ object AppUpdateManager {
             if (release.apkFileSize <= 0L || targetFile.length() == release.apkFileSize) {
                 // Verify checksum if published, to avoid installing a tampered/truncated cache
                 val expected = release.expectedSha256
-                if (expected == null) return targetFile
+                if (expected == null) {
+                    // Without a digest, only a version-specific filename proves this file belongs
+                    // to the selected release; a generic "latest" asset could be another build.
+                    return if (targetFile.name.contains(release.versionName, ignoreCase = true)) targetFile else null
+                }
                 val actual = calculateFileSha256(targetFile)
                 if (actual.equals(expected, ignoreCase = true)) return targetFile
             }
@@ -576,12 +580,12 @@ internal data class ReleaseCandidate(
  * version without a pre-release is higher than the same version with one.
  */
 internal fun compareVersions(a: String, b: String): Int {
-    fun core(value: String): List<Int> =
+    fun core(value: String): List<Long> =
         value.removePrefix("v").removePrefix("V").trim()
             .substringBefore('+')
             .substringBefore('-')
             .split('.')
-            .map { it.toIntOrNull() ?: 0 }
+            .map { it.toLongOrNull() ?: 0L }
 
     fun preRelease(value: String): List<String> {
         val cleaned = value.removePrefix("v").removePrefix("V").trim().substringBefore('+')
@@ -592,8 +596,8 @@ internal fun compareVersions(a: String, b: String): Int {
     val aCore = core(a)
     val bCore = core(b)
     for (i in 0 until maxOf(aCore.size, bCore.size)) {
-        val x = aCore.getOrElse(i) { 0 }
-        val y = bCore.getOrElse(i) { 0 }
+        val x = aCore.getOrElse(i) { 0L }
+        val y = bCore.getOrElse(i) { 0L }
         if (x != y) return x.compareTo(y)
     }
 
@@ -606,8 +610,8 @@ internal fun compareVersions(a: String, b: String): Int {
     for (i in 0 until minOf(aPre.size, bPre.size)) {
         val x = aPre[i]
         val y = bPre[i]
-        val xn = x.toIntOrNull()
-        val yn = y.toIntOrNull()
+        val xn = x.toLongOrNull()
+        val yn = y.toLongOrNull()
         val cmp = when {
             xn != null && yn != null -> xn.compareTo(yn)
             xn != null -> -1 // numeric identifiers have lower precedence than alphanumeric ones

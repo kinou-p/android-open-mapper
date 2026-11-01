@@ -1,9 +1,21 @@
 package com.kinou.gameassist.data.updater
 
+import android.content.Context
+import android.content.ContextWrapper
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.io.File
 
 class AppUpdateManagerTest {
+
+    @get:Rule
+    val tempFolder = TemporaryFolder()
+
+    private class CacheContext(private val cache: File) : ContextWrapper(null) {
+        override fun getCacheDir(): File = cache
+    }
 
     @Test
     fun testIsVersionNewer() {
@@ -73,6 +85,45 @@ class AppUpdateManagerTest {
     @Test
     fun malformedVersionsDoNotClaimAnUpdate() {
         assertFalse(AppUpdateManager.isVersionNewer("not-a-version", "1.4.0"))
+    }
+
+    @Test
+    fun versionNumbersLargerThanIntAreStillOrdered() {
+        assertTrue(AppUpdateManager.isVersionNewer("9999999999.0.0", "9999999998.0.0"))
+    }
+
+    @Test
+    fun aGenericCachedApkWithoutChecksumIsNotReusedAcrossReleases() {
+        val cacheDir = tempFolder.newFolder("cache")
+        val updates = File(cacheDir, "updates").apply { mkdirs() }
+        val generic = File(updates, "OpenMapper-latest.apk").apply { writeBytes(ByteArray(128)) }
+        val context = CacheContext(cacheDir)
+        val release = AppReleaseInfo(
+            tagName = "v1.4.0",
+            versionName = "1.4.0",
+            title = "OpenMapper 1.4.0",
+            changelog = "",
+            downloadUrl = "https://example.com/OpenMapper-latest.apk",
+            releaseHtmlUrl = "https://example.com",
+            isNewer = true,
+            apkFileName = generic.name,
+            apkFileSize = generic.length(),
+            expectedSha256 = null
+        )
+
+        assertNull(
+            "a generic cached file without checksum cannot be proven to be this release",
+            AppUpdateManager.getDownloadedApkFile(context, release)
+        )
+
+        val versioned = File(updates, "OpenMapper-v1.4.0.apk").apply { writeBytes(ByteArray(128)) }
+        assertEquals(
+            versioned,
+            AppUpdateManager.getDownloadedApkFile(
+                context,
+                release.copy(apkFileName = versioned.name, apkFileSize = versioned.length())
+            )
+        )
     }
 
     private fun candidate(tag: String, prerelease: Boolean = false, apk: Boolean = true) =

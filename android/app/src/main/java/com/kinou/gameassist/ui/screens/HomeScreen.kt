@@ -106,14 +106,22 @@ fun HomeScreen(
     var downloadError by remember { mutableStateOf<String?>(null) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
 
-    // Automatic check on launch, and again whenever the update channel changes
+    // Automatic check on launch, and again whenever the update channel changes. The effect is
+    // cancelled on a channel change, so a late response can't overwrite the new channel.
     LaunchedEffect(betaChannel) {
         val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
-        if (release != null && release.isNewer) {
-            updateInfo = release
-            AppUpdateManager.cleanupOldApks(context, release.apkFileName)
-            downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
+        if (isDownloadingUpdate) return@LaunchedEffect
+        val newer = release?.takeIf { it.isNewer }
+        if (newer != null) {
+            updateInfo = newer
+            AppUpdateManager.cleanupOldApks(context, newer.apkFileName)
+            downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, newer)
             showUpdateDialog = true
+        } else {
+            // The previous offer may belong to the channel we just left.
+            updateInfo = null
+            downloadedApkFile = null
+            showUpdateDialog = false
         }
     }
 
@@ -476,15 +484,23 @@ fun HomeScreen(
                         onClick = {
                             coroutineScope.launch {
                                 isCheckingUpdate = true
-                                val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
+                                val requestedBeta = betaChannel
+                                val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = requestedBeta)
                                 isCheckingUpdate = false
+                                // The user may have flipped the channel while this request was in flight.
+                                if (requestedBeta != betaChannel) return@launch
                                 if (release != null) {
-                                    updateInfo = release
                                     if (release.isNewer) {
+                                        if (isDownloadingUpdate) return@launch
+                                        updateInfo = release
                                         AppUpdateManager.cleanupOldApks(context, release.apkFileName)
                                         downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
                                         showUpdateDialog = true
                                     } else {
+                                        if (!isDownloadingUpdate) {
+                                            updateInfo = null
+                                            downloadedApkFile = null
+                                        }
                                         Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
                                     }
                                 } else {
