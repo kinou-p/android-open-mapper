@@ -112,6 +112,12 @@ fun HomeScreen(
     // generation also discards a result from a check that a manual refresh has superseded.
     LaunchedEffect(betaChannel) {
         val generation = ++updateCheckGeneration
+        // An offer from the channel we just left is not actionable: drop it before the new check.
+        if (!betaChannel && updateInfo?.isPrerelease == true && !isDownloadingUpdate) {
+            updateInfo = null
+            downloadedApkFile = null
+            showUpdateDialog = false
+        }
         isCheckingUpdate = true
         try {
             val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
@@ -123,12 +129,13 @@ fun HomeScreen(
                 AppUpdateManager.cleanupOldApks(context, newer.apkFileName)
                 downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, newer)
                 showUpdateDialog = true
-            } else {
-                // The previous offer may belong to the channel we just left.
+            } else if (release != null) {
+                // A successful check says the current channel is up to date.
                 updateInfo = null
                 downloadedApkFile = null
                 showUpdateDialog = false
             }
+            // release == null means the request failed: keep the current offer.
         } finally {
             if (generation == updateCheckGeneration) isCheckingUpdate = false
         }

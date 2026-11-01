@@ -177,7 +177,7 @@ object AppUpdateManager {
 
     fun sanitizeApkFileName(fileName: String): String {
         val trimmed = fileName.trim()
-        val isValid = trimmed.matches(Regex("^[a-zA-Z0-9._-]+\\.apk$", RegexOption.IGNORE_CASE)) &&
+        val isValid = trimmed.matches(Regex("^[a-zA-Z0-9._+-]+\\.apk$", RegexOption.IGNORE_CASE)) &&
                 !trimmed.contains("..") &&
                 !trimmed.contains("/") &&
                 !trimmed.contains("\\")
@@ -648,9 +648,11 @@ internal fun isValidVersion(version: String): Boolean {
     return true
 }
 
-/** True when an APK asset name identifies exactly [version], not a longer version. */
-internal fun isVersionedApkName(name: String, version: String): Boolean =
-    name.endsWith("$version.apk", ignoreCase = true)
+/** True when an APK asset name identifies exactly [version], not a suffix of a longer version. */
+internal fun isVersionedApkName(name: String, version: String): Boolean {
+    val escaped = Regex.escape(version)
+    return Regex("(?<![0-9.])$escaped\\.apk$", RegexOption.IGNORE_CASE).containsMatchIn(name)
+}
 
 /** Highest version among the allowed candidates, stable-only unless [includeBeta]. */
 internal fun bestRelease(candidates: List<ReleaseCandidate>, includeBeta: Boolean): ReleaseCandidate? =

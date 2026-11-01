@@ -38,6 +38,8 @@ class AppUpdateManagerTest {
     fun testSanitizeApkFileName() {
         assertEquals("OpenMapper-v1.2.0.apk", AppUpdateManager.sanitizeApkFileName("OpenMapper-v1.2.0.apk"))
         assertEquals("app_update_debug.apk", AppUpdateManager.sanitizeApkFileName("app_update_debug.apk"))
+        // Build metadata is a valid part of an APK name.
+        assertEquals("OpenMapper-v1.4.0+build.apk", AppUpdateManager.sanitizeApkFileName("OpenMapper-v1.4.0+build.apk"))
 
         // Rejections / fallbacks
         assertEquals("OpenMapper-Update.apk", AppUpdateManager.sanitizeApkFileName("../../../evil.apk"))
@@ -104,6 +106,9 @@ class AppUpdateManagerTest {
         assertFalse(isVersionedApkName("OpenMapper-v1.4.0-beta.1.apk", "1.4.0"))
         assertFalse(isVersionedApkName("OpenMapper-v1.4.0.1.apk", "1.4.0"))
         assertFalse(isVersionedApkName("OpenMapper-latest.apk", "1.4.0"))
+        // A shorter version that appears as a suffix of a longer one must not match.
+        assertFalse(isVersionedApkName("OpenMapper-v1.4.0.apk", "4.0"))
+        assertFalse(isVersionedApkName("OpenMapper-v1.4.0.1.apk", "0.1"))
     }
 
     @Test
