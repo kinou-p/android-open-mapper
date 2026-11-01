@@ -96,6 +96,7 @@ fun HomeScreen(
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
     var betaChannel by remember { mutableStateOf(UpdatePreferences.isBetaEnabled(context)) }
+    var updateCheckGeneration by remember { mutableIntStateOf(0) }
 
     // In-App Updater Download & Install States
     var isDownloadingUpdate by remember { mutableStateOf(false) }
@@ -107,21 +108,29 @@ fun HomeScreen(
     var downloadJob by remember { mutableStateOf<Job?>(null) }
 
     // Automatic check on launch, and again whenever the update channel changes. The effect is
-    // cancelled on a channel change, so a late response can't overwrite the new channel.
+    // cancelled on a channel change, so a late response can't overwrite the new channel; the
+    // generation also discards a result from a check that a manual refresh has superseded.
     LaunchedEffect(betaChannel) {
-        val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
-        if (isDownloadingUpdate) return@LaunchedEffect
-        val newer = release?.takeIf { it.isNewer }
-        if (newer != null) {
-            updateInfo = newer
-            AppUpdateManager.cleanupOldApks(context, newer.apkFileName)
-            downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, newer)
-            showUpdateDialog = true
-        } else {
-            // The previous offer may belong to the channel we just left.
-            updateInfo = null
-            downloadedApkFile = null
-            showUpdateDialog = false
+        val generation = ++updateCheckGeneration
+        isCheckingUpdate = true
+        try {
+            val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
+            if (generation != updateCheckGeneration) return@LaunchedEffect
+            if (isDownloadingUpdate) return@LaunchedEffect
+            val newer = release?.takeIf { it.isNewer }
+            if (newer != null) {
+                updateInfo = newer
+                AppUpdateManager.cleanupOldApks(context, newer.apkFileName)
+                downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, newer)
+                showUpdateDialog = true
+            } else {
+                // The previous offer may belong to the channel we just left.
+                updateInfo = null
+                downloadedApkFile = null
+                showUpdateDialog = false
+            }
+        } finally {
+            if (generation == updateCheckGeneration) isCheckingUpdate = false
         }
     }
 
@@ -483,31 +492,37 @@ fun HomeScreen(
                     OutlinedButton(
                         onClick = {
                             coroutineScope.launch {
+                                val generation = ++updateCheckGeneration
                                 isCheckingUpdate = true
-                                val requestedBeta = betaChannel
-                                val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = requestedBeta)
-                                isCheckingUpdate = false
-                                // The user may have flipped the channel while this request was in flight.
-                                if (requestedBeta != betaChannel) return@launch
-                                if (release != null) {
-                                    if (release.isNewer) {
-                                        if (isDownloadingUpdate) return@launch
-                                        updateInfo = release
-                                        AppUpdateManager.cleanupOldApks(context, release.apkFileName)
-                                        downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
-                                        showUpdateDialog = true
-                                    } else {
-                                        if (!isDownloadingUpdate) {
-                                            updateInfo = null
-                                            downloadedApkFile = null
+                                try {
+                                    val requestedBeta = betaChannel
+                                    val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = requestedBeta)
+                                    if (generation != updateCheckGeneration) return@launch
+                                    // The user may have flipped the channel while this request was in flight.
+                                    if (requestedBeta != betaChannel) return@launch
+                                    if (release != null) {
+                                        if (release.isNewer) {
+                                            if (isDownloadingUpdate) return@launch
+                                            updateInfo = release
+                                            AppUpdateManager.cleanupOldApks(context, release.apkFileName)
+                                            downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
+                                            showUpdateDialog = true
+                                        } else {
+                                            if (!isDownloadingUpdate) {
+                                                updateInfo = null
+                                                downloadedApkFile = null
+                                            }
+                                            Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
                                         }
-                                        Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
                                     }
-                                } else {
-                                    Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    if (generation == updateCheckGeneration) isCheckingUpdate = false
                                 }
                             }
                         },
+                        enabled = !isCheckingUpdate,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .weight(1f)

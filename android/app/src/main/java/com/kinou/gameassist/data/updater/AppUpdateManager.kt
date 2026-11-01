@@ -118,6 +118,7 @@ object AppUpdateManager {
     private fun buildReleaseInfo(context: Context, json: JsonObject, currentVersion: String): AppReleaseInfo? {
         val tagName = json["tag_name"]?.jsonPrimitive?.contentOrNull ?: return null
         val remoteVersion = tagName.removePrefix("v").trim()
+        if (!isValidVersion(remoteVersion)) return null
         val title = json["name"]?.jsonPrimitive?.contentOrNull
             ?: context.getString(com.kinou.gameassist.R.string.update_fallback_title, tagName)
         val changelog = json["body"]?.jsonPrimitive?.contentOrNull ?: ""
@@ -140,7 +141,7 @@ object AppUpdateManager {
                 if (name.endsWith(".apk", ignoreCase = true)) {
                     val downloadUrl = asset["browser_download_url"]?.jsonPrimitive?.contentOrNull ?: ""
                     val size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0L
-                    if (name.contains(remoteVersion, ignoreCase = true)) {
+                    if (isVersionedApkName(name, remoteVersion)) {
                         apkDownloadUrl = downloadUrl
                         apkFileName = name
                         apkFileSize = size
@@ -307,6 +308,8 @@ object AppUpdateManager {
             outputFile?.delete()
             throw e
         } catch (e: Exception) {
+            // Never leave a truncated APK in the cache: it would look downloaded on the next check.
+            outputFile?.delete()
             e.printStackTrace()
             Result.failure(e)
         } finally {
@@ -318,26 +321,22 @@ object AppUpdateManager {
 
     /**
      * Checks if a downloaded APK for the specified release already exists in the cache and is complete.
+     * A file with an unknown size and no checksum cannot be proven complete, so it is never reused.
      */
     fun getDownloadedApkFile(context: Context, release: AppReleaseInfo): File? {
         val updateDir = File(context.cacheDir, "updates")
         if (!updateDir.exists()) return null
         val targetFile = File(updateDir, release.apkFileName)
-        if (targetFile.exists() && targetFile.length() > 0) {
-            // Verify file size if available from release info
-            if (release.apkFileSize <= 0L || targetFile.length() == release.apkFileSize) {
-                // Verify checksum if published, to avoid installing a tampered/truncated cache
-                val expected = release.expectedSha256
-                if (expected == null) {
-                    // Without a digest, only a version-specific filename proves this file belongs
-                    // to the selected release; a generic "latest" asset could be another build.
-                    return if (targetFile.name.contains(release.versionName, ignoreCase = true)) targetFile else null
-                }
-                val actual = calculateFileSha256(targetFile)
-                if (actual.equals(expected, ignoreCase = true)) return targetFile
-            }
+        if (!targetFile.exists() || targetFile.length() <= 0L) return null
+        val expected = release.expectedSha256
+        if (release.apkFileSize <= 0L && expected == null) return null
+        if (release.apkFileSize > 0L && targetFile.length() != release.apkFileSize) return null
+        if (expected == null) {
+            // Without a digest, only a version-specific filename proves this file belongs
+            // to the selected release; a generic "latest" asset could be another build.
+            return if (isVersionedApkName(targetFile.name, release.versionName)) targetFile else null
         }
-        return null
+        return if (calculateFileSha256(targetFile).equals(expected, ignoreCase = true)) targetFile else null
     }
 
     /**
@@ -580,12 +579,12 @@ internal data class ReleaseCandidate(
  * version without a pre-release is higher than the same version with one.
  */
 internal fun compareVersions(a: String, b: String): Int {
-    fun core(value: String): List<Long> =
+    fun core(value: String): List<String> =
         value.removePrefix("v").removePrefix("V").trim()
             .substringBefore('+')
             .substringBefore('-')
             .split('.')
-            .map { it.toLongOrNull() ?: 0L }
+            .map { part -> if (part.isNotEmpty() && part.all { it.isDigit() }) part else "0" }
 
     fun preRelease(value: String): List<String> {
         val cleaned = value.removePrefix("v").removePrefix("V").trim().substringBefore('+')
@@ -596,9 +595,10 @@ internal fun compareVersions(a: String, b: String): Int {
     val aCore = core(a)
     val bCore = core(b)
     for (i in 0 until maxOf(aCore.size, bCore.size)) {
-        val x = aCore.getOrElse(i) { 0L }
-        val y = bCore.getOrElse(i) { 0L }
-        if (x != y) return x.compareTo(y)
+        val x = aCore.getOrElse(i) { "0" }
+        val y = bCore.getOrElse(i) { "0" }
+        val cmp = compareNumeric(x, y)
+        if (cmp != 0) return cmp
     }
 
     val aPre = preRelease(a)
@@ -610,12 +610,12 @@ internal fun compareVersions(a: String, b: String): Int {
     for (i in 0 until minOf(aPre.size, bPre.size)) {
         val x = aPre[i]
         val y = bPre[i]
-        val xn = x.toLongOrNull()
-        val yn = y.toLongOrNull()
+        val xNumeric = x.all { it.isDigit() }
+        val yNumeric = y.all { it.isDigit() }
         val cmp = when {
-            xn != null && yn != null -> xn.compareTo(yn)
-            xn != null -> -1 // numeric identifiers have lower precedence than alphanumeric ones
-            yn != null -> 1
+            xNumeric && yNumeric -> compareNumeric(x, y)
+            xNumeric -> -1 // numeric identifiers have lower precedence than alphanumeric ones
+            yNumeric -> 1
             else -> x.compareTo(y)
         }
         if (cmp != 0) return cmp
@@ -623,9 +623,38 @@ internal fun compareVersions(a: String, b: String): Int {
     return aPre.size.compareTo(bPre.size)
 }
 
+/** Numeric comparison of two non-negative integer strings, without overflow. */
+private fun compareNumeric(a: String, b: String): Int {
+    val x = a.trimStart('0').ifEmpty { "0" }
+    val y = b.trimStart('0').ifEmpty { "0" }
+    return if (x.length != y.length) x.length.compareTo(y.length) else x.compareTo(y)
+}
+
+/** True when [version] has numeric core components and valid semver identifiers. */
+internal fun isValidVersion(version: String): Boolean {
+    val cleaned = version.removePrefix("v").removePrefix("V").trim().substringBefore('+')
+    if (cleaned.isEmpty()) return false
+    val core = cleaned.substringBefore('-')
+    if (core.isEmpty()) return false
+    if (!core.split('.').all { it.isNotEmpty() && it.all { c -> c.isDigit() } }) return false
+    if ('-' in cleaned) {
+        val pre = cleaned.substringAfter('-')
+        if (pre.isEmpty()) return false
+        val valid = pre.split('.').all { part ->
+            part.isNotEmpty() && part.all { c -> c.isDigit() || c in 'a'..'z' || c in 'A'..'Z' || c == '-' }
+        }
+        if (!valid) return false
+    }
+    return true
+}
+
+/** True when an APK asset name identifies exactly [version], not a longer version. */
+internal fun isVersionedApkName(name: String, version: String): Boolean =
+    name.endsWith("$version.apk", ignoreCase = true)
+
 /** Highest version among the allowed candidates, stable-only unless [includeBeta]. */
 internal fun bestRelease(candidates: List<ReleaseCandidate>, includeBeta: Boolean): ReleaseCandidate? =
     candidates
-        .filter { it.hasApk && (includeBeta || !it.isPrerelease) }
+        .filter { it.hasApk && isValidVersion(it.versionName) && (includeBeta || !it.isPrerelease) }
         .maxWithOrNull(Comparator { a, b -> compareVersions(a.versionName, b.versionName) })
 

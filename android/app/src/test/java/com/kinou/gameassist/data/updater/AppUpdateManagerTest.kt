@@ -93,6 +93,50 @@ class AppUpdateManagerTest {
     }
 
     @Test
+    fun versionNumbersLargerThanLongAreStillOrdered() {
+        assertTrue(AppUpdateManager.isVersionNewer("999999999999999999999999.0.0", "999999999999999999999998.0.0"))
+    }
+
+    @Test
+    fun anApkNameMustEndWithTheExactVersion() {
+        assertTrue(isVersionedApkName("OpenMapper-v1.4.0.apk", "1.4.0"))
+        assertTrue(isVersionedApkName("OpenMapper-1.4.0.apk", "1.4.0"))
+        assertFalse(isVersionedApkName("OpenMapper-v1.4.0-beta.1.apk", "1.4.0"))
+        assertFalse(isVersionedApkName("OpenMapper-v1.4.0.1.apk", "1.4.0"))
+        assertFalse(isVersionedApkName("OpenMapper-latest.apk", "1.4.0"))
+    }
+
+    @Test
+    fun malformedVersionCandidatesAreIgnored() {
+        val best = bestRelease(
+            listOf(candidate("v2.foo.0"), candidate("v1.4.0")),
+            includeBeta = true
+        )
+        assertEquals("v1.4.0", best?.tagName)
+    }
+
+    @Test
+    fun aCachedFileWithUnknownSizeAndNoChecksumIsNotReused() {
+        val cacheDir = tempFolder.newFolder("cache-unknown")
+        val updates = File(cacheDir, "updates").apply { mkdirs() }
+        val file = File(updates, "OpenMapper-v1.4.0.apk").apply { writeBytes(ByteArray(128)) }
+        val release = AppReleaseInfo(
+            tagName = "v1.4.0",
+            versionName = "1.4.0",
+            title = "OpenMapper 1.4.0",
+            changelog = "",
+            downloadUrl = "https://example.com/OpenMapper-v1.4.0.apk",
+            releaseHtmlUrl = "https://example.com",
+            isNewer = true,
+            apkFileName = file.name,
+            apkFileSize = 0L,
+            expectedSha256 = null
+        )
+
+        assertNull(AppUpdateManager.getDownloadedApkFile(CacheContext(cacheDir), release))
+    }
+
+    @Test
     fun aGenericCachedApkWithoutChecksumIsNotReusedAcrossReleases() {
         val cacheDir = tempFolder.newFolder("cache")
         val updates = File(cacheDir, "updates").apply { mkdirs() }
