@@ -11,6 +11,9 @@
     <string name="update_check_failed">Não foi possível verificar atualizações.</string>
     <string name="update_available_title">Atualização %1$s disponível!</string>
     <string name="update_available_desc">Toque para baixar e instalar</string>
+    <string name="update_beta_channel">Versões beta</string>
+    <string name="update_beta_desc">As versões de pré-lançamento podem ser instáveis. Desativado por padrão.</string>
+    <string name="update_beta_badge">BETA</string>
     <string name="update_dialog_title">🚀 Atualização %1$s Disponível</string>
     <string name="update_dialog_notes">Notas da versão:</string>
     <string name="update_dialog_downloading">Baixando atualização...</string>

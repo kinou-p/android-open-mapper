@@ -11,6 +11,9 @@
     <string name="update_check_failed">Failed to check for updates.</string>
     <string name="update_available_title">Update %1$s available!</string>
     <string name="update_available_desc">Tap to download and install</string>
+    <string name="update_beta_channel">Beta updates</string>
+    <string name="update_beta_desc">Prerelease builds may be unstable. Off by default.</string>
+    <string name="update_beta_badge">BETA</string>
     <string name="update_dialog_title">🚀 Update %1$s Available</string>
     <string name="update_dialog_notes">Release notes:</string>
     <string name="update_dialog_downloading">Downloading update...</string>

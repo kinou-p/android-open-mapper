@@ -10,6 +10,9 @@
     <string name="update_check_failed">הבדיקה אחר עדכונים נכשלה.</string>
     <string name="update_available_title">עדכון %1$s זמין!</string>
     <string name="update_available_desc">הקש כדי להוריד ולהתקין</string>
+    <string name="update_beta_channel">עדכוני בטא</string>
+    <string name="update_beta_desc">גרסאות בטא עשויות להיות לא יציבות. כבוי כברירת מחדל.</string>
+    <string name="update_beta_badge">בטא</string>
     <string name="update_dialog_title">🚀 עדכון %1$s זמין</string>
     <string name="update_dialog_notes">פרטי העדכון:</string>
     <string name="update_dialog_downloading">מוריד עדכון...</string>

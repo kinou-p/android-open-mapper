@@ -36,6 +36,7 @@ import com.kinou.gameassist.data.model.GamepadDevice
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.updater.AppReleaseInfo
 import com.kinou.gameassist.data.updater.AppUpdateManager
+import com.kinou.gameassist.data.updater.UpdatePreferences
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.injector.ShizukuStatus
 import com.kinou.gameassist.ui.overlay.EdgeHandleOverlayView
@@ -94,6 +95,7 @@ fun HomeScreen(
     var updateInfo by remember { mutableStateOf<AppReleaseInfo?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var betaChannel by remember { mutableStateOf(UpdatePreferences.isBetaEnabled(context)) }
 
     // In-App Updater Download & Install States
     var isDownloadingUpdate by remember { mutableStateOf(false) }
@@ -104,9 +106,9 @@ fun HomeScreen(
     var downloadError by remember { mutableStateOf<String?>(null) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
 
-    // Automatic check on launch & sync cached APK state for the exact release
-    LaunchedEffect(Unit) {
-        val release = AppUpdateManager.checkForUpdate(context, currentVersion)
+    // Automatic check on launch, and again whenever the update channel changes
+    LaunchedEffect(betaChannel) {
+        val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
         if (release != null && release.isNewer) {
             updateInfo = release
             AppUpdateManager.cleanupOldApks(context, release.apkFileName)
@@ -244,7 +246,10 @@ fun HomeScreen(
                                 ) {
                                     Icon(Icons.Default.NewReleases, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(24.dp))
                                     Column {
-                                        Text(stringResource(R.string.update_available_title, release.tagName), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text(stringResource(R.string.update_available_title, release.tagName), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f, fill = false))
+                                            if (release.isPrerelease) BetaBadge()
+                                        }
                                         Text(stringResource(R.string.update_available_desc), color = TextSecondary, fontSize = 11.sp)
                                     }
                                 }
@@ -471,7 +476,7 @@ fun HomeScreen(
                         onClick = {
                             coroutineScope.launch {
                                 isCheckingUpdate = true
-                                val release = AppUpdateManager.checkForUpdate(context, currentVersion)
+                                val release = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
                                 isCheckingUpdate = false
                                 if (release != null) {
                                     updateInfo = release
@@ -515,6 +520,41 @@ fun HomeScreen(
                         Text(stringResource(R.string.home_report_bug), color = NeonCyan, fontSize = 12.sp, maxLines = 1)
                     }
                 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.update_beta_channel),
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            stringResource(R.string.update_beta_desc),
+                            color = TextMuted,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = betaChannel,
+                        onCheckedChange = {
+                            betaChannel = it
+                            UpdatePreferences.setBetaEnabled(context, it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = DarkBackground,
+                            checkedTrackColor = NeonCyan,
+                            uncheckedThumbColor = TextSecondary,
+                            uncheckedTrackColor = DarkSurface
+                        )
+                    )
+                }
             }
         }
     }
@@ -535,6 +575,7 @@ fun HomeScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = NeonCyan)
                     Text(stringResource(R.string.update_dialog_title, release.tagName), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                    if (release.isPrerelease) BetaBadge()
                 }
             },
             text = {
@@ -897,4 +938,18 @@ fun StatusCard(
             }
         }
     }
+}
+
+/** Small "BETA" chip shown when the update comes from the prerelease channel. */
+@Composable
+private fun BetaBadge() {
+    Text(
+        text = stringResource(R.string.update_beta_badge),
+        color = NeonPink,
+        fontSize = 9.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .background(NeonPink.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 4.dp, vertical = 1.dp)
+    )
 }
