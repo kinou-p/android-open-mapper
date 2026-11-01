@@ -36,6 +36,7 @@ import com.kinou.gameassist.data.model.GamepadDevice
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.updater.AppReleaseInfo
 import com.kinou.gameassist.data.updater.AppUpdateManager
+import com.kinou.gameassist.data.updater.UpdatePreferences
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.injector.ShizukuStatus
 import com.kinou.gameassist.ui.overlay.EdgeHandleOverlayView
@@ -94,6 +95,8 @@ fun HomeScreen(
     var updateInfo by remember { mutableStateOf<AppReleaseInfo?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var betaChannel by remember { mutableStateOf(UpdatePreferences.isBetaEnabled(context)) }
+    var updateCheckGeneration by remember { mutableIntStateOf(0) }
 
     // In-App Updater Download & Install States
     var isDownloadingUpdate by remember { mutableStateOf(false) }
@@ -104,14 +107,39 @@ fun HomeScreen(
     var downloadError by remember { mutableStateOf<String?>(null) }
     var downloadJob by remember { mutableStateOf<Job?>(null) }
 
-    // Automatic check on launch & sync cached APK state for the exact release
-    LaunchedEffect(Unit) {
-        val release = AppUpdateManager.checkForUpdate(context, currentVersion)
-        if (release != null && release.isNewer) {
-            updateInfo = release
-            AppUpdateManager.cleanupOldApks(context, release.apkFileName)
-            downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
-            showUpdateDialog = true
+    // Automatic check on launch, and again whenever the update channel changes. The effect is
+    // cancelled on a channel change, so a late response can't overwrite the new channel; the
+    // generation also discards a result from a check that a manual refresh has superseded.
+    LaunchedEffect(betaChannel) {
+        val generation = ++updateCheckGeneration
+        // An offer from the channel we just left is not actionable: drop it before the new check.
+        if (!betaChannel && updateInfo?.isPrerelease == true && !isDownloadingUpdate) {
+            updateInfo = null
+            downloadedApkFile = null
+            showUpdateDialog = false
+        }
+        isCheckingUpdate = true
+        try {
+            val result = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = betaChannel)
+            if (generation != updateCheckGeneration) return@LaunchedEffect
+            if (isDownloadingUpdate) return@LaunchedEffect
+            // A failed request proves nothing about the current offer: keep it.
+            if (result.isFailure) return@LaunchedEffect
+            val release = result.getOrNull()
+            val newer = release?.takeIf { it.isNewer }
+            if (newer != null) {
+                updateInfo = newer
+                AppUpdateManager.cleanupOldApks(context, newer.apkFileName)
+                downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, newer)
+                showUpdateDialog = true
+            } else {
+                // A successful check says the current channel is up to date.
+                updateInfo = null
+                downloadedApkFile = null
+                showUpdateDialog = false
+            }
+        } finally {
+            if (generation == updateCheckGeneration) isCheckingUpdate = false
         }
     }
 
@@ -244,7 +272,10 @@ fun HomeScreen(
                                 ) {
                                     Icon(Icons.Default.NewReleases, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(24.dp))
                                     Column {
-                                        Text(stringResource(R.string.update_available_title, release.tagName), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text(stringResource(R.string.update_available_title, release.tagName), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp, modifier = Modifier.weight(1f, fill = false))
+                                            if (release.isPrerelease) BetaBadge()
+                                        }
                                         Text(stringResource(R.string.update_available_desc), color = TextSecondary, fontSize = 11.sp)
                                     }
                                 }
@@ -470,23 +501,38 @@ fun HomeScreen(
                     OutlinedButton(
                         onClick = {
                             coroutineScope.launch {
+                                val generation = ++updateCheckGeneration
                                 isCheckingUpdate = true
-                                val release = AppUpdateManager.checkForUpdate(context, currentVersion)
-                                isCheckingUpdate = false
-                                if (release != null) {
-                                    updateInfo = release
-                                    if (release.isNewer) {
+                                try {
+                                    val requestedBeta = betaChannel
+                                    val result = AppUpdateManager.checkForUpdate(context, currentVersion, includeBeta = requestedBeta)
+                                    if (generation != updateCheckGeneration) return@launch
+                                    // The user may have flipped the channel while this request was in flight.
+                                    if (requestedBeta != betaChannel) return@launch
+                                    if (result.isFailure) {
+                                        Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
+                                        return@launch
+                                    }
+                                    val release = result.getOrNull()
+                                    if (release != null && release.isNewer) {
+                                        if (isDownloadingUpdate) return@launch
+                                        updateInfo = release
                                         AppUpdateManager.cleanupOldApks(context, release.apkFileName)
                                         downloadedApkFile = AppUpdateManager.getDownloadedApkFile(context, release)
                                         showUpdateDialog = true
                                     } else {
+                                        if (!isDownloadingUpdate) {
+                                            updateInfo = null
+                                            downloadedApkFile = null
+                                        }
                                         Toast.makeText(context, context.getString(R.string.update_latest_version, currentVersion), Toast.LENGTH_SHORT).show()
                                     }
-                                } else {
-                                    Toast.makeText(context, context.getString(R.string.update_check_failed), Toast.LENGTH_SHORT).show()
+                                } finally {
+                                    if (generation == updateCheckGeneration) isCheckingUpdate = false
                                 }
                             }
                         },
+                        enabled = !isCheckingUpdate,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .weight(1f)
@@ -515,6 +561,51 @@ fun HomeScreen(
                         Text(stringResource(R.string.home_report_bug), color = NeonCyan, fontSize = 12.sp, maxLines = 1)
                     }
                 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.update_beta_channel),
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            stringResource(R.string.update_beta_desc),
+                            color = TextMuted,
+                            fontSize = 10.sp
+                        )
+                    }
+                    Switch(
+                        checked = betaChannel,
+                        onCheckedChange = {
+                            betaChannel = it
+                            UpdatePreferences.setBetaEnabled(context, it)
+                            // Opting out must also retire a prerelease offer that is already
+                            // downloading; the cancelled job deletes its partial APK.
+                            if (!it && updateInfo?.isPrerelease == true) {
+                                downloadJob?.cancel()
+                                isDownloadingUpdate = false
+                                downloadedApkFile?.delete()
+                                downloadedApkFile = null
+                                updateInfo = null
+                                showUpdateDialog = false
+                            }
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = DarkBackground,
+                            checkedTrackColor = NeonCyan,
+                            uncheckedThumbColor = TextSecondary,
+                            uncheckedTrackColor = DarkSurface
+                        )
+                    )
+                }
             }
         }
     }
@@ -535,6 +626,7 @@ fun HomeScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = NeonCyan)
                     Text(stringResource(R.string.update_dialog_title, release.tagName), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                    if (release.isPrerelease) BetaBadge()
                 }
             },
             text = {
@@ -680,35 +772,39 @@ fun HomeScreen(
                 } else {
                     Button(
                         onClick = {
-                            downloadJob = coroutineScope.launch {
+                            if (!isDownloadingUpdate) {
+                                // Set synchronously so a double tap cannot start two downloads.
                                 isDownloadingUpdate = true
-                                downloadProgress = 0f
-                                downloadedBytes = 0L
-                                totalBytes = release.apkFileSize
-                                downloadError = null
+                                downloadJob = coroutineScope.launch {
+                                    downloadProgress = 0f
+                                    downloadedBytes = 0L
+                                    totalBytes = release.apkFileSize
+                                    downloadError = null
 
-                                val res = AppUpdateManager.downloadApk(
-                                    context = context,
-                                    downloadUrl = release.downloadUrl,
-                                    targetFileName = release.apkFileName,
-                                    expectedSha256 = release.expectedSha256
-                                ) { progress, dBytes, tBytes ->
-                                    downloadProgress = progress
-                                    downloadedBytes = dBytes
-                                    totalBytes = tBytes
-                                }
-                                isDownloadingUpdate = false
-
-                                res.onSuccess { apkFile ->
-                                    downloadedApkFile = apkFile
-                                    if (AppUpdateManager.canInstallPackages(context)) {
-                                        AppUpdateManager.installApk(context, apkFile)
+                                    val res = AppUpdateManager.downloadApk(
+                                        context = context,
+                                        downloadUrl = release.downloadUrl,
+                                        targetFileName = release.apkFileName,
+                                        expectedSha256 = release.expectedSha256
+                                    ) { progress, dBytes, tBytes ->
+                                        downloadProgress = progress
+                                        downloadedBytes = dBytes
+                                        totalBytes = tBytes
                                     }
-                                }.onFailure { err ->
-                                    downloadError = err.localizedMessage ?: err.message ?: "Erreur"
+                                    isDownloadingUpdate = false
+
+                                    res.onSuccess { apkFile ->
+                                        downloadedApkFile = apkFile
+                                        if (AppUpdateManager.canInstallPackages(context)) {
+                                            AppUpdateManager.installApk(context, apkFile)
+                                        }
+                                    }.onFailure { err ->
+                                        downloadError = err.localizedMessage ?: err.message ?: "Erreur"
+                                    }
                                 }
                             }
                         },
+                        enabled = !isDownloadingUpdate,
                         colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                     ) {
                         Icon(Icons.Default.Download, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(16.dp))
@@ -897,4 +993,18 @@ fun StatusCard(
             }
         }
     }
+}
+
+/** Small "BETA" chip shown when the update comes from the prerelease channel. */
+@Composable
+private fun BetaBadge() {
+    Text(
+        text = stringResource(R.string.update_beta_badge),
+        color = NeonPink,
+        fontSize = 9.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .background(NeonPink.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 4.dp, vertical = 1.dp)
+    )
 }

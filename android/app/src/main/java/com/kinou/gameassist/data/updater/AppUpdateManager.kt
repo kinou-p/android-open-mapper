@@ -13,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -22,6 +24,7 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -37,7 +40,8 @@ data class AppReleaseInfo(
     val isNewer: Boolean,
     val apkFileName: String = "OpenMapper.apk",
     val apkFileSize: Long = 0L,
-    val expectedSha256: String? = null
+    val expectedSha256: String? = null,
+    val isPrerelease: Boolean = false
 )
 
 /**
@@ -46,15 +50,27 @@ data class AppReleaseInfo(
 object AppUpdateManager {
     private const val GITHUB_OWNER = "kinou-p"
     private const val GITHUB_REPO = "android-open-mapper"
-    private const val API_URL = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
+    private const val API_BASE = "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO"
+    private const val API_URL = "$API_BASE/releases/latest"
+    private const val RELEASES_URL = "$API_BASE/releases?per_page=100"
+
+    /** Upper bound for a release feed, so a hostile/huge body cannot exhaust the heap. */
+    private const val MAX_FEED_CHARS = 4 * 1024 * 1024
 
     /**
      * Checks for the latest release on GitHub asynchronously.
+     * [includeBeta] also considers prerelease builds and keeps the highest version overall.
+     * A successful response with no eligible release is `success(null)`; a network or parsing
+     * failure is a failed [Result], so callers can keep a still-valid offer.
      */
-    suspend fun checkForUpdate(context: Context, currentVersion: String): AppReleaseInfo? = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdate(
+        context: Context,
+        currentVersion: String,
+        includeBeta: Boolean = false
+    ): Result<AppReleaseInfo?> = withContext(Dispatchers.IO) {
         var connection: HttpURLConnection? = null
         try {
-            val url = URL(API_URL)
+            val url = URL(if (includeBeta) RELEASES_URL else API_URL)
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
@@ -63,79 +79,124 @@ object AppUpdateManager {
             connection.readTimeout = 8000
 
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                return@withContext null
+                return@withContext Result.failure(IOException("HTTP ${connection.responseCode}"))
             }
 
             val reader = BufferedReader(InputStreamReader(connection.inputStream))
-            val responseText = reader.use { it.readText() }
-
-            val json = Json.parseToJsonElement(responseText).jsonObject
-            val tagName = json["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@withContext null
-            val remoteVersion = tagName.removePrefix("v").trim()
-            val title = json["name"]?.jsonPrimitive?.contentOrNull ?: context.getString(com.kinou.gameassist.R.string.update_fallback_title, tagName)
-            val changelog = json["body"]?.jsonPrimitive?.contentOrNull ?: ""
-            val htmlUrl = json["html_url"]?.jsonPrimitive?.contentOrNull ?: "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases"
-
-            // Search for attached .apk asset (prefer version-specific over generic)
-            var apkDownloadUrl = ""
-            var apkFileName = "OpenMapper-$remoteVersion.apk"
-            var apkFileSize = 0L
-            val assets = json["assets"]?.jsonArray
-            if (assets != null) {
-                var fallbackUrl = ""
-                var fallbackName = ""
-                var fallbackSize = 0L
-                for (assetElem in assets) {
-                    val asset = assetElem.jsonObject
-                    val name = asset["name"]?.jsonPrimitive?.contentOrNull ?: ""
-                    if (name.endsWith(".apk", ignoreCase = true)) {
-                        val downloadUrl = asset["browser_download_url"]?.jsonPrimitive?.contentOrNull ?: ""
-                        val size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0L
-                        if (name.contains(remoteVersion, ignoreCase = true)) {
-                            apkDownloadUrl = downloadUrl
-                            apkFileName = name
-                            apkFileSize = size
-                            break
-                        } else if (fallbackUrl.isEmpty()) {
-                            fallbackUrl = downloadUrl
-                            fallbackName = name
-                            fallbackSize = size
-                        }
+            val responseText = reader.use { input ->
+                val builder = StringBuilder()
+                val buffer = CharArray(8 * 1024)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    builder.append(buffer, 0, read)
+                    if (builder.length > MAX_FEED_CHARS) {
+                        throw IOException("Release feed exceeds $MAX_FEED_CHARS characters")
                     }
                 }
-                if (apkDownloadUrl.isEmpty() && fallbackUrl.isNotEmpty()) {
-                    apkDownloadUrl = fallbackUrl
-                    apkFileName = fallbackName.ifEmpty { "OpenMapper-$remoteVersion.apk" }
-                    apkFileSize = fallbackSize
-                }
+                builder.toString()
             }
 
-            val isNewer = isVersionNewer(remoteVersion, currentVersion.removePrefix("v").trim())
-            val expectedSha256 = extractSha256FromBody(changelog)
-
-            return@withContext AppReleaseInfo(
-                tagName = tagName,
-                versionName = remoteVersion,
-                title = title,
-                changelog = changelog,
-                downloadUrl = apkDownloadUrl,
-                releaseHtmlUrl = htmlUrl,
-                isNewer = isNewer,
-                apkFileName = apkFileName,
-                apkFileSize = apkFileSize,
-                expectedSha256 = expectedSha256
-            )
+            val json = if (includeBeta) {
+                bestReleaseJson(responseText)
+            } else {
+                Json.parseToJsonElement(responseText).jsonObject
+            }
+            Result.success(json?.let { buildReleaseInfo(context, it, currentVersion) })
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext null
+            Result.failure(e)
         } finally {
             connection?.disconnect()
         }
     }
 
+    /** Picks the highest stable or prerelease entry from a `/releases` array. */
+    private fun bestReleaseJson(responseText: String): JsonObject? {
+        val entries = Json.parseToJsonElement(responseText).jsonArray.mapNotNull { element ->
+            val json = element.jsonObject
+            val tagName = json["tag_name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val isDraft = json["draft"]?.jsonPrimitive?.booleanOrNull ?: false
+            if (isDraft) return@mapNotNull null
+            val candidate = ReleaseCandidate(
+                tagName = tagName,
+                versionName = tagName.removePrefix("v").trim(),
+                isPrerelease = json["prerelease"]?.jsonPrimitive?.booleanOrNull ?: false,
+                hasApk = json["assets"]?.jsonArray?.any { asset ->
+                    asset.jsonObject["name"]?.jsonPrimitive?.contentOrNull
+                        ?.endsWith(".apk", ignoreCase = true) == true
+                } ?: false
+            )
+            candidate to json
+        }
+        val best = bestRelease(entries.map { it.first }, includeBeta = true) ?: return null
+        return entries.firstOrNull { it.first == best }?.second
+    }
+
+    private fun buildReleaseInfo(context: Context, json: JsonObject, currentVersion: String): AppReleaseInfo? {
+        val tagName = json["tag_name"]?.jsonPrimitive?.contentOrNull ?: return null
+        val remoteVersion = tagName.removePrefix("v").trim()
+        if (!isValidVersion(remoteVersion)) return null
+        val title = json["name"]?.jsonPrimitive?.contentOrNull
+            ?: context.getString(com.kinou.gameassist.R.string.update_fallback_title, tagName)
+        val changelog = json["body"]?.jsonPrimitive?.contentOrNull ?: ""
+        val htmlUrl = json["html_url"]?.jsonPrimitive?.contentOrNull
+            ?: "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases"
+        val isPrerelease = json["prerelease"]?.jsonPrimitive?.booleanOrNull ?: false
+
+        // Search for attached .apk asset (prefer version-specific over generic)
+        var apkDownloadUrl = ""
+        var apkFileName = "OpenMapper-$remoteVersion.apk"
+        var apkFileSize = 0L
+        val assets = json["assets"]?.jsonArray
+        if (assets != null) {
+            var fallbackUrl = ""
+            var fallbackName = ""
+            var fallbackSize = 0L
+            for (assetElem in assets) {
+                val asset = assetElem.jsonObject
+                val name = asset["name"]?.jsonPrimitive?.contentOrNull ?: ""
+                if (name.endsWith(".apk", ignoreCase = true)) {
+                    val downloadUrl = asset["browser_download_url"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0L
+                    if (isVersionedApkName(name, remoteVersion)) {
+                        apkDownloadUrl = downloadUrl
+                        apkFileName = name
+                        apkFileSize = size
+                        break
+                    } else if (fallbackUrl.isEmpty()) {
+                        fallbackUrl = downloadUrl
+                        fallbackName = name
+                        fallbackSize = size
+                    }
+                }
+            }
+            if (apkDownloadUrl.isEmpty() && fallbackUrl.isNotEmpty()) {
+                apkDownloadUrl = fallbackUrl
+                apkFileName = fallbackName.ifEmpty { "OpenMapper-$remoteVersion.apk" }
+                apkFileSize = fallbackSize
+            }
+        }
+
+        return AppReleaseInfo(
+            tagName = tagName,
+            versionName = remoteVersion,
+            title = title,
+            changelog = changelog,
+            downloadUrl = apkDownloadUrl,
+            releaseHtmlUrl = htmlUrl,
+            isNewer = isVersionNewer(remoteVersion, currentVersion.removePrefix("v").trim()),
+            apkFileName = apkFileName,
+            apkFileSize = apkFileSize,
+            expectedSha256 = extractSha256FromBody(changelog),
+            isPrerelease = isPrerelease
+        )
+    }
+
     fun sanitizeApkFileName(fileName: String): String {
         val trimmed = fileName.trim()
-        val isValid = trimmed.matches(Regex("^[a-zA-Z0-9._-]+\\.apk$", RegexOption.IGNORE_CASE)) &&
+        val isValid = trimmed.matches(Regex("^[a-zA-Z0-9._+-]+\\.apk$", RegexOption.IGNORE_CASE)) &&
                 !trimmed.contains("..") &&
                 !trimmed.contains("/") &&
                 !trimmed.contains("\\")
@@ -252,6 +313,12 @@ object AppUpdateManager {
             outputStream.flush()
             outputStream.close()
 
+            // A successful HTTP status does not guarantee a complete body: reject a short read.
+            if (totalBytes > 0 && downloadedBytes != totalBytes) {
+                outputFile.delete()
+                return@withContext Result.failure(Exception(context.getString(com.kinou.gameassist.R.string.err_apk_corrupt)))
+            }
+
             // Vérification d'intégrité du fichier téléchargé (si un checksum est fourni par la release)
             if (expectedSha256 != null) {
                 val actual = calculateFileSha256(outputFile)
@@ -266,6 +333,8 @@ object AppUpdateManager {
             outputFile?.delete()
             throw e
         } catch (e: Exception) {
+            // Never leave a truncated APK in the cache: it would look downloaded on the next check.
+            outputFile?.delete()
             e.printStackTrace()
             Result.failure(e)
         } finally {
@@ -277,22 +346,22 @@ object AppUpdateManager {
 
     /**
      * Checks if a downloaded APK for the specified release already exists in the cache and is complete.
+     * A file with an unknown size and no checksum cannot be proven complete, so it is never reused.
      */
     fun getDownloadedApkFile(context: Context, release: AppReleaseInfo): File? {
         val updateDir = File(context.cacheDir, "updates")
         if (!updateDir.exists()) return null
         val targetFile = File(updateDir, release.apkFileName)
-        if (targetFile.exists() && targetFile.length() > 0) {
-            // Verify file size if available from release info
-            if (release.apkFileSize <= 0L || targetFile.length() == release.apkFileSize) {
-                // Verify checksum if published, to avoid installing a tampered/truncated cache
-                val expected = release.expectedSha256
-                if (expected == null) return targetFile
-                val actual = calculateFileSha256(targetFile)
-                if (actual.equals(expected, ignoreCase = true)) return targetFile
-            }
+        if (!targetFile.exists() || targetFile.length() <= 0L) return null
+        val expected = release.expectedSha256
+        if (release.apkFileSize <= 0L && expected == null) return null
+        if (release.apkFileSize > 0L && targetFile.length() != release.apkFileSize) return null
+        if (expected == null) {
+            // Without a digest, only a version-specific filename proves this file belongs
+            // to the selected release; a generic "latest" asset could be another build.
+            return if (isVersionedApkName(targetFile.name, release.versionName)) targetFile else null
         }
-        return null
+        return if (calculateFileSha256(targetFile).equals(expected, ignoreCase = true)) targetFile else null
     }
 
     /**
@@ -499,25 +568,10 @@ object AppUpdateManager {
     }
 
     /**
-     * Compares two semantic version strings (e.g. "1.1.0" vs "1.0.1").
+     * Compares two semantic version names (tolerates a leading "v").
+     * Returns a negative value, zero, or a positive value.
      */
-    fun isVersionNewer(remote: String, current: String): Boolean {
-        try {
-            val remoteParts = remote.split("-")[0].split(".").mapNotNull { it.toIntOrNull() }
-            val currentParts = current.split("-")[0].split(".").mapNotNull { it.toIntOrNull() }
-
-            val length = maxOf(remoteParts.size, currentParts.size)
-            for (i in 0 until length) {
-                val r = remoteParts.getOrElse(i) { 0 }
-                val c = currentParts.getOrElse(i) { 0 }
-                if (r > c) return true
-                if (r < c) return false
-            }
-            return false
-        } catch (e: Exception) {
-            return remote != current
-        }
-    }
+    fun isVersionNewer(remote: String, current: String): Boolean = compareVersions(remote, current) > 0
 
     /**
      * Launches the browser to the GitHub release page as a fallback.
@@ -534,3 +588,100 @@ object AppUpdateManager {
         }
     }
 }
+
+/** A release we can offer: it has an APK and its channel is allowed. */
+internal data class ReleaseCandidate(
+    val tagName: String,
+    val versionName: String,
+    val isPrerelease: Boolean,
+    val hasApk: Boolean
+)
+
+/**
+ * Semver-style comparison, tolerant of a leading "v" and of build metadata.
+ * Pre-release identifiers follow the semver rules: numeric identifiers compare
+ * numerically, a numeric identifier is lower than an alphanumeric one, and a
+ * version without a pre-release is higher than the same version with one.
+ */
+internal fun compareVersions(a: String, b: String): Int {
+    fun core(value: String): List<String> =
+        value.removePrefix("v").removePrefix("V").trim()
+            .substringBefore('+')
+            .substringBefore('-')
+            .split('.')
+            .map { part -> if (part.isNotEmpty() && part.all { it.isDigit() }) part else "0" }
+
+    fun preRelease(value: String): List<String> {
+        val cleaned = value.removePrefix("v").removePrefix("V").trim().substringBefore('+')
+        if ('-' !in cleaned) return emptyList()
+        return cleaned.substringAfter('-').split('.').filter { it.isNotEmpty() }
+    }
+
+    val aCore = core(a)
+    val bCore = core(b)
+    for (i in 0 until maxOf(aCore.size, bCore.size)) {
+        val x = aCore.getOrElse(i) { "0" }
+        val y = bCore.getOrElse(i) { "0" }
+        val cmp = compareNumeric(x, y)
+        if (cmp != 0) return cmp
+    }
+
+    val aPre = preRelease(a)
+    val bPre = preRelease(b)
+    if (aPre.isEmpty() && bPre.isEmpty()) return 0
+    if (aPre.isEmpty()) return 1
+    if (bPre.isEmpty()) return -1
+
+    for (i in 0 until minOf(aPre.size, bPre.size)) {
+        val x = aPre[i]
+        val y = bPre[i]
+        val xNumeric = x.all { it.isDigit() }
+        val yNumeric = y.all { it.isDigit() }
+        val cmp = when {
+            xNumeric && yNumeric -> compareNumeric(x, y)
+            xNumeric -> -1 // numeric identifiers have lower precedence than alphanumeric ones
+            yNumeric -> 1
+            else -> x.compareTo(y)
+        }
+        if (cmp != 0) return cmp
+    }
+    return aPre.size.compareTo(bPre.size)
+}
+
+/** Numeric comparison of two non-negative integer strings, without overflow. */
+private fun compareNumeric(a: String, b: String): Int {
+    val x = a.trimStart('0').ifEmpty { "0" }
+    val y = b.trimStart('0').ifEmpty { "0" }
+    return if (x.length != y.length) x.length.compareTo(y.length) else x.compareTo(y)
+}
+
+/** True when [version] has numeric core components and valid semver identifiers. */
+internal fun isValidVersion(version: String): Boolean {
+    val cleaned = version.removePrefix("v").removePrefix("V").trim().substringBefore('+')
+    if (cleaned.isEmpty()) return false
+    val core = cleaned.substringBefore('-')
+    if (core.isEmpty()) return false
+    if (!core.split('.').all { it.isNotEmpty() && it.all { c -> c.isDigit() } }) return false
+    if ('-' in cleaned) {
+        val pre = cleaned.substringAfter('-')
+        if (pre.isEmpty()) return false
+        val valid = pre.split('.').all { part ->
+            part.isNotEmpty() && part.all { c -> c.isDigit() || c in 'a'..'z' || c in 'A'..'Z' || c == '-' }
+        }
+        if (!valid) return false
+    }
+    return true
+}
+
+/** True when an APK asset name identifies exactly [version], after a separator or "v". */
+internal fun isVersionedApkName(name: String, version: String): Boolean {
+    val escaped = Regex.escape(version)
+    return Regex("(?:^|[vV_-])$escaped\\.apk$", RegexOption.IGNORE_CASE).containsMatchIn(name)
+}
+
+/** Highest version among the allowed candidates, stable-only unless [includeBeta]. */
+internal fun bestRelease(candidates: List<ReleaseCandidate>, includeBeta: Boolean): ReleaseCandidate? =
+    candidates
+        .filter { it.hasApk && isValidVersion(it.versionName) && (includeBeta || !it.isPrerelease) }
+        .maxWithOrNull(Comparator { a, b -> compareVersions(a.versionName, b.versionName) })
+
