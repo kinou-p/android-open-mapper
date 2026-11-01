@@ -109,6 +109,8 @@ class AppUpdateManagerTest {
         // A shorter version that appears as a suffix of a longer one must not match.
         assertFalse(isVersionedApkName("OpenMapper-v1.4.0.apk", "4.0"))
         assertFalse(isVersionedApkName("OpenMapper-v1.4.0.1.apk", "0.1"))
+        // Nor may it be glued to another word without a separator.
+        assertFalse(isVersionedApkName("OpenMapper-beta1.4.0.apk", "1.4.0"))
     }
 
     @Test

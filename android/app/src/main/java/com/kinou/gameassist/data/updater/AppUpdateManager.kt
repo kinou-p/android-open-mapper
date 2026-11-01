@@ -673,10 +673,10 @@ internal fun isValidVersion(version: String): Boolean {
     return true
 }
 
-/** True when an APK asset name identifies exactly [version], not a suffix of a longer version. */
+/** True when an APK asset name identifies exactly [version], after a separator or "v". */
 internal fun isVersionedApkName(name: String, version: String): Boolean {
     val escaped = Regex.escape(version)
-    return Regex("(?<![0-9.])$escaped\\.apk$", RegexOption.IGNORE_CASE).containsMatchIn(name)
+    return Regex("(?:^|[vV_-])$escaped\\.apk$", RegexOption.IGNORE_CASE).containsMatchIn(name)
 }
 
 /** Highest version among the allowed candidates, stable-only unless [includeBeta]. */
