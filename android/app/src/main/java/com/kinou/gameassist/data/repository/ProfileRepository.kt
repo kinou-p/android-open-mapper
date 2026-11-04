@@ -492,11 +492,12 @@ class ProfileRepository internal constructor(context: Context) {
         return p
     }
 
-    suspend fun createCustomProfileAsync(name: String, targetPackage: String): GameProfile = withContext(Dispatchers.IO) {
-        createCustomProfile(name, targetPackage)
+    suspend fun createCustomProfileAsync(name: String, targetPackage: String, startEmpty: Boolean = false): GameProfile = withContext(Dispatchers.IO) {
+        createCustomProfile(name, targetPackage, startEmpty)
     }
 
-    fun createCustomProfile(name: String, targetPackage: String): GameProfile {
+    /** A new profile from the Call of Duty layout, or with no buttons when [startEmpty] (#38). */
+    fun createCustomProfile(name: String, targetPackage: String, startEmpty: Boolean = false): GameProfile {
         val base = createDefaultCodmProfile()
         val newId = "profile_${UUID.randomUUID().toString().take(8)}"
         val newProf = base.deepCopy().copy(
@@ -505,7 +506,8 @@ class ProfileRepository internal constructor(context: Context) {
             packageName = if (targetPackage.isNotBlank()) targetPackage.trim() else "com.game.app",
             description = localizedDefaultProfileName(),
             customScreenshotPath = null,
-            buttons = base.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
+            buttons = if (startEmpty) mutableListOf()
+                      else base.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
         )
         saveProfile(newProf)
         return newProf

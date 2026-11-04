@@ -49,7 +49,7 @@ fun ProfileEditorScreen(
     onSaveProfile: (GameProfile) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onDuplicateProfile: (GameProfile) -> Unit,
-    onCreateProfile: ((name: String, targetPackage: String) -> Unit)? = null,
+    onCreateProfile: ((name: String, targetPackage: String, startEmpty: Boolean) -> Unit)? = null,
     onImportProfile: (String, (Boolean) -> Unit) -> Unit,
     onBack: () -> Unit
 ) {
@@ -273,9 +273,9 @@ fun ProfileEditorScreen(
         if (showCreateDialog) {
             CreateProfileDialog(
                 onDismiss = { showCreateDialog = false },
-                onConfirm = { name, pkg ->
+                onConfirm = { name, pkg, startEmpty ->
                     showCreateDialog = false
-                    onCreateProfile?.invoke(name, pkg)
+                    onCreateProfile?.invoke(name, pkg, startEmpty)
                     Toast.makeText(context, context.getString(R.string.profile_created_toast), Toast.LENGTH_SHORT).show()
                 }
             )
@@ -922,11 +922,12 @@ fun SelectGamePackageDialog(
 @Composable
 fun CreateProfileDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, targetPackage: String) -> Unit
+    onConfirm: (name: String, targetPackage: String, startEmpty: Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val installedApps = rememberInstalledLauncherApps(context)
     var profileNameText by remember { mutableStateOf("") }
+    var startEmpty by remember { mutableStateOf(false) }
     var selectedPackageText by remember { mutableStateOf("com.game.app") }
     var searchQuery by remember { mutableStateOf("") }
 
@@ -1076,6 +1077,37 @@ fun CreateProfileDialog(
                     ),
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary)
                 )
+
+                // Start from the Call of Duty layout or from an empty screen (#38)
+                Text(
+                    stringResource(R.string.create_profile_start_with),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        false to R.string.create_profile_start_codm,
+                        true to R.string.create_profile_start_empty
+                    ).forEach { (empty, label) ->
+                        val selected = startEmpty == empty
+                        FilterChip(
+                            selected = selected,
+                            onClick = { startEmpty = empty },
+                            label = { Text(stringResource(label), fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonGreen,
+                                selectedLabelColor = DarkBackground,
+                                containerColor = DarkSurface,
+                                labelColor = TextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selected,
+                                borderColor = if (selected) NeonGreen else DarkCardBorder
+                            )
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -1083,7 +1115,7 @@ fun CreateProfileDialog(
                 onClick = {
                     val finalName = if (profileNameText.isNotBlank()) profileNameText.trim() else context.getString(R.string.profile_new_default_name)
                     val finalPkg = if (selectedPackageText.isNotBlank()) selectedPackageText.trim() else "com.game.app"
-                    onConfirm(finalName, finalPkg)
+                    onConfirm(finalName, finalPkg, startEmpty)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
             ) {
