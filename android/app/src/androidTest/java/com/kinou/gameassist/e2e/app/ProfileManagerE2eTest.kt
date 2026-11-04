@@ -20,10 +20,12 @@ import com.kinou.gameassist.MainActivity
 import com.kinou.gameassist.R
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.e2e.Profiles
+import com.kinou.gameassist.e2e.waitFor
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -74,6 +76,30 @@ class ProfileManagerE2eTest {
 
         row("E2E Created").assertExists()
         assertNotNull(profileNamed("E2E Created"))
+    }
+
+    /** Opens the New Profile dialog, names the profile and optionally picks the empty start (#38). */
+    private fun createProfile(name: String, empty: Boolean) {
+        val newProfile = text(R.string.btn_new_profile)
+        rule.onNode(hasText(newProfile) or hasContentDescription(newProfile)).performClick()
+        rule.onAllNodes(hasSetTextAction())[0].performTextInput(name)
+        if (empty) rule.onNodeWithText(text(R.string.create_profile_start_empty)).performClick()
+        rule.onNodeWithText(text(R.string.btn_add)).performClick()
+        waitFor("the profile $name to be saved") { profileNamed(name) != null }
+    }
+
+    @Test
+    fun aProfileCanBeCreatedEmpty() {
+        createProfile("E2E Empty", empty = true)
+
+        assertTrue("no buttons", profileNamed("E2E Empty")!!.buttons.isEmpty())
+    }
+
+    @Test
+    fun aNewProfileStillStartsFromTheCallOfDutyLayout() {
+        createProfile("E2E Layout", empty = false)
+
+        assertTrue("Call of Duty buttons", profileNamed("E2E Layout")!!.buttons.isNotEmpty())
     }
 
     @Test

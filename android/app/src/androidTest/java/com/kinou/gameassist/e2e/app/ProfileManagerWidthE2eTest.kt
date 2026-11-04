@@ -37,7 +37,7 @@ class ProfileManagerWidthE2eTest {
                     onSaveProfile = {},
                     onDeleteProfile = {},
                     onDuplicateProfile = {},
-                    onCreateProfile = { _, _ -> },
+                    onCreateProfile = { _, _, _ -> },
                     onImportProfile = { _, _ -> },
                     onBack = {}
                 )
