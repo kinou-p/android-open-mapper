@@ -92,6 +92,10 @@
     <string name="btn_select">Choisir</string>
     <string name="tab_aim_title">🎯 Visée</string>
     <string name="tab_movement_title">🕹️ Dépl.</string>
+    <string name="left_stick_enabled_title">🕹️ Stick gauche → joystick tactile</string>
+    <string name="left_stick_enabled_desc">Désactivez si le jeu lit déjà lui-même le stick gauche, ou pour un profil curseur seul (L3+R3).</string>
+    <string name="camera_enabled_title">🎥 Stick droit → zone caméra</string>
+    <string name="camera_enabled_desc">Désactivez si le jeu lit déjà lui-même le stick droit, ou pour un profil curseur seul (L3+R3).</string>
     <string name="exclusive_controller_title">🔒 Cacher la manette au jeu</string>
     <string name="exclusive_controller_desc">Pour les jeux qui lisent aussi la manette eux-mêmes (caméra inversée, entrées en double). Pendant le mapping, seul OpenMapper reçoit la manette et le jeu ne voit que les touchers. À laisser désactivé pour les autres jeux. Tant que c’est activé, l’écran de test manette de l’app ne voit pas la manette.</string>
     <string name="tab_buttons_title">🎮 Touches</string>
