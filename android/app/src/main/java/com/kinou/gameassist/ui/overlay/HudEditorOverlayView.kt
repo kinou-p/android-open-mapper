@@ -1481,7 +1481,7 @@ class HudEditorOverlayView(
                 val jx = joy.centerX * w
                 val jy = joy.centerY * h
                 val jr = joy.radius * h
-                if (hypot(tx - jx, ty - jy) <= jr) {
+                if (joy.enabled && hypot(tx - jx, ty - jy) <= jr) {
                     selectedItem = "JOYSTICK"
                     draggedItem = "JOYSTICK"
                     dragOffsetX = tx - jx

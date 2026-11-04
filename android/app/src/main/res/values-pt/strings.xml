@@ -89,6 +89,10 @@
     <string name="btn_select">Escolher</string>
     <string name="tab_aim_title">🎯 Mira</string>
     <string name="tab_movement_title">🕹️ Mover</string>
+    <string name="left_stick_enabled_title">🕹️ Analógico esquerdo → joystick de toque</string>
+    <string name="left_stick_enabled_desc">Desative se o jogo já lê o analógico esquerdo, ou para um perfil só de cursor (L3+R3).</string>
+    <string name="camera_enabled_title">🎥 Analógico direito → zona da câmera</string>
+    <string name="camera_enabled_desc">Desative se o jogo já lê o analógico direito, ou para um perfil só de cursor (L3+R3).</string>
     <string name="exclusive_controller_title">🔒 Esconder o controle do jogo</string>
     <string name="exclusive_controller_desc">Para jogos que também leem o controle por conta própria (câmera invertida, entradas duplas). Durante o mapeamento, só o OpenMapper recebe o controle e o jogo só vê toques. Deixe desligado para outros jogos. Enquanto ativo, a tela de teste do controle do app não vê o controle.</string>
     <string name="tab_buttons_title">🎮 Botões</string>

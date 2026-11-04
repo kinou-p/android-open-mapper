@@ -83,6 +83,10 @@
     <string name="btn_select">בחר</string>
     <string name="tab_aim_title">🎯 כיוון (Aim)</string>
     <string name="tab_movement_title">🕹️ תנועה</string>
+    <string name="left_stick_enabled_title">🕹️ סטיק שמאלי ← ג׳ויסטיק מגע</string>
+    <string name="left_stick_enabled_desc">כבו אם המשחק כבר קורא את הסטיק השמאלי בעצמו, או לפרופיל של סמן בלבד (L3+R3).</string>
+    <string name="camera_enabled_title">🎥 סטיק ימני ← אזור מצלמה</string>
+    <string name="camera_enabled_desc">כבו אם המשחק כבר קורא את הסטיק הימני בעצמו, או לפרופיל של סמן בלבד (L3+R3).</string>
     <string name="exclusive_controller_title">🔒 הסתר את הבקר מהמשחק</string>
     <string name="exclusive_controller_desc">למשחקים שקוראים גם בעצמם את הבקר (מצלמה הפוכה, קלט כפול). בזמן המיפוי רק OpenMapper מקבל את הבקר והמשחק רואה רק נגיעות. השאירו כבוי למשחקים אחרים. כשהאפשרות פעילה, מסך בדיקת הבקר של האפליקציה לא רואה את הבקר.</string>
     <string name="tab_buttons_title">🎮 מקשים</string>
