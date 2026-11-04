@@ -67,6 +67,9 @@
     <string name="profile_renamed_toast">שם הפרופיל שונה</string>
     <string name="btn_new_profile">פרופיל חדש</string>
     <string name="create_profile_title">צור פרופיל חדש</string>
+    <string name="create_profile_start_with">להתחיל עם</string>
+    <string name="create_profile_start_codm">פריסת Call of Duty</string>
+    <string name="create_profile_start_empty">ריק</string>
     <string name="select_game_app_title">משחק/אפליקציה ליעד</string>
     <string name="select_game_app_desc">בחר את המשחק המותקן לקישור לפרופיל זה:</string>
     <string name="custom_package_label">שם חבילה מותאם אישית</string>
