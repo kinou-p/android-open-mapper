@@ -32,6 +32,7 @@ import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.service.OverlayService
 import com.kinou.gameassist.util.shouldPushLiveProfileUpdate
+import com.kinou.gameassist.ui.ProfileSelection
 import com.kinou.gameassist.ui.screens.BugReportScreen
 import com.kinou.gameassist.ui.screens.CommunityScreen
 import com.kinou.gameassist.ui.screens.GamepadTestScreen
@@ -180,13 +181,15 @@ class MainActivity : AppCompatActivity() {
                 LaunchedEffect(currentScreen) { editorOwnsGamepad = GamepadHandoff.editorOwnsGamepad(currentScreen) }
                 DisposableEffect(Unit) { onDispose { editorOwnsGamepad = false } }
 
+                // The selected profile is remembered across app restarts (#38)
+                val selectionPrefs = remember { getSharedPreferences(ProfileSelection.PREFS, MODE_PRIVATE) }
                 LaunchedEffect(profiles) {
-                    if (selectedProfile == null && profiles.isNotEmpty()) {
-                        selectedProfile = profiles.firstOrNull()
-                    } else if (selectedProfile != null) {
-                        val matched = profiles.firstOrNull { it.id == selectedProfile?.id }
-                        selectedProfile = matched ?: profiles.firstOrNull()
-                    }
+                    selectedProfile = ProfileSelection.pick(
+                        profiles, selectedProfile?.id, selectionPrefs.getString(ProfileSelection.KEY_LAST_PROFILE, null)
+                    )
+                }
+                LaunchedEffect(selectedProfile?.id) {
+                    selectedProfile?.id?.let { selectionPrefs.edit().putString(ProfileSelection.KEY_LAST_PROFILE, it).apply() }
                 }
 
                 BackHandler(enabled = currentScreen != Screen.HOME) {
