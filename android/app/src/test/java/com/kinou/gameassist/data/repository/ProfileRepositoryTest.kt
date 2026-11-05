@@ -274,6 +274,27 @@ class ProfileRepositoryTest {
     }
 
     @Test
+    fun favoriteIsSavedAndOlderProfilesLoadAsNotFavorite() {
+        val starred = json.decodeFromString<GameProfile>(json.encodeToString(GameProfile(id = "fav", name = "Fav", favorite = true)))
+        assertTrue(starred.favorite)
+
+        val older = json.decodeFromString<GameProfile>("""{"id":"old","name":"Old"}""")
+        assertFalse(older.favorite)
+    }
+
+    @Test
+    fun aDuplicatedFavoriteIsNotAFavorite() {
+        val repo = ProfileRepository(TestContext(tempFolder.newFolder("duplicate_favorite")))
+        val original = GameProfile(id = "starred", name = "Starred", favorite = true)
+        repo.saveProfile(original)
+
+        val copy = repo.duplicateProfile(original)
+
+        assertFalse(copy.favorite)
+        assertTrue(original.favorite)
+    }
+
+    @Test
     fun saveProfileReturnsFalseWhenTheWriteFails() {
         val baseDir = tempFolder.newFolder("save_failure")
         // Make <filesDir>/profiles a regular file so the profile file cannot be written.

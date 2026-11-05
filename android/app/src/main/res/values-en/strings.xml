@@ -340,6 +340,11 @@
     <string name="profile_edit_title">Edit profile</string>
     <string name="btn_edit_profile">Edit</string>
     <string name="profile_actions">More actions</string>
+    <string name="profile_favorite">Add to favorites</string>
+    <string name="profile_unfavorite">Remove from favorites</string>
+    <string name="profile_set_default">Set as default</string>
+    <string name="profile_unset_default">Remove as default</string>
+    <string name="profile_default_badge">Default profile</string>
     <!-- Home secondary actions -->
     <string name="home_check_update">Updates</string>
     <string name="home_report_bug">Report a bug</string>
