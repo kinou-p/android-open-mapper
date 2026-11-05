@@ -44,6 +44,9 @@ import kotlin.math.pow
 fun ProfileEditorScreen(
     profiles: List<GameProfile>,
     currentProfile: GameProfile?,
+    defaultProfileId: String? = null,
+    onToggleFavorite: (GameProfile) -> Unit = {},
+    onSetDefault: (String?) -> Unit = {},
     onActivate: (GameProfile) -> Unit,
     onEdit: (GameProfile) -> Unit,
     onSaveProfile: (GameProfile) -> Unit,
@@ -143,6 +146,10 @@ fun ProfileEditorScreen(
                 ProfileCard(
                     profile = prof,
                     isActive = prof.id == currentProfile?.id,
+                    isFavorite = prof.favorite,
+                    isDefault = prof.id == defaultProfileId,
+                    onToggleFavorite = { onToggleFavorite(prof) },
+                    onToggleDefault = { onSetDefault(if (prof.id == defaultProfileId) null else prof.id) },
                     canDelete = profiles.size > 1,
                     onActivate = { onActivate(prof) },
                     onEdit = { onEdit(prof) },
@@ -289,6 +296,10 @@ fun ProfileCard(
     isActive: Boolean,
     canDelete: Boolean,
     onActivate: () -> Unit,
+    isFavorite: Boolean = false,
+    isDefault: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
+    onToggleDefault: () -> Unit = {},
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
     onExport: () -> Unit,
@@ -333,6 +344,14 @@ fun ProfileCard(
                     color = NeonCyan,
                     fontSize = 12.sp
                 )
+                if (isDefault) {
+                    Text(
+                        text = stringResource(R.string.profile_default_badge),
+                        color = NeonGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
             }
 
             Row(
@@ -353,6 +372,15 @@ fun ProfileCard(
                         color = if (isActive) DarkBackground else TextPrimary,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
+                    )
+                }
+
+                IconButton(onClick = onToggleFavorite, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = stringResource(if (isFavorite) R.string.profile_unfavorite else R.string.profile_favorite),
+                        tint = if (isFavorite) NeonYellow else TextSecondary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
@@ -388,6 +416,21 @@ fun ProfileCard(
                             onClick = {
                                 showActions = false
                                 onDuplicate()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(if (isDefault) R.string.profile_unset_default else R.string.profile_set_default),
+                                    color = TextPrimary
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.PushPin, contentDescription = null, tint = NeonGreen, modifier = Modifier.size(18.dp))
+                            },
+                            onClick = {
+                                showActions = false
+                                onToggleDefault()
                             }
                         )
                         DropdownMenuItem(

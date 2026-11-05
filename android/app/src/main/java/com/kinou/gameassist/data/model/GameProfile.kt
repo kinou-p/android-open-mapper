@@ -71,7 +71,11 @@ data class GameProfile(
     var settings: GameSettings = GameSettings(),
 
     @SerialName("custom_screenshot_path")
-    var customScreenshotPath: String? = null
+    var customScreenshotPath: String? = null,
+
+    /** Starred in the Profile Manager: listed at the top (#38). */
+    @SerialName("favorite")
+    var favorite: Boolean = false
 )
 
 /**

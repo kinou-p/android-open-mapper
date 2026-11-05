@@ -351,6 +351,7 @@ class ProfileRepository internal constructor(context: Context) {
             id = newId,
             name = localizedCopySuffix(profile.name),
             customScreenshotPath = newScreenshotPath,
+            favorite = false, // a copy is a new profile, not starred yet
             buttons = profile.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
         )
         saveProfile(copy)
