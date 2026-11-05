@@ -1,5 +1,6 @@
 package com.kinou.gameassist.ui.screens
 
+import com.kinou.gameassist.engine.DeadzoneLimits
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -492,7 +493,7 @@ fun ProfileEditScreen(
                         SliderSetting(
                             label = stringResource(R.string.deadzone_title),
                             value = deadzoneCam,
-                            range = 0.02f..0.35f,
+                            range = DeadzoneLimits.MIN..DeadzoneLimits.MAX,
                             displayText = "${(deadzoneCam * 100).toInt()}%",
                             onValueChange = {
                                 deadzoneCam = it
@@ -904,7 +905,7 @@ fun ProfileEditScreen(
                         SliderSetting(
                             label = stringResource(R.string.joystick_deadzone),
                             value = deadzoneJoy,
-                            range = 0.02f..0.35f,
+                            range = DeadzoneLimits.MIN..DeadzoneLimits.MAX,
                             displayText = "${(deadzoneJoy * 100).toInt()}%",
                             onValueChange = {
                                 deadzoneJoy = it
