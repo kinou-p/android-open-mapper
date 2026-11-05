@@ -15,6 +15,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kinou.gameassist.MainActivity
 import com.kinou.gameassist.R
+import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.e2e.Profiles
 import com.kinou.gameassist.e2e.waitFor
@@ -24,6 +25,8 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.serialization.json.Json
+import java.io.File
 
 /** The left stick and the camera zone can be switched off in the profile editor (#38). */
 @RunWith(AndroidJUnit4::class)
@@ -50,7 +53,10 @@ class StickSwitchesE2eTest {
         repository.getAllProfiles().filter { it.name.startsWith("E2E") }.forEach { repository.deleteProfile(it.id) }
     }
 
-    private fun saved() = repository.getAllProfiles().first { it.id == "e2e_sticks" }
+    // Read back from the file: the repository hands the screens the very objects they edit,
+    // so its in-memory copy changes even when nothing is saved.
+    private fun saved(): GameProfile =
+        Json { ignoreUnknownKeys = true }.decodeFromString(File(context.filesDir, "profiles/e2e_sticks.json").readText())
 
     private fun flip(titleId: Int) =
         rule.onNode(isToggleable() and hasText(text(titleId))).performClick()
