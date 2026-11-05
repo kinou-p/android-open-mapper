@@ -6,6 +6,7 @@ import android.view.WindowManager
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.engine.GamepadEngine
+import com.kinou.gameassist.engine.LinuxInputReader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -16,8 +17,11 @@ import kotlinx.coroutines.cancel
  * Runs the real [GamepadEngine] against a profile, with a [UiAutomationTouchInjector] and a
  * scripted "gamepad": the test presses buttons and moves the sticks through the engine public
  * API, the engine injects touches into whatever simulated game is on screen.
+ *
+ * With [readController], the scripted gamepad is replaced by the real /dev/input reader, which
+ * reads a [com.kinou.gameassist.e2e.input.VirtualGamepad] (see [ShellProcess]).
  */
-class E2eRig(profile: GameProfile) : AutoCloseable {
+class E2eRig(profile: GameProfile, private val readController: Boolean = false) : AutoCloseable {
 
     private val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -31,16 +35,20 @@ class E2eRig(profile: GameProfile) : AutoCloseable {
         injector.setScreenResolution(metrics.widthPixels, metrics.heightPixels)
         engine = GamepadEngine(context, injector, scope)
         engine.setProfile(profile)
+        if (readController) LinuxInputReader.processSpawner = ShellProcess::start
         engine.start()
-        // The real /dev/input reader needs Shizuku. Without it, it fails right after start and resets
-        // every input once; with it, a real gamepad would feed the engine. Stop it and let that
-        // one reset happen now, so the scripted inputs below are never wiped.
-        engine.linuxReader.stop()
-        Thread.sleep(READER_SETTLE_MS)
+        if (!readController) {
+            // The real /dev/input reader needs Shizuku. Without it, it fails right after start and resets
+            // every input once; with it, a real gamepad would feed the engine. Stop it and let that
+            // one reset happen now, so the scripted inputs below are never wiped.
+            engine.linuxReader.stop()
+            Thread.sleep(READER_SETTLE_MS)
+        }
     }
 
     private companion object {
         const val READER_SETTLE_MS = 400L
+        val SHIZUKU_SPAWNER = LinuxInputReader.processSpawner
     }
 
     fun press(button: String) = engine.onRawButtonDown(button)
@@ -75,6 +83,7 @@ class E2eRig(profile: GameProfile) : AutoCloseable {
     override fun close() {
         centerSticks()
         engine.stop()
+        if (readController) LinuxInputReader.processSpawner = SHIZUKU_SPAWNER
         injector.releaseAll()
         scope.cancel(CancellationException("e2e rig closed"))
     }

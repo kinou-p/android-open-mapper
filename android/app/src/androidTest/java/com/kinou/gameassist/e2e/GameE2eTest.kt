@@ -34,9 +34,12 @@ abstract class GameE2eTest<A : SimulatedGameActivity<V>, V : GameView>(
         waitFor("the game to be laid out and focused") { game.width > 0 && game.height > 0 && game.hasWindowFocus() }
     }
 
-    /** Starts the engine on [profile]; the game and the injector must agree on the screen size. */
-    protected fun startEngine(profile: GameProfile): E2eRig {
-        val started = E2eRig(profile)
+    /**
+     * Starts the engine on [profile]; the game and the injector must agree on the screen size.
+     * [readController]: read a virtual gamepad through the real /dev/input reader (see [E2eRig]).
+     */
+    protected fun startEngine(profile: GameProfile, readController: Boolean = false): E2eRig {
+        val started = E2eRig(profile, readController)
         rig = started
         assertEquals("game width vs screen", started.injector.screenWidth, game.width)
         assertEquals("game height vs screen", started.injector.screenHeight, game.height)
