@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -92,6 +94,8 @@ fun ProfileEditScreen(
     var aimDeadzone by remember(profile.id) { mutableFloatStateOf(AimSettings.coerceDeadzone(profile.settings.aimDeadzone)) }
     var responseCurve by remember(profile.id) { mutableStateOf(profile.camera.responseCurve) }
     var exclusiveController by remember(profile.id) { mutableStateOf(profile.settings.exclusiveController) }
+    var leftStickEnabled by remember(profile.id) { mutableStateOf(profile.joystick.enabled) }
+    var cameraEnabled by remember(profile.id) { mutableStateOf(profile.camera.enabled) }
     var cameraMode by remember(profile.id) { mutableStateOf(profile.camera.mode) }
     var joystickRadius by remember(profile.id) { mutableFloatStateOf(profile.camera.joystickRadius) }
 
@@ -260,6 +264,20 @@ fun ProfileEditScreen(
                 // ==========================================
                 if (selectedTab == 0) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Right stick on/off: off for games that read it themselves or a cursor-only profile (#38)
+                        StickSwitch(
+                            title = stringResource(R.string.camera_enabled_title),
+                            description = stringResource(R.string.camera_enabled_desc),
+                            checked = cameraEnabled,
+                            onCheckedChange = {
+                                cameraEnabled = it
+                                profile.camera.enabled = it
+                                onSave()
+                            }
+                        )
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
                         // Right stick: swipe camera or second joystick (twin-stick games, issue #29)
                         Text(stringResource(R.string.right_stick_mode_title), color = TextSecondary, fontSize = 13.sp)
                         Row(
@@ -864,6 +882,20 @@ fun ProfileEditScreen(
                 // ==========================================
                 if (selectedTab == 1) {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Left stick on/off: off for games that read it themselves or a cursor-only profile (#38)
+                        StickSwitch(
+                            title = stringResource(R.string.left_stick_enabled_title),
+                            description = stringResource(R.string.left_stick_enabled_desc),
+                            checked = leftStickEnabled,
+                            onCheckedChange = {
+                                leftStickEnabled = it
+                                profile.joystick.enabled = it
+                                onSave()
+                            }
+                        )
+
+                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 1.dp)
+
                         // Hide the controller from games that partly read it themselves (issue #28)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1379,6 +1411,33 @@ fun ProfileEditScreen(
                 Toast.makeText(context, context.getString(R.string.package_updated_toast), Toast.LENGTH_SHORT).show()
                 showPackageDialog = false
             }
+        )
+    }
+}
+
+/** On/off row for a stick mapping (left stick joystick, right stick camera); the whole row toggles. */
+@Composable
+private fun StickSwitch(title: String, description: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(description, color = TextSecondary, fontSize = 11.sp)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = DarkBackground,
+                checkedTrackColor = NeonCyan,
+                uncheckedThumbColor = TextSecondary,
+                uncheckedTrackColor = DarkSurface
+            )
         )
     }
 }
