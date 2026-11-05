@@ -465,6 +465,64 @@ class LinuxInputReaderTest {
     }
 
     @Test
+    fun testParseAbsRanges_ReadsMinAndMaxPerAxis() {
+        val block = """
+            add device 1: /dev/input/event5
+              name:     "Xbox Wireless Controller"
+              events:
+                KEY (0001): 0130  0131  0133  0134
+                ABS (0003): 0000  : value 0, min -32768, max 32767, fuzz 16, flat 128, resolution 0
+                            0002  : value 0, min 0, max 1023, fuzz 0, flat 0, resolution 0
+                            0010  : value 0, min -1, max 1, fuzz 0, flat 0, resolution 0
+              input props:
+                <none>
+        """.trimIndent()
+
+        assertEquals(
+            mapOf(0x00 to -32768L..32767L, 0x02 to 0L..1023L, 0x10 to -1L..1L),
+            LinuxInputReader.parseAbsRanges(block)
+        )
+        assertEquals(0L..1023L, LinuxInputReader.parseGamepadNodeInfo(block)!!.absRanges[0x02])
+    }
+
+    @Test
+    fun testParseAbsRanges_NoAbsSectionIsEmpty() {
+        assertTrue(LinuxInputReader.parseAbsRanges("I: Bus=0005\nN: Name=\"D3\"\n").isEmpty())
+    }
+
+    @Test
+    fun testTrigger_XboxOneOnUsbIsPressedByAFullPull() {
+        // xpad reports Xbox One / Series triggers as 0..1023 on ABS_Z / ABS_RZ
+        val range = 0L..1023L
+        assertTrue(LinuxInputReader.isTriggerDown(1023L, ControllerLayoutType.XBOX_WIRED_USB, range))
+        assertTrue(LinuxInputReader.isTriggerDown(400L, ControllerLayoutType.XBOX_WIRED_USB, range))
+        assertFalse(LinuxInputReader.isTriggerDown(100L, ControllerLayoutType.XBOX_WIRED_USB, range))
+        assertFalse(LinuxInputReader.isTriggerDown(0L, ControllerLayoutType.XBOX_WIRED_USB, range))
+    }
+
+    @Test
+    fun testTrigger_AKnownRangeNeedsAFifthOfTheTravel() {
+        assertFalse(LinuxInputReader.isTriggerDown(50L, ControllerLayoutType.PLAYSTATION_HID_DRIVER, 0L..255L))
+        assertTrue(LinuxInputReader.isTriggerDown(60L, ControllerLayoutType.PLAYSTATION_HID_DRIVER, 0L..255L))
+        assertFalse(LinuxInputReader.isTriggerDown(8000L, ControllerLayoutType.XBOX_WIRED_USB, 0L..65535L))
+        assertTrue(LinuxInputReader.isTriggerDown(20000L, ControllerLayoutType.XBOX_WIRED_USB, 0L..65535L))
+        // A signed trigger rests at its minimum
+        assertFalse(LinuxInputReader.isTriggerDown(-32768L, ControllerLayoutType.NINTENDO_SWITCH, -32768L..32767L))
+        assertTrue(LinuxInputReader.isTriggerDown(0L, ControllerLayoutType.NINTENDO_SWITCH, -32768L..32767L))
+    }
+
+    @Test
+    fun testTrigger_WithoutARangeTheLayoutGuessIsKept() {
+        assertTrue(LinuxInputReader.isTriggerDown(32767L, ControllerLayoutType.XBOX_WIRED_USB))
+        assertFalse(LinuxInputReader.isTriggerDown(1000L, ControllerLayoutType.XBOX_WIRED_USB))
+        assertTrue(LinuxInputReader.isTriggerDown(255L, ControllerLayoutType.PLAYSTATION))
+        assertFalse(LinuxInputReader.isTriggerDown(30L, ControllerLayoutType.PLAYSTATION))
+        assertTrue(LinuxInputReader.isTriggerDown(1023L, ControllerLayoutType.XBOX_BLUETOOTH))
+        // An empty or one-value range says nothing: guessed as before
+        assertTrue(LinuxInputReader.isTriggerDown(255L, ControllerLayoutType.PLAYSTATION, 0L..0L))
+    }
+
+    @Test
     fun testAxisRouting_EveryLayoutRoutesLeftStickHatAndUnknownCode() {
         ControllerLayoutType.values().forEach { layout ->
             assertEquals("LX for $layout", AxisTarget.LEFT_X, LinuxInputReader.axisTarget(layout, 0x0000))

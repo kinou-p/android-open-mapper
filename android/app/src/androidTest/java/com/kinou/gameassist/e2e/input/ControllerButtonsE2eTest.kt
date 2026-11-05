@@ -93,6 +93,17 @@ class ControllerButtonsE2eTest : GameE2eTest<TapGameActivity, TapGameView>(TapGa
     }
 
     @Test
+    fun anXboxOnePadOnUsbPullsItsTriggers() {
+        // Its triggers report 0..1023: a full pull must count, not be read as 3% of a 0..32767 trigger
+        val pad = plugAndMap(VirtualGamepad.Model.XBOX_ONE, listOf("BUTTON_L2", "BUTTON_R2"))
+
+        pad.leftTrigger(true); Thread.sleep(120); pad.leftTrigger(false); Thread.sleep(80)
+        pad.rightTrigger(true); Thread.sleep(120); pad.rightTrigger(false)
+
+        assertTappedInOrder(2)
+    }
+
+    @Test
     fun aPlayStationPadUsesItsOwnButtonLayout() {
         // Cross, Circle, Square, Triangle: Square is BTN_WEST and Triangle BTN_NORTH, the other way round from Xbox
         plugAndMap(VirtualGamepad.Model.PLAYSTATION, listOf("BUTTON_A", "BUTTON_B", "BUTTON_X", "BUTTON_Y", "BUTTON_R2"))
