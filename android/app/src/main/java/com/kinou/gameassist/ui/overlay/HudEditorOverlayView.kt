@@ -326,14 +326,14 @@ class HudEditorOverlayView(
 
     // Top Bar Visibility & Action Button Bounds
     var isTopBarHidden = false
-    private val btnCloseRect = RectF()
-    private val btnSaveRect = RectF()
+    internal val btnCloseRect = RectF() // internal: read by the e2e tests
+    internal val btnSaveRect = RectF()
     private val btnHideRect = RectF()
     private val btnStrafeRect = RectF()
     private val btnRecoilRect = RectF()
     private val btnOpacRect = RectF()
     private val btnDetailsRect = RectF()
-    private val btnAddRect = RectF()
+    internal val btnAddRect = RectF()
     private val btnShotRect = RectF()
     private val btnRemRect = RectF()
     private val btnShowRect = RectF()
@@ -391,7 +391,7 @@ class HudEditorOverlayView(
     private var hasShowBtnMoved = false
 
     // Bottom Context Bar Action Button Bounds
-    private val btnDelRect = RectF()
+    internal val btnDelRect = RectF()
     private val btnNudgeRightRect = RectF()
     private val btnNudgeDownRect = RectF()
     private val btnNudgeUpRect = RectF()
