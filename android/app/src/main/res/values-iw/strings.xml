@@ -318,6 +318,11 @@
     <string name="profile_edit_title">עריכת פרופיל</string>
     <string name="btn_edit_profile">עריכה</string>
     <string name="profile_actions">פעולות נוספות</string>
+    <string name="profile_favorite">הוספה למועדפים</string>
+    <string name="profile_unfavorite">הסרה מהמועדפים</string>
+    <string name="profile_set_default">הגדרה כברירת מחדל</string>
+    <string name="profile_unset_default">ביטול ברירת מחדל</string>
+    <string name="profile_default_badge">פרופיל ברירת מחדל</string>
     <string name="home_check_update">עדכונים</string>
     <string name="home_report_bug">דיווח על תקלה</string>
     <string name="community_author_prefix">מאת %1$s</string>
