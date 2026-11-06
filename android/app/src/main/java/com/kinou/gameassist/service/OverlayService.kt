@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import com.kinou.gameassist.util.AppLog
+import com.kinou.gameassist.util.serviceStartProfileId
 
 class OverlayService : LifecycleService() {
 
@@ -60,6 +61,14 @@ class OverlayService : LifecycleService() {
         val isServiceRunningFlow: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
         val isServiceRunning: Boolean get() = _isServiceRunning.value
 
+        // Profile the running overlay uses, so the app shows the right one when reopened (#51)
+        private val _activeProfileId = MutableStateFlow<String?>(null)
+        val activeProfileIdFlow: StateFlow<String?> = _activeProfileId.asStateFlow()
+
+        // Last profile the overlay ran, reused when Android restarts the service without an intent
+        const val PREFS = "openmapper_prefs"
+        const val KEY_SERVICE_PROFILE = "service_profile_id"
+
         private val _liveProfileUpdateFlow = MutableSharedFlow<GameProfile>(replay = 0, extraBufferCapacity = 1)
         val liveProfileUpdateFlow: SharedFlow<GameProfile> = _liveProfileUpdateFlow.asSharedFlow()
 
@@ -74,7 +83,16 @@ class OverlayService : LifecycleService() {
     private lateinit var hapticManager: com.kinou.gameassist.engine.HapticManager
     private lateinit var engine: GamepadEngine
 
+    private val prefs by lazy { getSharedPreferences(PREFS, Context.MODE_PRIVATE) }
+
     private var currentProfile: GameProfile? = null
+        set(value) {
+            if (value != null && value.id != field?.id) {
+                prefs.edit().putString(KEY_SERVICE_PROFILE, value.id).apply()
+            }
+            field = value
+            _activeProfileId.value = value?.id
+        }
 
     // Overlay Views
     private var edgeHandleView: EdgeHandleOverlayView? = null
@@ -256,7 +274,7 @@ class OverlayService : LifecycleService() {
             return START_NOT_STICKY
         }
 
-        val profileId = intent?.getStringExtra(EXTRA_PROFILE_ID) ?: "codm_multiplayer_default"
+        val profileId = serviceStartProfileId(intent?.getStringExtra(EXTRA_PROFILE_ID), prefs.getString(KEY_SERVICE_PROFILE, null))
         currentProfile = repository.getProfile(profileId) ?: repository.createDefaultCodmProfile()
 
         startForegroundService()
@@ -664,6 +682,7 @@ class OverlayService : LifecycleService() {
 
     override fun onDestroy() {
         _isServiceRunning.value = false
+        _activeProfileId.value = null
         mainHandler.removeCallbacks(cursorSpeedSave)
         try {
             unregisterReceiver(bluetoothDisconnectReceiver)
