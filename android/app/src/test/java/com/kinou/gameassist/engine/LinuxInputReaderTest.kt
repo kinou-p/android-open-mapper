@@ -506,9 +506,12 @@ class LinuxInputReaderTest {
         assertTrue(LinuxInputReader.isTriggerDown(60L, ControllerLayoutType.PLAYSTATION_HID_DRIVER, 0L..255L))
         assertFalse(LinuxInputReader.isTriggerDown(8000L, ControllerLayoutType.XBOX_WIRED_USB, 0L..65535L))
         assertTrue(LinuxInputReader.isTriggerDown(20000L, ControllerLayoutType.XBOX_WIRED_USB, 0L..65535L))
-        // A signed trigger rests at its minimum
+        // A signed trigger is not pulled at its minimum nor at its middle, wherever the pad rests it
         assertFalse(LinuxInputReader.isTriggerDown(-32768L, ControllerLayoutType.NINTENDO_SWITCH, -32768L..32767L))
-        assertTrue(LinuxInputReader.isTriggerDown(0L, ControllerLayoutType.NINTENDO_SWITCH, -32768L..32767L))
+        assertFalse(LinuxInputReader.isTriggerDown(0L, ControllerLayoutType.NINTENDO_SWITCH, -32768L..32767L))
+        assertFalse(LinuxInputReader.isTriggerDown(6000L, ControllerLayoutType.NINTENDO_SWITCH, -32768L..32767L))
+        assertTrue(LinuxInputReader.isTriggerDown(7000L, ControllerLayoutType.NINTENDO_SWITCH, -32768L..32767L))
+        assertTrue(LinuxInputReader.isTriggerDown(32767L, ControllerLayoutType.NINTENDO_SWITCH, -32768L..32767L))
     }
 
     @Test

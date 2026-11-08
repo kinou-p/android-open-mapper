@@ -103,7 +103,9 @@ class LinuxInputReader(
          */
         internal fun isTriggerDown(rawValue: Long, layoutType: ControllerLayoutType, range: LongRange? = null): Boolean {
             if (range != null && range.last > range.first) {
-                return rawValue - range.first > (range.last - range.first) * TRIGGER_PULL_FRACTION
+                // Counted from zero on a signed axis: it may rest at its middle, so its minimum is not "released"
+                val rest = if (range.first < 0L) 0L else range.first
+                return rawValue - rest > (range.last - rest) * TRIGGER_PULL_FRACTION
             }
             return when (layoutType) {
                 ControllerLayoutType.XBOX_BLUETOOTH -> {
