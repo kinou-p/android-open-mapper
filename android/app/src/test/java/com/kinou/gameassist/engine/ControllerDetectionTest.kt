@@ -162,8 +162,10 @@ class ControllerDetectionTest {
             assertEquals("$layout", "DPAD_DOWN", BinaryInputParser.evKeyToButtonName(0x0221, layout))
             assertEquals("$layout", "DPAD_LEFT", BinaryInputParser.evKeyToButtonName(0x0222, layout))
             assertEquals("$layout", "DPAD_RIGHT", BinaryInputParser.evKeyToButtonName(0x0223, layout))
-            // BTN_DPAD_* of some generic pads
+            // The numbered codes some generic pads use for their D-pad
             assertEquals("$layout", "DPAD_UP", BinaryInputParser.evKeyToButtonName(0x0103, layout))
+            assertEquals("$layout", "DPAD_DOWN", BinaryInputParser.evKeyToButtonName(0x0104, layout))
+            assertEquals("$layout", "DPAD_LEFT", BinaryInputParser.evKeyToButtonName(0x0105, layout))
             assertEquals("$layout", "DPAD_RIGHT", BinaryInputParser.evKeyToButtonName(0x0106, layout))
         }
     }
