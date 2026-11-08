@@ -57,6 +57,16 @@ class TwinStickE2eTest : GameE2eTest<FpsGameActivity, FpsGameView>(FpsGameActivi
     }
 
     @Test
+    fun aSwitchedOffCameraLeavesTheAimAssistAlone() {
+        val profile = twinStickProfile().also { it.camera.enabled = false; it.joystick.raaKeepAlive = true }
+        val rig = startEngine(profile)
+
+        rig.rightStick(1f, 0f)
+
+        assertStays("no finger at all") { game.snapshotState().pointersDown == 0 && game.snapshotState().moveX == 0f }
+    }
+
+    @Test
     fun centeringTheRightStickLiftsItsFinger() {
         val rig = startEngine(twinStickProfile())
 
