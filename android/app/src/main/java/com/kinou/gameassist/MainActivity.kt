@@ -183,13 +183,20 @@ class MainActivity : AppCompatActivity() {
 
                 // The selected profile is remembered across app restarts (#38)
                 val selectionPrefs = remember { getSharedPreferences(ProfileSelection.PREFS, MODE_PRIVATE) }
+                var defaultProfileId by remember { mutableStateOf(selectionPrefs.getString(ProfileSelection.KEY_DEFAULT_PROFILE, null)) }
+                val setDefaultProfile: (String?) -> Unit = { id ->
+                    defaultProfileId = id
+                    selectionPrefs.edit().putString(ProfileSelection.KEY_DEFAULT_PROFILE, id).apply()
+                }
                 LaunchedEffect(profiles) {
                     selectedProfile = ProfileSelection.pick(
-                        profiles, selectedProfile?.id, selectionPrefs.getString(ProfileSelection.KEY_LAST_PROFILE, null)
+                        profiles, selectedProfile?.id, selectionPrefs.getString(ProfileSelection.KEY_LAST_PROFILE, null), defaultProfileId, isServiceRunning
                     )
                 }
                 LaunchedEffect(selectedProfile?.id) {
-                    selectedProfile?.id?.let { selectionPrefs.edit().putString(ProfileSelection.KEY_LAST_PROFILE, it).apply() }
+                    selectedProfile?.id?.takeIf { ProfileSelection.remembersAsLast(it, defaultProfileId) }?.let {
+                        selectionPrefs.edit().putString(ProfileSelection.KEY_LAST_PROFILE, it).apply()
+                    }
                 }
 
                 BackHandler(enabled = currentScreen != Screen.HOME) {
@@ -324,8 +331,19 @@ class MainActivity : AppCompatActivity() {
                             )
 
                             Screen.PROFILES -> ProfileEditorScreen(
-                                profiles = profiles,
+                                profiles = ProfileSelection.ordered(profiles, defaultProfileId),
                                 currentProfile = selectedProfile,
+                                defaultProfileId = defaultProfileId,
+                                onToggleFavorite = { prof ->
+                                    lifecycleScope.launch {
+                                        val updated = repository.toggleFavoriteAsync(prof.id) ?: return@launch
+                                        // The overlay saves its own copy later: it must not bring the old star back
+                                        if (shouldPushLiveProfileUpdate(updated.id, selectedProfile?.id)) {
+                                            OverlayService.updateLiveProfile(updated)
+                                        }
+                                    }
+                                },
+                                onSetDefault = setDefaultProfile,
                                 onActivate = {
                                     selectedProfile = it
                                     OverlayService.updateLiveProfile(it)
@@ -340,7 +358,7 @@ class MainActivity : AppCompatActivity() {
                                 },
                                 onDeleteProfile = { id ->
                                     lifecycleScope.launch {
-                                        repository.deleteProfileAsync(id)
+                                        if (repository.deleteProfileAsync(id) && id == defaultProfileId) setDefaultProfile(null)
                                     }
                                 },
                                 onDuplicateProfile = { prof ->

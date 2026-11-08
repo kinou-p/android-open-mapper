@@ -11,6 +11,7 @@ import com.kinou.gameassist.data.model.GameProfile
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.*
+import org.junit.Assume.assumeFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -271,6 +272,65 @@ class ProfileRepositoryTest {
         assertNotNull(imported)
         assertEquals("Export Test Name", imported!!.name)
         assertEquals(originalProfile.buttons.size, imported.buttons.size)
+    }
+
+    @Test
+    fun favoriteIsSavedAndOlderProfilesLoadAsNotFavorite() {
+        val starred = json.decodeFromString<GameProfile>(json.encodeToString(GameProfile(id = "fav", name = "Fav", favorite = true)))
+        assertTrue(starred.favorite)
+
+        val older = json.decodeFromString<GameProfile>("""{"id":"old","name":"Old"}""")
+        assertFalse(older.favorite)
+    }
+
+    @Test
+    fun aDuplicatedFavoriteIsNotAFavorite() {
+        val repo = ProfileRepository(TestContext(tempFolder.newFolder("duplicate_favorite")))
+        val original = GameProfile(id = "starred", name = "Starred", favorite = true)
+        repo.saveProfile(original)
+
+        val copy = repo.duplicateProfile(original)
+
+        assertFalse(copy.favorite)
+        assertTrue(original.favorite)
+    }
+
+    private val isWindows = System.getProperty("os.name").orEmpty().startsWith("Windows")
+
+    @Test
+    fun aStarIsAppliedToTheLatestSavedProfile() {
+        assumeFalse("AtomicFile cannot replace a file on Windows", isWindows)
+        val dir = tempFolder.newFolder("toggle_favorite")
+        val repo = ProfileRepository(TestContext(dir))
+        val card = GameProfile(id = "starred", name = "Before")
+        repo.saveProfile(card)
+        repo.saveProfile(card.copy(name = "Edited after the card was drawn"))
+
+        val updated = repo.toggleFavorite("starred")
+
+        assertTrue(updated!!.favorite)
+        val reopened = ProfileRepository(TestContext(dir)).getProfile("starred")!!
+        assertTrue(reopened.favorite)
+        assertEquals("the newer edit is kept", "Edited after the card was drawn", reopened.name)
+    }
+
+    @Test
+    fun twoQuickStarTapsCancelEachOther() {
+        assumeFalse("AtomicFile cannot replace a file on Windows", isWindows)
+        val repo = ProfileRepository(TestContext(tempFolder.newFolder("toggle_twice")))
+        repo.saveProfile(GameProfile(id = "starred", name = "Star"))
+
+        repo.toggleFavorite("starred")
+        repo.toggleFavorite("starred")
+
+        assertFalse(repo.getProfile("starred")!!.favorite)
+    }
+
+    @Test
+    fun aStarOnAMissingProfileDoesNothing() {
+        val repo = ProfileRepository(TestContext(tempFolder.newFolder("toggle_missing")))
+
+        assertNull(repo.toggleFavorite("gone"))
     }
 
     @Test

@@ -270,6 +270,18 @@ class ProfileRepository internal constructor(context: Context) {
         }
     }
 
+    /** Flips the star on the saved profile in one step, so quick taps and other saves are not overwritten. */
+    fun toggleFavorite(id: String): GameProfile? {
+        synchronized(fileLock) {
+            val updated = getProfile(id)?.apply { favorite = !favorite } ?: return null
+            return if (saveProfileInternal(updated)) updated else null
+        }
+    }
+
+    suspend fun toggleFavoriteAsync(id: String): GameProfile? = withContext(Dispatchers.IO) {
+        toggleFavorite(id)
+    }
+
     fun deleteProfile(id: String): Boolean {
         if (!SAFE_ID_REGEX.matches(id)) return false
         synchronized(fileLock) {
@@ -350,6 +362,7 @@ class ProfileRepository internal constructor(context: Context) {
             id = newId,
             name = localizedCopySuffix(profile.name),
             customScreenshotPath = newScreenshotPath,
+            favorite = false, // a copy is a new profile, not starred yet
             buttons = profile.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
         )
         saveProfile(copy)

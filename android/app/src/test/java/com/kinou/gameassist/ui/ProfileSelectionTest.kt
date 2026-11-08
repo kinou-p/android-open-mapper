@@ -2,11 +2,29 @@ package com.kinou.gameassist.ui
 
 import com.kinou.gameassist.data.model.GameProfile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The selected profile survives closing the app (#38). */
+/** The selected profile survives closing the app, the default profile and the favorites order (#38). */
 class ProfileSelectionTest {
+
+    @Test
+    fun whileTheOverlayRunsTheDefaultDoesNotReplaceTheProfileInUse() {
+        val a = GameProfile(id = "a", name = "A")
+        val b = GameProfile(id = "b", name = "B")
+
+        assertEquals(a, ProfileSelection.pick(listOf(a, b), null, "a", "b", overlayRunning = true))
+        assertEquals(b, ProfileSelection.pick(listOf(a, b), null, "a", "b", overlayRunning = false))
+    }
+
+    @Test
+    fun theDefaultOpeningByItselfIsNotRememberedAsUsedLast() {
+        assertFalse(ProfileSelection.remembersAsLast("b", "b"))
+        assertTrue(ProfileSelection.remembersAsLast("a", "b"))
+        assertTrue(ProfileSelection.remembersAsLast("a", null))
+    }
 
     private val a = GameProfile(id = "a", name = "A")
     private val b = GameProfile(id = "b", name = "B")
@@ -42,5 +60,34 @@ class ProfileSelectionTest {
     @Test
     fun noProfilesMeansNoSelection() {
         assertNull(ProfileSelection.pick(emptyList(), currentId = "a", lastId = "a"))
+    }
+
+    @Test
+    fun theDefaultProfileIsOpenedInsteadOfTheLastUsedOne() {
+        assertEquals(c, ProfileSelection.pick(all, currentId = null, lastId = "b", defaultId = "c"))
+    }
+
+    @Test
+    fun theCurrentSelectionStillWinsOverTheDefault() {
+        assertEquals(a, ProfileSelection.pick(all, currentId = "a", lastId = "b", defaultId = "c"))
+    }
+
+    @Test
+    fun aDeletedDefaultFallsBackToTheLastUsedProfile() {
+        assertEquals(b, ProfileSelection.pick(all, currentId = null, lastId = "b", defaultId = "gone"))
+    }
+
+    @Test
+    fun theListShowsTheDefaultThenTheFavoritesThenTheRestInTheirOrder() {
+        val d = GameProfile(id = "d", name = "D", favorite = true)
+        val e = GameProfile(id = "e", name = "E")
+        val f = GameProfile(id = "f", name = "F", favorite = true)
+
+        assertEquals(listOf(e, d, f, a, b), ProfileSelection.ordered(listOf(a, d, b, e, f), defaultId = "e"))
+    }
+
+    @Test
+    fun withoutFavoritesOrADefaultTheOrderIsUnchanged() {
+        assertEquals(all, ProfileSelection.ordered(all, defaultId = null))
     }
 }

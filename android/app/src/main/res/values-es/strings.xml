@@ -332,6 +332,11 @@
     <string name="profile_edit_title">Editar el perfil</string>
     <string name="btn_edit_profile">Editar</string>
     <string name="profile_actions">Más acciones</string>
+    <string name="profile_favorite">Añadir a favoritos</string>
+    <string name="profile_unfavorite">Quitar de favoritos</string>
+    <string name="profile_set_default">Usar por defecto</string>
+    <string name="profile_unset_default">Dejar de usar por defecto</string>
+    <string name="profile_default_badge">Perfil por defecto</string>
     <!-- Home secondary actions -->
     <string name="home_check_update">Actualizaciones</string>
     <string name="home_report_bug">Informar de un error</string>
