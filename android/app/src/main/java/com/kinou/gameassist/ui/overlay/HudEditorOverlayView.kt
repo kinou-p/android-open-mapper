@@ -1580,7 +1580,9 @@ class HudEditorOverlayView(
                         val curH = c.rectY2 - c.rectY1
 
                         when (activeCamHandle) {
-                            CamHandle.BODY -> {
+                            CamHandle.BODY -> if (RightStickCircle.shown(c)) {
+                                RightStickCircle.moveZoneTo(c, (tx - dragOffsetX) / w, (ty - dragOffsetY) / h, w, h)
+                            } else {
                                 val newX1 = ((tx - dragOffsetX) / w).coerceIn(0.01f, 0.99f - curW)
                                 val newY1 = ((ty - dragOffsetY) / h).coerceIn(0.01f, 0.99f - curH)
                                 c.rectX1 = newX1
@@ -1867,5 +1869,19 @@ internal object RightStickCircle {
 
     fun scale(cam: CameraConfig, factor: Float) {
         cam.joystickRadius = (cam.joystickRadius * factor).coerceIn(MIN_RADIUS, MAX_RADIUS)
+    }
+
+    /** Moves the zone to the new top-left corner, as far as the circle (not the hidden zone) fits on screen. */
+    fun moveZoneTo(cam: CameraConfig, x1: Float, y1: Float, w: Float, h: Float) {
+        val zoneW = cam.rectX2 - cam.rectX1
+        val zoneH = cam.rectY2 - cam.rectY1
+        val marginX = radius(cam, h) / w
+        val marginY = cam.joystickRadius
+        val centerX = (x1 + zoneW / 2f).coerceIn(marginX, 1f - marginX)
+        val centerY = (y1 + zoneH / 2f).coerceIn(marginY, 1f - marginY)
+        cam.rectX1 = centerX - zoneW / 2f
+        cam.rectY1 = centerY - zoneH / 2f
+        cam.rectX2 = centerX + zoneW / 2f
+        cam.rectY2 = centerY + zoneH / 2f
     }
 }

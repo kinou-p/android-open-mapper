@@ -55,6 +55,23 @@ class RightStickCircleTest {
     }
 
     @Test
+    fun theCircleCanBeDraggedUpToTheScreenEdge() {
+        val c = cam().apply { rectX1 = 0.55f; rectY1 = 0.35f; rectX2 = 0.95f; rectY2 = 0.95f; joystickRadius = 0.10f }
+
+        RightStickCircle.moveZoneTo(c, 5f, 5f, 2000f, 1000f)
+
+        assertEquals("touches the right edge", 2000f - 100f, RightStickCircle.centerX(c, 2000f), 0.5f)
+        assertEquals("touches the bottom edge", 1000f - 100f, RightStickCircle.centerY(c, 1000f), 0.5f)
+        assertEquals("the zone keeps its size", 0.40f, c.rectX2 - c.rectX1, 0.001f)
+        assertEquals("the zone keeps its size", 0.60f, c.rectY2 - c.rectY1, 0.001f)
+
+        RightStickCircle.moveZoneTo(c, -5f, -5f, 2000f, 1000f)
+
+        assertEquals("touches the left edge", 100f, RightStickCircle.centerX(c, 2000f), 0.5f)
+        assertEquals("touches the top edge", 100f, RightStickCircle.centerY(c, 1000f), 0.5f)
+    }
+
+    @Test
     fun resizingStaysInsideTheSliderRange() {
         val c = cam()
         RightStickCircle.scale(c, 100f)

@@ -128,10 +128,24 @@ class HudEditorRightStickE2eTest {
     }
 
     @Test
+    fun theCircleCanBeDraggedUpToTheScreenEdge() {
+        val view = editor()!!
+        val radius = view.camera.joystickRadius
+
+        swipe(view, view.width * 0.75f, view.height * 0.65f, view.width * 0.999f, view.height * 0.999f)
+
+        waitFor("the right stick to be selected") { view.isCameraSelected }
+        val cam = view.camera
+        assertEquals("center x at the edge", 1f - radius * view.height / view.width, (cam.rectX1 + cam.rectX2) / 2f, 0.02f)
+        assertEquals("center y at the edge", 1f - radius, (cam.rectY1 + cam.rectY2) / 2f, 0.02f)
+    }
+
+    @Test
     fun theOldZoneCornersNoLongerResizeIt() {
         val view = editor()!!
         tap(view, view.width * 0.75f, view.height * 0.65f)
         waitFor("the right stick to be selected") { view.isCameraSelected }
+        val radiusBefore = view.camera.joystickRadius
 
         // where the zone's top-left corner handle used to be
         swipe(view, view.width * 0.55f, view.height * 0.35f, view.width * 0.30f, view.height * 0.20f)
@@ -142,5 +156,6 @@ class HudEditorRightStickE2eTest {
         assertEquals(0.35f, cam.rectY1, 0.001f)
         assertEquals(0.95f, cam.rectX2, 0.001f)
         assertEquals(0.95f, cam.rectY2, 0.001f)
+        assertEquals("the stick keeps its size", radiusBefore, cam.joystickRadius, 0.001f)
     }
 }

@@ -58,12 +58,11 @@ class TwinStickE2eTest : GameE2eTest<FpsGameActivity, FpsGameView>(FpsGameActivi
 
     @Test
     fun centeringTheRightStickLiftsItsFinger() {
-        val rig = startEngine(twinStickProfile())
+        // no aim-assist keep-alive: its finger on the left stick would hide the camera finger's state
+        val rig = startEngine(twinStickProfile().also { it.joystick.raaKeepAlive = false })
 
         rig.rightStick(1f, 0f)
-        // wait for the camera finger itself: the aim-assist keep-alive (on by default) also puts a
-        // finger on the left stick while the right stick is pushed, so the pointer count is 1 or 2
-        waitFor("the right stick finger down") { game.snapshotState().cameraTouches == 1 }
+        waitFor("the right stick finger down") { game.snapshotState().cameraTouches == 1 && game.snapshotState().pointersDown == 1 }
         rig.rightStick(0f, 0f)
 
         waitFor("the finger lifted") { game.snapshotState().pointersDown == 0 }
