@@ -67,7 +67,7 @@ class DeadzoneSliderE2eTest {
 
     @After
     fun removeTestProfiles() {
-        repository.getAllProfiles().filter { it.name.startsWith("E2E") }.forEach { repository.deleteProfile(it.id) }
+        repository.deleteProfile("e2e_deadzone")
     }
 
     private fun sliderAt(value: Float) = SemanticsMatcher("slider at $value") {
