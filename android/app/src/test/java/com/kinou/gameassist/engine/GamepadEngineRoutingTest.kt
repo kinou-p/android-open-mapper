@@ -36,15 +36,26 @@ class GamepadEngineRoutingTest {
         override fun dispatch(context: CoroutineContext, block: Runnable) = Unit
     }
 
+    private data class Touch(val pointerId: Int, val x: Float, val y: Float)
+
     private class RecordingInjector : ShizukuTouchInjector() {
         val downs = mutableListOf<Float>()
         val ups = mutableListOf<Float>()
+        val downTouches = mutableListOf<Touch>()
+        val upTouches = mutableListOf<Touch>()
+        val cancels = mutableListOf<Int>()
         var resets = 0
 
-        override fun touchDown(pointerId: Int, x: Float, y: Float, pressure: Float?) { downs += x }
+        override fun touchDown(pointerId: Int, x: Float, y: Float, pressure: Float?) {
+            downs += x
+            downTouches += Touch(pointerId, x, y)
+        }
         override fun touchMove(pointerId: Int, x: Float, y: Float, pressure: Float?) {}
-        override fun touchUp(pointerId: Int, x: Float?, y: Float?) { ups += x ?: -1f }
-        override fun cancelTouch(pointerId: Int, x: Float?, y: Float?) {}
+        override fun touchUp(pointerId: Int, x: Float?, y: Float?) {
+            ups += x ?: -1f
+            upTouches += Touch(pointerId, x ?: -1f, y ?: -1f)
+        }
+        override fun cancelTouch(pointerId: Int, x: Float?, y: Float?) { cancels += pointerId }
         override fun resetAllPointers() { resets++ }
     }
 
@@ -88,6 +99,20 @@ class GamepadEngineRoutingTest {
     }
 
     @Test
+    fun aPressAndItsReleaseAreTheSameFingerOnTheRightSpot() {
+        load(button("BUTTON_A", 0.10f).copy(y = 0.70f))
+
+        engine.onRawButtonDown("BUTTON_A")
+        engine.onRawButtonUp("BUTTON_A")
+
+        val down = injector.downTouches.single()
+        val up = injector.upTouches.single()
+        assertEquals(px(0.10f), down.x)
+        assertEquals(0.70f * injector.screenHeight, down.y)
+        assertEquals("the same finger is lifted", down, up)
+    }
+
+    @Test
     fun buttonNamesFromAnySourceAreNormalized() {
         load(button("BUTTON_A", 0.10f))
 
@@ -106,6 +131,17 @@ class GamepadEngineRoutingTest {
         engine.onRawButtonDown("BUTTON_A")
 
         assertEquals(1, injector.downs.size)
+    }
+
+    @Test
+    fun aRepeatedDownFromTheReaderDoesNotToggleTwice() {
+        load(button("BUTTON_Y", 0.10f, role = ButtonRole.TOGGLE_RECOIL))
+        val before = profile.camera.antiRecoilEnabled
+
+        engine.onRawButtonDown("BUTTON_Y")
+        engine.onRawButtonDown("BUTTON_Y")
+
+        assertEquals("flipped once, not back again", !before, profile.camera.antiRecoilEnabled)
     }
 
     @Test
@@ -312,6 +348,7 @@ class GamepadEngineRoutingTest {
 
         assertEquals(!before, profile.joystick.jiggleStrafe)
         assertEquals(!before, engine.movementProcessor.config.jiggleStrafe)
+        assertTrue("no touch in the game", injector.downs.isEmpty())
     }
 
     @Test
@@ -342,5 +379,19 @@ class GamepadEngineRoutingTest {
         // The reset forgot the held stick clicks: A is a plain button again right away
         engine.onRawButtonDown("BUTTON_A")
         assertEquals(listOf(px(0.10f)), injector.downs)
+    }
+
+    @Test
+    fun aFullResetLiftsAHeldButtonAndForgetsIt() {
+        load(button("BUTTON_A", 0.10f))
+        engine.onRawButtonDown("BUTTON_A")
+        val finger = injector.downTouches.single().pointerId
+
+        engine.resetAllInputs()
+
+        assertTrue("the held finger is lifted", finger in injector.cancels || injector.upTouches.any { it.pointerId == finger })
+        // The button is not remembered as held: pressing it again is a new press
+        engine.onRawButtonDown("BUTTON_A")
+        assertEquals(2, injector.downTouches.size)
     }
 }
