@@ -6,6 +6,7 @@ import android.os.Build
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import com.kinou.gameassist.data.model.CameraConfig
 import com.kinou.gameassist.data.model.GamepadDetector
 import com.kinou.gameassist.data.model.GyroActivation
 import com.kinou.gameassist.data.model.GameProfile
@@ -16,6 +17,10 @@ import kotlinx.coroutines.*
 enum class TacticalKind { ANTI_RECOIL, JIGGLE_STRAFE }
 
 data class TacticalEvent(val kind: TacticalKind, val enabled: Boolean, val speed: Float = 0f)
+
+/** Does the right stick count as aiming? Not while the camera is switched off: it drives nothing then. */
+internal fun rightStickAims(rx: Float, ry: Float, camera: CameraConfig): Boolean =
+    camera.enabled && kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camera.deadzone
 
 class GamepadEngine(
     private val context: Context,
@@ -542,7 +547,7 @@ class GamepadEngine(
                                 buttonProcessor.processAimJoystick(rx, ry)
                             } else {
                                 val camCfg = cameraProcessor.config
-                                val isAimingOrCamera = isAds || isFiring || (kotlin.math.hypot(rx.toDouble(), ry.toDouble()) > camCfg.deadzone)
+                                val isAimingOrCamera = isAds || isFiring || rightStickAims(rx, ry, camCfg)
                                 movementProcessor.process(lx, ly, isAimingOrCamera, isFiring = isFiring)
                                 var gyroDx = 0f
                                 var gyroDy = 0f
@@ -564,8 +569,9 @@ class GamepadEngine(
                                         gyroSmoothX = 0f
                                         gyroSmoothY = 0f
                                     }
-                                } else if (gyroSource.running) {
-                                    gyroSource.stop()
+                                } else {
+                                    if (gyroSource.running) gyroSource.stop()
+                                    dropGyro()
                                 }
                                 cameraProcessor.process(rx, ry, isAiming = isAds, isFiring = isFiring, gyroDx = gyroDx, gyroDy = gyroDy)
                             }

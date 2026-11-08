@@ -47,6 +47,15 @@ class StickSwitchesTest {
     }
 
     @Test
+    fun theRightStickOnlyCountsAsAimingWhileTheCameraIsOn() {
+        val on = CameraConfig(enabled = true, deadzone = 0.1f)
+
+        assertTrue(rightStickAims(1f, 0f, on))
+        assertFalse("inside the deadzone", rightStickAims(0.05f, 0f, on))
+        assertFalse("camera off", rightStickAims(1f, 0f, on.copy(enabled = false)))
+    }
+
+    @Test
     fun gyroAimIsOffWhileTheCameraIsSwitchedOff() {
         val on = CameraConfig(enabled = true, gyroEnabled = true, mode = CameraMode.SWIPE)
 

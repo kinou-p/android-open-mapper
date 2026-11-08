@@ -357,7 +357,7 @@ The input engine solves Android's fundamental problem: **background applications
 #### 8. `GyroSource.kt` (#22)
 - **Controller sensor, not the phone's**: `InputDevice.sensorManager` + `Sensor.TYPE_GYROSCOPE`, Android 12+; `ensureStarted()` retries every 2 s and reattaches to the current controller.
 - **Frame-rate integration**: accumulates yaw/pitch between two frames (`consumeDelta`) so no sample is lost; `denoise()` removes drift below 0.02 rad/s and `smooth()` applies a low-pass filter capped at 0.95.
-- **Scope**: swipe camera only (`CameraConfig.gyroApplies = gyroEnabled && mode == SWIPE`). In joystick mode the right stick owns the camera contact: the editor hides the gyro block and the engine does not read the sensor.
+- **Scope**: swipe camera only (`CameraConfig.gyroApplies = enabled && gyroEnabled && mode == SWIPE`). In joystick mode the right stick owns the camera contact: the editor hides the gyro block and the engine does not read the sensor.
 
 ---
 

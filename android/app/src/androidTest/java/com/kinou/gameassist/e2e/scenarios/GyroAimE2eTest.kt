@@ -58,6 +58,23 @@ class GyroAimE2eTest : GameE2eTest<FpsGameActivity, FpsGameView>(FpsGameActivity
     }
 
     @Test
+    fun noCameraMoveWhenTheCameraIsSwitchedBackOn() {
+        val rig = startEngine(gyroProfile())
+        rig.press("BUTTON_L2")
+        turn(rig, 400, yawPerStep = 0.2f)
+        waitFor("the camera to turn") { abs(game.snapshotState().lookDx) > 30f }
+
+        // the camera is switched off then on again while LT is still held and the controller is still
+        rig.engine.setProfile(gyroProfile().also { it.camera.enabled = false })
+        waitFor("the camera finger lifted") { game.snapshotState().pointersDown == 0 }
+        val touchesBefore = game.snapshotState().cameraTouches
+        rig.engine.setProfile(gyroProfile())
+
+        assertStays("no camera touch from old motion", forMs = 500) { game.snapshotState().cameraTouches == touchesBefore }
+        rig.release("BUTTON_L2")
+    }
+
+    @Test
     fun noCameraJumpAfterTheHudEditorWasOpen() {
         val rig = startEngine(gyroProfile())
         rig.press("BUTTON_L2")
