@@ -1,5 +1,6 @@
 package com.kinou.gameassist.ui.screens
 
+import com.kinou.gameassist.engine.DeadzoneLimits
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -306,8 +307,8 @@ fun GamepadTestScreen(
                             if (driftTestFinished) {
                                 HorizontalDivider(color = DarkCardBorder, thickness = 1.dp)
 
-                                val recommendedLS = (maxDriftLS + 0.02f).coerceIn(0.03f, 0.35f)
-                                val recommendedRS = (maxDriftRS + 0.02f).coerceIn(0.03f, 0.35f)
+                                val recommendedLS = DeadzoneLimits.recommended(maxDriftLS)
+                                val recommendedRS = DeadzoneLimits.recommended(maxDriftRS)
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),

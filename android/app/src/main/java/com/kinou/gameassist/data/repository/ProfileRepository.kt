@@ -1,5 +1,6 @@
 package com.kinou.gameassist.data.repository
 
+import com.kinou.gameassist.engine.DeadzoneLimits
 import android.content.Context
 import androidx.core.util.AtomicFile
 import com.kinou.gameassist.data.model.*
@@ -66,7 +67,7 @@ class ProfileRepository internal constructor(context: Context) {
             if (!joy.centerX.isFinite()) joy.centerX = 0.18f else joy.centerX = joy.centerX.coerceIn(-0.5f, 1.5f)
             if (!joy.centerY.isFinite()) joy.centerY = 0.72f else joy.centerY = joy.centerY.coerceIn(-0.5f, 1.5f)
             if (!joy.radius.isFinite() || joy.radius <= 0f) joy.radius = 0.13f else joy.radius = joy.radius.coerceIn(0.01f, 1.0f)
-            if (!joy.deadzone.isFinite() || joy.deadzone < 0f) joy.deadzone = 0.10f else joy.deadzone = joy.deadzone.coerceIn(0.0f, 0.5f)
+            if (!joy.deadzone.isFinite() || joy.deadzone < 0f) joy.deadzone = 0.10f else joy.deadzone = joy.deadzone.coerceIn(0.0f, DeadzoneLimits.MAX)
             if (!joy.outerDeadzone.isFinite() || joy.outerDeadzone <= 0f) joy.outerDeadzone = 0.95f else joy.outerDeadzone = joy.outerDeadzone.coerceIn(0.5f, 1.0f)
             if (!joy.sprintThreshold.isFinite()) joy.sprintThreshold = 0.82f else joy.sprintThreshold = joy.sprintThreshold.coerceIn(0.2f, 1.0f)
 
@@ -78,7 +79,7 @@ class ProfileRepository internal constructor(context: Context) {
             if (!cam.rectY2.isFinite()) cam.rectY2 = 0.92f else cam.rectY2 = cam.rectY2.coerceIn(-0.5f, 1.5f)
             if (!cam.sensitivityX.isFinite() || cam.sensitivityX <= 0f) cam.sensitivityX = 1.45f else cam.sensitivityX = cam.sensitivityX.coerceIn(0.05f, 10.0f)
             if (!cam.sensitivityY.isFinite() || cam.sensitivityY <= 0f) cam.sensitivityY = 1.15f else cam.sensitivityY = cam.sensitivityY.coerceIn(0.05f, 10.0f)
-            if (!cam.deadzone.isFinite() || cam.deadzone < 0f) cam.deadzone = 0.08f else cam.deadzone = cam.deadzone.coerceIn(0.0f, 0.5f)
+            if (!cam.deadzone.isFinite() || cam.deadzone < 0f) cam.deadzone = 0.08f else cam.deadzone = cam.deadzone.coerceIn(0.0f, DeadzoneLimits.MAX)
             if (!cam.smoothing.isFinite()) cam.smoothing = 0.22f else cam.smoothing = cam.smoothing.coerceIn(0.0f, 1.0f)
             if (!cam.acceleration.isFinite()) cam.acceleration = 1.25f else cam.acceleration = cam.acceleration.coerceIn(0.5f, 5.0f)
             if (!cam.flickBoost.isFinite()) cam.flickBoost = 2.0f else cam.flickBoost = cam.flickBoost.coerceIn(1.0f, 5.0f)
