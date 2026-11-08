@@ -164,7 +164,7 @@ class ProfileStorageTest {
             ButtonRole.values().map { json.encodeToString(it) }
         )
         val saved = json.encodeToString(sample())
-        listOf("\"package_name\"", "\"gamepad_button\"", "\"rapid_fire_rate_hz\"", "\"custom_screenshot_path\"").forEach {
+        listOf("\"id\"", "\"name\"", "\"description\"", "\"package_name\"", "\"joystick\"", "\"camera\"", "\"buttons\"", "\"settings\"", "\"custom_screenshot_path\"", "\"gamepad_button\"", "\"rapid_fire_rate_hz\"").forEach {
             assertTrue("$it is saved", saved.contains(it))
         }
     }
@@ -196,7 +196,8 @@ class ProfileStorageTest {
     @Test
     fun unsafeIdsAreNeverReadOrDeleted() {
         val repo = openRepository()
-        writeFile("../outside.json", "{}")
+        // A valid profile: a broken one would come back null even if the file was read
+        writeFile("../outside.json", json.encodeToString(sample("outside")))
 
         assertNull(repo.getProfile("../outside"))
         assertFalse(repo.deleteProfile("../outside"))
