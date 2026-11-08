@@ -45,7 +45,7 @@ class ControllerSticksE2eTest : GameE2eTest<FpsGameActivity, FpsGameView>(FpsGam
         waitFor("the character to walk right") { state().moveX > 0.3f }
 
         pad.leftStick(0f, 0f)
-        waitFor("the character to stop") { state().pointersDown == 0 }
+        waitFor("the character to stop") { state().pointersDown == 0 && state().moveX == 0f }
     }
 
     @Test
