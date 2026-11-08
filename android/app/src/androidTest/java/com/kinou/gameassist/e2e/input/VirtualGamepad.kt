@@ -31,12 +31,17 @@ class VirtualGamepad(val model: Model) : AutoCloseable {
     val node: String
 
     init {
-        send(registerCommand())
         var found: String? = null
-        waitFor("the virtual gamepad to appear") {
-            found = shell("getevent -p").split("add device").firstOrNull { "\"${model.deviceName}\"" in it }
-                ?.let { Regex("""(/dev/input/event\d+)""").find(it)?.groupValues?.get(1) }
-            found != null
+        try {
+            send(registerCommand())
+            waitFor("the virtual gamepad to appear") {
+                found = shell("getevent -p").split("add device").firstOrNull { "\"${model.deviceName}\"" in it }
+                    ?.let { Regex("""(/dev/input/event\d+)""").find(it)?.groupValues?.get(1) }
+                found != null
+            }
+        } catch (e: Throwable) {
+            close() // no caller gets this object to close: do not leave the device plugged in
+            throw e
         }
         node = found!!
     }
