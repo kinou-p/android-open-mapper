@@ -215,12 +215,17 @@ class HudEditorE2eTest {
         waitFor("the profile to be saved without the button") { saved()?.buttons?.isEmpty() == true }
     }
 
+    /** The profile editor's tab only comes back with the screen, so waiting for it proves the HUD editor left. */
+    private fun assertProfileEditorNotShown() =
+        assertTrue(rule.onAllNodesWithText(text(R.string.tab_aim_title)).fetchSemanticsNodes().isEmpty())
+
     @Test
     fun closingTheEditorSavesTheChangesAndGoesBack() {
         val view = editor()!!
         swipe(view, view.width * 0.5f, view.height * 0.5f, view.width * 0.3f, view.height * 0.7f)
         waitFor("the button to be selected") { view.selectedButton?.id == "hud_a" }
 
+        assertProfileEditorNotShown()
         tap(view, view.btnCloseRect)
 
         waitFor("the new place to be saved") { saved()?.buttons?.singleOrNull()?.let { abs(it.x - 0.3f) < 0.06f } == true }
@@ -233,6 +238,7 @@ class HudEditorE2eTest {
         swipe(view, view.width * 0.5f, view.height * 0.5f, view.width * 0.3f, view.height * 0.7f)
         waitFor("the button to be selected") { view.selectedButton?.id == "hud_a" }
 
+        assertProfileEditorNotShown()
         instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
 
         waitFor("the new place to be saved") { saved()?.buttons?.singleOrNull()?.let { abs(it.x - 0.3f) < 0.06f } == true }
