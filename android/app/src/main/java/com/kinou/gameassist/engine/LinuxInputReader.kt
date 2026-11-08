@@ -75,6 +75,73 @@ class LinuxInputReader(
                 .toList()
         }
 
+        private val ABS_RANGE_LINE = Regex("""^([0-9a-fA-F]{4})\s*:\s*value\s*-?\d+\s*,\s*min\s*(-?\d+)\s*,\s*max\s*(-?\d+)""")
+
+        /** Min..max of each `ABS_*` code of one `getevent -p` block; empty for `/proc/bus/input/devices`. */
+        internal fun parseAbsRanges(block: String): Map<Int, LongRange> {
+            val absSection = block.substringAfter("ABS (0003):", missingDelimiterValue = "")
+            if (absSection.isEmpty()) return emptyMap()
+            return absSection.lineSequence()
+                .mapNotNull { ABS_RANGE_LINE.find(it.trim()) }
+                .mapNotNull { m ->
+                    val code = m.groupValues[1].toIntOrNull(16) ?: return@mapNotNull null
+                    val min = m.groupValues[2].toLongOrNull() ?: return@mapNotNull null
+                    val max = m.groupValues[3].toLongOrNull() ?: return@mapNotNull null
+                    code to (min..max)
+                }
+                .toMap()
+        }
+
+        /** How far a trigger must be pulled to count as pressed, when its range is known. */
+        private const val TRIGGER_PULL_FRACTION = 0.2f
+
+        /**
+         * Is a trigger pulled? With the range the driver reports, a fifth of the travel: one value
+         * can mean a full pull on one pad and a light touch on another (1023 is the end of an Xbox
+         * One trigger on USB, 0..1023, but 3% of a 0..32767 trigger). Without it (no `getevent -p`),
+         * the range is guessed per layout from the value.
+         */
+        internal fun isTriggerDown(rawValue: Long, layoutType: ControllerLayoutType, range: LongRange? = null): Boolean {
+            if (range != null && range.last > range.first) {
+                // Counted from zero on a signed axis: it may rest at its middle, so its minimum is not "released"
+                val rest = if (range.first < 0L) 0L else range.first
+                return rawValue - rest > (range.last - rest) * TRIGGER_PULL_FRACTION
+            }
+            return when (layoutType) {
+                ControllerLayoutType.XBOX_BLUETOOTH -> {
+                    // ABS_BRAKE / ABS_GAS: range 0..1023
+                    rawValue > 200L
+                }
+                ControllerLayoutType.PLAYSTATION, ControllerLayoutType.PLAYSTATION_HID_DRIVER -> {
+                    // 0..255
+                    rawValue > 60L
+                }
+                ControllerLayoutType.XBOX_WIRED_USB -> {
+                    // ABS_Z / ABS_RZ: range 0..32767 or 0..65535 or -32768..32767 or 0..255
+                    when {
+                        rawValue < 0L -> (rawValue + 32768L) > 8000L
+                        rawValue > 32767L -> rawValue > 16000L // 0..65535
+                        rawValue > 255L -> rawValue > 8000L    // 0..32767 (threshold 25% = ~8192)
+                        else -> rawValue > 60L                 // 0..255
+                    }
+                }
+                ControllerLayoutType.NINTENDO_SWITCH -> {
+                    if (rawValue < 0L) (rawValue + 32768L) > 8000L
+                    else if (rawValue > 255L) rawValue > 8000L
+                    else rawValue > 60L
+                }
+                ControllerLayoutType.GENERIC_BLUETOOTH, ControllerLayoutType.GENERIC_USB -> {
+                    when {
+                        rawValue < 0L -> (rawValue + 32768L) > 8000L
+                        rawValue > 32767L -> rawValue > 16000L
+                        rawValue > 1023L -> rawValue > 8000L
+                        rawValue > 255L -> rawValue > 250L
+                        else -> rawValue > 60L
+                    }
+                }
+            }
+        }
+
         /**
          * What a raw `ABS_*` code drives for a given detected layout. Pure so the routing (the heart
          * of the right-stick mapping) is unit-testable without a live engine — see LinuxInputReaderTest.
@@ -461,7 +528,8 @@ class LinuxInputReader(
                 layoutType = layoutType,
                 stickRange = stickRange,
                 isBluetooth = isBluetooth,
-                absAxes = parseAbsAxisLines(block)
+                absAxes = parseAbsAxisLines(block),
+                absRanges = parseAbsRanges(block)
             )
         }
     }
@@ -817,42 +885,6 @@ class LinuxInputReader(
         }
     }
 
-    private fun isTriggerDown(rawValue: Long, layoutType: ControllerLayoutType): Boolean {
-        return when (layoutType) {
-            ControllerLayoutType.XBOX_BLUETOOTH -> {
-                // ABS_BRAKE / ABS_GAS: range 0..1023
-                rawValue > 200L
-            }
-            ControllerLayoutType.PLAYSTATION, ControllerLayoutType.PLAYSTATION_HID_DRIVER -> {
-                // 0..255
-                rawValue > 60L
-            }
-            ControllerLayoutType.XBOX_WIRED_USB -> {
-                // ABS_Z / ABS_RZ: range 0..32767 or 0..65535 or -32768..32767 or 0..255
-                when {
-                    rawValue < 0L -> (rawValue + 32768L) > 8000L
-                    rawValue > 32767L -> rawValue > 16000L // 0..65535
-                    rawValue > 255L -> rawValue > 8000L    // 0..32767 (threshold 25% = ~8192)
-                    else -> rawValue > 60L                 // 0..255
-                }
-            }
-            ControllerLayoutType.NINTENDO_SWITCH -> {
-                if (rawValue < 0L) (rawValue + 32768L) > 8000L
-                else if (rawValue > 255L) rawValue > 8000L
-                else rawValue > 60L
-            }
-            ControllerLayoutType.GENERIC_BLUETOOTH, ControllerLayoutType.GENERIC_USB -> {
-                when {
-                    rawValue < 0L -> (rawValue + 32768L) > 8000L
-                    rawValue > 32767L -> rawValue > 16000L
-                    rawValue > 1023L -> rawValue > 8000L
-                    rawValue > 255L -> rawValue > 250L
-                    else -> rawValue > 60L
-                }
-            }
-        }
-    }
-
     private fun handleAbsoluteAxis(nodeInfo: GamepadNodeInfo, code: Int, rawValue: Long) {
         if (nodeInfo.stickRange == StickRangeMode.AUTO) {
             if (rawValue > 32767L) {
@@ -867,16 +899,15 @@ class LinuxInputReader(
             AxisTarget.LEFT_Y -> engine.ly = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
             AxisTarget.RIGHT_X -> engine.rx = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
             AxisTarget.RIGHT_Y -> engine.ry = BinaryInputParser.normalizeStick(rawValue, nodeInfo.stickRange)
-            AxisTarget.TRIGGER_L2 -> handleTriggerL2(rawValue, nodeInfo.layoutType)
-            AxisTarget.TRIGGER_R2 -> handleTriggerR2(rawValue, nodeInfo.layoutType)
+            AxisTarget.TRIGGER_L2 -> handleTriggerL2(isTriggerDown(rawValue, nodeInfo.layoutType, nodeInfo.absRanges[code]))
+            AxisTarget.TRIGGER_R2 -> handleTriggerR2(isTriggerDown(rawValue, nodeInfo.layoutType, nodeInfo.absRanges[code]))
             AxisTarget.HAT_X -> handleHatX(rawValue)
             AxisTarget.HAT_Y -> handleHatY(rawValue)
             AxisTarget.NONE -> {}
         }
     }
 
-    private fun handleTriggerL2(rawValue: Long, layoutType: ControllerLayoutType) {
-        val isDown = isTriggerDown(rawValue, layoutType)
+    private fun handleTriggerL2(isDown: Boolean) {
         val prev = ltActive.getAndSet(isDown)
         if (isDown != prev) {
             if (isDown) engine.onRawButtonDown("BUTTON_L2")
@@ -884,8 +915,7 @@ class LinuxInputReader(
         }
     }
 
-    private fun handleTriggerR2(rawValue: Long, layoutType: ControllerLayoutType) {
-        val isDown = isTriggerDown(rawValue, layoutType)
+    private fun handleTriggerR2(isDown: Boolean) {
         val prev = rtActive.getAndSet(isDown)
         if (isDown != prev) {
             if (isDown) engine.onRawButtonDown("BUTTON_R2")
@@ -947,5 +977,7 @@ data class GamepadNodeInfo(
     var stickRange: StickRangeMode,
     val isBluetooth: Boolean,
     /** Raw `ABS (0003)` lines of the node's `getevent -p` block, for the bug report. */
-    val absAxes: List<String> = emptyList()
+    val absAxes: List<String> = emptyList(),
+    /** Min..max of each `ABS_*` code, when `getevent -p` gave them. */
+    val absRanges: Map<Int, LongRange> = emptyMap()
 )

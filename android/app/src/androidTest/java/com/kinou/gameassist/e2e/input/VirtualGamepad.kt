@@ -15,6 +15,9 @@ class VirtualGamepad(val model: Model) : AutoCloseable {
         /** Xbox 360 over USB: sticks -32768..32767, triggers 0..255 on ABS_Z / ABS_RZ. */
         XBOX("OM Test Xbox 360 Controller", 0x045e, 0x028e, "usb", -32768, 32767, 255),
 
+        /** Xbox One / Series over USB: like the 360, but its triggers go 0..1023. */
+        XBOX_ONE("OM Test Xbox One Controller", 0x045e, 0x02ea, "usb", -32768, 32767, 1023),
+
         /** DualShock 4 on the hid-sony driver: sticks 0..255, right stick on ABS_RX / ABS_RY. */
         PLAYSTATION("OM Test Wireless Controller", 0x054c, 0x09cc, "bluetooth", 0, 255, 255)
     }

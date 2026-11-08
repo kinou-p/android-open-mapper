@@ -558,6 +558,10 @@ OpenMapper directly intercepts Linux binary streams from kernel drivers (`/dev/i
 
 ### 3. Analog Trigger Thresholds (LT / RT)
 
+**With the range from `getevent -p`** (the normal case, every layout, including Xbox One / Series on USB with $0 \dots 1023$): pressed past 20% of the travel, counted from the minimum, or from zero on a signed axis that may rest at its middle.
+
+**Without a range** (only `/proc/bus/input/devices` was readable), the threshold is guessed per layout:
+
 | Controller Layout | Linux Axis Read | Raw Range | Pressed Threshold (`isDown`) |
 | :--- | :--- | :--- | :--- |
 | `XBOX_BLUETOOTH` | `ABS_BRAKE` (0x0a) / `ABS_GAS` (0x09) | $0 \dots 1023$ | $raw > 200L$ (Travel > ~20%) |
