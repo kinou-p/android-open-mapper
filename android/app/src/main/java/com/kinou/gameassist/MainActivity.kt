@@ -347,9 +347,9 @@ class MainActivity : AppCompatActivity() {
                                         OverlayService.updateLiveProfile(copy)
                                     }
                                 },
-                                onCreateProfile = { name, pkg, startEmpty ->
+                                onCreateProfile = { name, pkg, layout ->
                                     lifecycleScope.launch {
-                                        val created = repository.createCustomProfileAsync(name, pkg, startEmpty)
+                                        val created = repository.createCustomProfileAsync(name, pkg, layout)
                                         selectedProfile = created
                                         OverlayService.updateLiveProfile(created)
                                     }

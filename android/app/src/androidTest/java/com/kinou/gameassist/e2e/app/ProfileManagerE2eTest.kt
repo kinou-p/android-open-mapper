@@ -2,6 +2,7 @@ package com.kinou.gameassist.e2e.app
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.hasAnySibling
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
@@ -86,6 +87,14 @@ class ProfileManagerE2eTest {
         if (empty) rule.onNodeWithText(text(R.string.create_profile_start_empty)).performClick()
         rule.onNodeWithText(text(R.string.btn_add)).performClick()
         waitFor("the profile $name to be saved") { profileNamed(name) != null }
+    }
+
+    @Test
+    fun theStartChoiceCanBeScrolledToOnAShortScreen() {
+        val newProfile = text(R.string.btn_new_profile)
+        rule.onNode(hasText(newProfile) or hasContentDescription(newProfile)).performClick()
+
+        rule.onNode(hasText(text(R.string.create_profile_start_empty)) and hasAnyAncestor(hasScrollAction())).assertExists()
     }
 
     @Test

@@ -299,14 +299,16 @@ class ProfileRepositoryTest {
 
     @Test
     fun aNewProfileCanStartEmpty() {
-        val repo = ProfileRepository(TestContext(tempFolder.newFolder("empty_profile")))
+        val dir = tempFolder.newFolder("empty_profile")
+        val repo = ProfileRepository(TestContext(dir))
 
-        val created = repo.createCustomProfile("My game", "com.my.game", startEmpty = true)
+        val created = repo.createCustomProfile("My game", "com.my.game", StarterLayout.EMPTY)
 
         assertTrue("no buttons", created.buttons.isEmpty())
         assertEquals("My game", created.name)
         assertEquals("com.my.game", created.packageName)
-        assertTrue("saved", repo.getAllProfiles().any { it.id == created.id && it.buttons.isEmpty() })
+        val reopened = ProfileRepository(TestContext(dir))
+        assertTrue("saved to disk", reopened.getProfile(created.id)?.buttons?.isEmpty() == true)
     }
 
     @Test
