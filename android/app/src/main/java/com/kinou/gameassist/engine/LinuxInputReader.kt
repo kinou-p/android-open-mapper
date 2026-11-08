@@ -195,9 +195,18 @@ class LinuxInputReader(
         internal fun shouldFallBackToCat(exclusive: Boolean, stillCurrent: Boolean): Boolean =
             exclusive && stillCurrent
 
+        /**
+         * Starts a command as the shell user. Shizuku in the app; the end-to-end tests start it
+         * with UiAutomation instead, so a virtual gamepad goes through the real reader.
+         */
+        @Volatile
+        internal var processSpawner: (Array<String>) -> Process? = { cmd ->
+            shizukuNewProcessMethod?.invoke(null, cmd, null, null) as? Process
+        }
+
         private fun spawnShizukuProcess(cmd: Array<String>): Process? {
             return try {
-                shizukuNewProcessMethod?.invoke(null, cmd, null, null) as? Process
+                processSpawner(cmd)
             } catch (e: Exception) {
                 e.printStackTrace()
                 null
