@@ -28,7 +28,6 @@ import kotlinx.coroutines.launch
 import com.kinou.gameassist.data.community.CommunityApiClient
 import com.kinou.gameassist.data.language.LanguageManager
 import com.kinou.gameassist.data.model.GameProfile
-import com.kinou.gameassist.data.model.deepCopy
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.service.OverlayService
@@ -191,11 +190,13 @@ class MainActivity : AppCompatActivity() {
                 }
                 LaunchedEffect(profiles) {
                     selectedProfile = ProfileSelection.pick(
-                        profiles, selectedProfile?.id, selectionPrefs.getString(ProfileSelection.KEY_LAST_PROFILE, null), defaultProfileId
+                        profiles, selectedProfile?.id, selectionPrefs.getString(ProfileSelection.KEY_LAST_PROFILE, null), defaultProfileId, isServiceRunning
                     )
                 }
                 LaunchedEffect(selectedProfile?.id) {
-                    selectedProfile?.id?.let { selectionPrefs.edit().putString(ProfileSelection.KEY_LAST_PROFILE, it).apply() }
+                    selectedProfile?.id?.takeIf { ProfileSelection.remembersAsLast(it, defaultProfileId) }?.let {
+                        selectionPrefs.edit().putString(ProfileSelection.KEY_LAST_PROFILE, it).apply()
+                    }
                 }
 
                 BackHandler(enabled = currentScreen != Screen.HOME) {
@@ -334,8 +335,13 @@ class MainActivity : AppCompatActivity() {
                                 currentProfile = selectedProfile,
                                 defaultProfileId = defaultProfileId,
                                 onToggleFavorite = { prof ->
-                                    val updated = prof.deepCopy().apply { favorite = !favorite }
-                                    lifecycleScope.launch { repository.saveProfileAsync(updated) }
+                                    lifecycleScope.launch {
+                                        val updated = repository.toggleFavoriteAsync(prof.id) ?: return@launch
+                                        // The overlay saves its own copy later: it must not bring the old star back
+                                        if (shouldPushLiveProfileUpdate(updated.id, selectedProfile?.id)) {
+                                            OverlayService.updateLiveProfile(updated)
+                                        }
+                                    }
                                 },
                                 onSetDefault = setDefaultProfile,
                                 onActivate = {
@@ -351,9 +357,8 @@ class MainActivity : AppCompatActivity() {
                                     OverlayService.updateLiveProfile(prof)
                                 },
                                 onDeleteProfile = { id ->
-                                    if (id == defaultProfileId) setDefaultProfile(null)
                                     lifecycleScope.launch {
-                                        repository.deleteProfileAsync(id)
+                                        if (repository.deleteProfileAsync(id) && id == defaultProfileId) setDefaultProfile(null)
                                     }
                                 },
                                 onDuplicateProfile = { prof ->

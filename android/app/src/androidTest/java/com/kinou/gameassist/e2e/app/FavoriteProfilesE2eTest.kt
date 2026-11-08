@@ -1,6 +1,8 @@
 package com.kinou.gameassist.e2e.app
 
 import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasContentDescription
@@ -9,6 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
@@ -18,11 +21,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kinou.gameassist.MainActivity
 import com.kinou.gameassist.R
+import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.e2e.Profiles
 import com.kinou.gameassist.e2e.waitFor
+import com.kinou.gameassist.service.OverlayService
 import com.kinou.gameassist.ui.ProfileSelection
+import kotlinx.coroutines.launch
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -116,6 +123,76 @@ class FavoriteProfilesE2eTest {
             scrollTo("E2E Fav B")
             waitForRowButton("E2E Fav B", R.string.btn_active)
         }
+    }
+
+    @Test
+    fun whileTheOverlayRunsTheAppKeepsShowingItsProfileNotTheDefault() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.uiAutomation.executeShellCommand("appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow").close()
+        prefs().edit().putString(ProfileSelection.KEY_DEFAULT_PROFILE, "e2e_fav_b")
+            .putString(ProfileSelection.KEY_LAST_PROFILE, "e2e_fav_a").commit()
+        val overlay = Intent(context, OverlayService::class.java).apply {
+            action = OverlayService.ACTION_START
+            putExtra(OverlayService.EXTRA_PROFILE_ID, "e2e_fav_a")
+        }
+        ContextCompat.startForegroundService(context, overlay)
+        waitFor("the overlay to run") { OverlayService.isServiceRunning }
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                openProfiles()
+                scrollTo("E2E Fav A")
+                waitForRowButton("E2E Fav A", R.string.btn_active)
+            }
+        } finally {
+            context.stopService(Intent(context, OverlayService::class.java))
+            waitFor("the overlay to stop") { !OverlayService.isServiceRunning }
+        }
+    }
+
+    @Test
+    fun theDefaultOpeningByItselfDoesNotBecomeTheLastUsedProfile() {
+        prefs().edit().putString(ProfileSelection.KEY_DEFAULT_PROFILE, "e2e_fav_b")
+            .putString(ProfileSelection.KEY_LAST_PROFILE, "e2e_fav_a").commit()
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            openProfiles()
+            scrollTo("E2E Fav B")
+            waitForRowButton("E2E Fav B", R.string.btn_active)
+        }
+
+        assertEquals("e2e_fav_a", prefs().getString(ProfileSelection.KEY_LAST_PROFILE, null))
+    }
+
+    @Test
+    fun deletingTheDefaultProfileRemovesItAsDefault() {
+        prefs().edit().putString(ProfileSelection.KEY_DEFAULT_PROFILE, "e2e_fav_b").commit()
+        ActivityScenario.launch(MainActivity::class.java).use {
+            openProfiles()
+            scrollTo("E2E Fav B")
+            rowButton("E2E Fav B", R.string.profile_actions).performClick()
+            rule.onNodeWithText(text(R.string.btn_delete)).performClick()
+            rule.onAllNodesWithText(text(R.string.btn_delete)).onLast().performClick()
+
+            waitFor("the default to be cleared") { prefs().getString(ProfileSelection.KEY_DEFAULT_PROFILE, null) == null }
+        }
+    }
+
+    @Test
+    fun aStarOnTheActiveProfileReachesTheRunningOverlay() {
+        val pushed = java.util.concurrent.atomic.AtomicReference<GameProfile?>()
+        val collector = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+            OverlayService.liveProfileUpdateFlow.collect { pushed.set(it) }
+        }
+        prefs().edit().putString(ProfileSelection.KEY_LAST_PROFILE, "e2e_fav_b").commit()
+        ActivityScenario.launch(MainActivity::class.java).use {
+            openProfiles()
+            scrollTo("E2E Fav B")
+            waitForRowButton("E2E Fav B", R.string.btn_active)
+            rowButton("E2E Fav B", R.string.profile_favorite).performClick()
+
+            waitFor("the overlay to get the star") { pushed.get()?.let { it.id == "e2e_fav_b" && it.favorite } == true }
+        }
+        collector.cancel()
     }
 
     @Test

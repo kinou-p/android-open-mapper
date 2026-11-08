@@ -11,11 +11,15 @@ internal object ProfileSelection {
     const val KEY_LAST_PROFILE = "last_profile_id"
     const val KEY_DEFAULT_PROFILE = "default_profile_id"
 
-    fun pick(profiles: List<GameProfile>, currentId: String?, lastId: String?, defaultId: String? = null): GameProfile? =
+    /** While the overlay runs it keeps its profile: the default only decides what the app opens on otherwise. */
+    fun pick(profiles: List<GameProfile>, currentId: String?, lastId: String?, defaultId: String? = null, overlayRunning: Boolean = false): GameProfile? =
         profiles.firstOrNull { it.id == currentId }
-            ?: profiles.firstOrNull { it.id == defaultId }
+            ?: profiles.firstOrNull { it.id == defaultId }?.takeUnless { overlayRunning }
             ?: profiles.firstOrNull { it.id == lastId }
             ?: profiles.firstOrNull()
+
+    /** The default opens by itself, so it is not "used last": removing it goes back to the profile really used. */
+    fun remembersAsLast(id: String, defaultId: String?): Boolean = id != defaultId
 
     /** Profile Manager order: the default profile, then the favorites, then the rest, each in saved order. */
     fun ordered(profiles: List<GameProfile>, defaultId: String?): List<GameProfile> =
