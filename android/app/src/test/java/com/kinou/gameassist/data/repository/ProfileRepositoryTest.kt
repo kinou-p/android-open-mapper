@@ -296,4 +296,27 @@ class ProfileRepositoryTest {
 
         assertNull(imported)
     }
+
+    @Test
+    fun aNewProfileCanStartEmpty() {
+        val dir = tempFolder.newFolder("empty_profile")
+        val repo = ProfileRepository(TestContext(dir))
+
+        val created = repo.createCustomProfile("My game", "com.my.game", StarterLayout.EMPTY)
+
+        assertTrue("no buttons", created.buttons.isEmpty())
+        assertEquals("My game", created.name)
+        assertEquals("com.my.game", created.packageName)
+        val reopened = ProfileRepository(TestContext(dir))
+        assertTrue("saved to disk", reopened.getProfile(created.id)?.buttons?.isEmpty() == true)
+    }
+
+    @Test
+    fun aNewProfileStillStartsFromTheCodmLayoutByDefault() {
+        val repo = ProfileRepository(TestContext(tempFolder.newFolder("codm_profile")))
+
+        val created = repo.createCustomProfile("My game", "com.my.game")
+
+        assertEquals(repo.createDefaultCodmProfile().buttons.size, created.buttons.size)
+    }
 }

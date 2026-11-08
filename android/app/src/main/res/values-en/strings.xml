@@ -73,6 +73,9 @@
     <string name="profile_renamed_toast">Profile renamed</string>
     <string name="btn_new_profile">New Profile</string>
     <string name="create_profile_title">Create New Profile</string>
+    <string name="create_profile_start_with">Start with</string>
+    <string name="create_profile_start_codm">Call of Duty layout</string>
+    <string name="create_profile_start_empty">Empty</string>
     <string name="select_game_app_title">Target Game / App</string>
     <string name="select_game_app_desc">Choose the installed game to link with this profile:</string>
     <string name="custom_package_label">Custom Package Name</string>

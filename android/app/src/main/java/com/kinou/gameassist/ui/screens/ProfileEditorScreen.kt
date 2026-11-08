@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +36,7 @@ import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.model.ResponseCurve
 import com.kinou.gameassist.data.repository.ProfileFileReader
 import com.kinou.gameassist.data.repository.ProfileRepository
+import com.kinou.gameassist.data.repository.StarterLayout
 import com.kinou.gameassist.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -49,7 +52,7 @@ fun ProfileEditorScreen(
     onSaveProfile: (GameProfile) -> Unit,
     onDeleteProfile: (String) -> Unit,
     onDuplicateProfile: (GameProfile) -> Unit,
-    onCreateProfile: ((name: String, targetPackage: String) -> Unit)? = null,
+    onCreateProfile: ((name: String, targetPackage: String, layout: StarterLayout) -> Unit)? = null,
     onImportProfile: (String, (Boolean) -> Unit) -> Unit,
     onBack: () -> Unit
 ) {
@@ -273,9 +276,9 @@ fun ProfileEditorScreen(
         if (showCreateDialog) {
             CreateProfileDialog(
                 onDismiss = { showCreateDialog = false },
-                onConfirm = { name, pkg ->
+                onConfirm = { name, pkg, layout ->
                     showCreateDialog = false
-                    onCreateProfile?.invoke(name, pkg)
+                    onCreateProfile?.invoke(name, pkg, layout)
                     Toast.makeText(context, context.getString(R.string.profile_created_toast), Toast.LENGTH_SHORT).show()
                 }
             )
@@ -922,11 +925,12 @@ fun SelectGamePackageDialog(
 @Composable
 fun CreateProfileDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, targetPackage: String) -> Unit
+    onConfirm: (name: String, targetPackage: String, layout: StarterLayout) -> Unit
 ) {
     val context = LocalContext.current
     val installedApps = rememberInstalledLauncherApps(context)
     var profileNameText by remember { mutableStateOf("") }
+    var layout by remember { mutableStateOf(StarterLayout.CODM) }
     var selectedPackageText by remember { mutableStateOf("com.game.app") }
     var searchQuery by remember { mutableStateOf("") }
 
@@ -953,7 +957,7 @@ fun CreateProfileDialog(
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Profile Name
@@ -1076,6 +1080,37 @@ fun CreateProfileDialog(
                     ),
                     textStyle = androidx.compose.ui.text.TextStyle(fontSize = 12.sp, color = TextPrimary)
                 )
+
+                // Start from the Call of Duty layout or from an empty screen (#38)
+                Text(
+                    stringResource(R.string.create_profile_start_with),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        StarterLayout.CODM to R.string.create_profile_start_codm,
+                        StarterLayout.EMPTY to R.string.create_profile_start_empty
+                    ).forEach { (choice, label) ->
+                        val selected = layout == choice
+                        FilterChip(
+                            selected = selected,
+                            onClick = { layout = choice },
+                            label = { Text(stringResource(label), fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = NeonGreen,
+                                selectedLabelColor = DarkBackground,
+                                containerColor = DarkSurface,
+                                labelColor = TextSecondary
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = selected,
+                                borderColor = if (selected) NeonGreen else DarkCardBorder
+                            )
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
@@ -1083,7 +1118,7 @@ fun CreateProfileDialog(
                 onClick = {
                     val finalName = if (profileNameText.isNotBlank()) profileNameText.trim() else context.getString(R.string.profile_new_default_name)
                     val finalPkg = if (selectedPackageText.isNotBlank()) selectedPackageText.trim() else "com.game.app"
-                    onConfirm(finalName, finalPkg)
+                    onConfirm(finalName, finalPkg, layout)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)
             ) {

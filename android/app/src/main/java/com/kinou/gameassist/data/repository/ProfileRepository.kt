@@ -16,6 +16,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.util.UUID
 
+/** What a new profile starts with (#38). */
+enum class StarterLayout { CODM, EMPTY }
+
 class ProfileRepository internal constructor(context: Context) {
     private val context: Context = context.applicationContext
     private val json: Json = Json {
@@ -491,11 +494,12 @@ class ProfileRepository internal constructor(context: Context) {
         return p
     }
 
-    suspend fun createCustomProfileAsync(name: String, targetPackage: String): GameProfile = withContext(Dispatchers.IO) {
-        createCustomProfile(name, targetPackage)
+    suspend fun createCustomProfileAsync(name: String, targetPackage: String, layout: StarterLayout = StarterLayout.CODM): GameProfile = withContext(Dispatchers.IO) {
+        createCustomProfile(name, targetPackage, layout)
     }
 
-    fun createCustomProfile(name: String, targetPackage: String): GameProfile {
+    /** A new profile from the Call of Duty layout, or with no buttons (#38). */
+    fun createCustomProfile(name: String, targetPackage: String, layout: StarterLayout = StarterLayout.CODM): GameProfile {
         val base = createDefaultCodmProfile()
         val newId = "profile_${UUID.randomUUID().toString().take(8)}"
         val newProf = base.deepCopy().copy(
@@ -504,7 +508,8 @@ class ProfileRepository internal constructor(context: Context) {
             packageName = if (targetPackage.isNotBlank()) targetPackage.trim() else "com.game.app",
             description = localizedDefaultProfileName(),
             customScreenshotPath = null,
-            buttons = base.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
+            buttons = if (layout == StarterLayout.EMPTY) mutableListOf()
+                      else base.buttons.map { it.copy(id = "btn_${UUID.randomUUID().toString().take(8)}") }.toMutableList()
         )
         saveProfile(newProf)
         return newProf
