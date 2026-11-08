@@ -218,6 +218,7 @@
     <!-- Overlay & Service -->
     <string name="overlay_camera_zone">🎥 ZONA DE CÂMERA 360° (ANALÓGICO DIREITO)</string>
     <string name="overlay_joystick_zone">🕹️ LS (MOVIMENTO)</string>
+    <string name="overlay_right_stick_zone">🕹️ RS (MIRA)</string>
     <string name="overlay_editor_title">Editor HUD - %1$s</string>
     <string name="overlay_btn_add">➕ Adicionar</string>
     <string name="overlay_btn_delete">🗑️ Excluir</string>

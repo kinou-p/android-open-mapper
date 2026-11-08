@@ -43,6 +43,9 @@ class ProfileManagerE2eTest {
     private val repository = ProfileRepository.getInstance(context)
     private fun text(id: Int) = context.getString(id)
 
+    // the Profiles top bar shows icon-only buttons under 480 dp wide (phones in portrait)
+    private fun topBarButton(label: String) = hasText(label) or hasContentDescription(label)
+
     @Before
     fun openProfileManager() {
         rule.onAllNodesWithText(text(R.string.nav_profiles)).onFirst().performClick()
@@ -68,7 +71,7 @@ class ProfileManagerE2eTest {
 
     @Test
     fun createdProfileAppearsInTheList() {
-        rule.onNodeWithText(text(R.string.btn_new_profile)).performClick()
+        rule.onNode(topBarButton(text(R.string.btn_new_profile))).performClick()
         rule.onAllNodes(hasSetTextAction())[0].performTextInput("E2E Created")
         rule.onNodeWithText(text(R.string.btn_add)).performClick()
 
@@ -80,7 +83,7 @@ class ProfileManagerE2eTest {
     fun importedJsonProfileAppearsInTheList() {
         val json = repository.exportProfileToJson(Profiles.profile("e2e_import", emptyList()).copy(name = "E2E Imported"))
 
-        rule.onNodeWithText(text(R.string.btn_import)).performClick()
+        rule.onNode(topBarButton(text(R.string.btn_import))).performClick()
         rule.onNode(hasSetTextAction()).performTextInput(json)
         rule.onAllNodesWithText(text(R.string.btn_import)).onLast().performClick()
 
@@ -93,7 +96,7 @@ class ProfileManagerE2eTest {
     fun invalidJsonIsRejectedAndNothingIsAdded() {
         val before = repository.getAllProfiles().size
 
-        rule.onNodeWithText(text(R.string.btn_import)).performClick()
+        rule.onNode(topBarButton(text(R.string.btn_import))).performClick()
         rule.onNode(hasSetTextAction()).performTextInput("this is not a profile")
         rule.onAllNodesWithText(text(R.string.btn_import)).onLast().performClick()
         rule.waitForIdle()
