@@ -31,6 +31,8 @@ import com.kinou.gameassist.data.model.GameProfile
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.service.OverlayService
+import com.kinou.gameassist.util.pickSelectedProfile
+import com.kinou.gameassist.util.profileAfterDelete
 import com.kinou.gameassist.util.shouldPushLiveProfileUpdate
 import com.kinou.gameassist.ui.screens.BugReportScreen
 import com.kinou.gameassist.ui.screens.CommunityScreen
@@ -176,17 +178,13 @@ class MainActivity : AppCompatActivity() {
                 var editTargetProfile by remember { mutableStateOf<GameProfile?>(null) }
                 var visualEditorOrigin by remember { mutableStateOf(Screen.PROFILES) }
                 val isServiceRunning by OverlayService.isServiceRunningFlow.collectAsState()
+                val runningProfileId by OverlayService.activeProfileIdFlow.collectAsState()
 
                 LaunchedEffect(currentScreen) { editorOwnsGamepad = GamepadHandoff.editorOwnsGamepad(currentScreen) }
                 DisposableEffect(Unit) { onDispose { editorOwnsGamepad = false } }
 
-                LaunchedEffect(profiles) {
-                    if (selectedProfile == null && profiles.isNotEmpty()) {
-                        selectedProfile = profiles.firstOrNull()
-                    } else if (selectedProfile != null) {
-                        val matched = profiles.firstOrNull { it.id == selectedProfile?.id }
-                        selectedProfile = matched ?: profiles.firstOrNull()
-                    }
+                LaunchedEffect(profiles, runningProfileId) {
+                    selectedProfile = pickSelectedProfile(profiles, selectedProfile?.id, runningProfileId)
                 }
 
                 BackHandler(enabled = currentScreen != Screen.HOME) {
@@ -338,6 +336,9 @@ class MainActivity : AppCompatActivity() {
                                 onDeleteProfile = { id ->
                                     lifecycleScope.launch {
                                         repository.deleteProfileAsync(id)
+                                        OverlayService.forgetDeletedProfile(this@MainActivity, id)
+                                        profileAfterDelete(repository.getAllProfilesAsync(), id, OverlayService.activeProfileIdFlow.value)
+                                            ?.let { OverlayService.updateLiveProfile(it) }
                                     }
                                 },
                                 onDuplicateProfile = { prof ->
