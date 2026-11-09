@@ -14,6 +14,17 @@ class ActiveProfileSyncTest {
     private val profiles = listOf(codm, custom, other)
 
     @Test
+    fun deletingTheProfileTheOverlayRunsMovesItToAnotherOne() {
+        assertEquals(codm, profileAfterDelete(listOf(codm, other), "custom", "custom"))
+    }
+
+    @Test
+    fun deletingAnotherProfileLeavesTheOverlayAlone() {
+        assertNull(profileAfterDelete(listOf(codm, custom), "other", "custom"))
+        assertNull(profileAfterDelete(listOf(codm, custom), "other", null))
+    }
+
+    @Test
     fun reopenedAppShowsTheProfileTheOverlayRuns() {
         // Reopened app: nothing selected yet, the overlay runs the custom profile
         assertEquals(custom, pickSelectedProfile(profiles, selectedId = null, runningId = "custom"))

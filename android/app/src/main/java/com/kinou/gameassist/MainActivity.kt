@@ -32,6 +32,7 @@ import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.injector.ShizukuManager
 import com.kinou.gameassist.service.OverlayService
 import com.kinou.gameassist.util.pickSelectedProfile
+import com.kinou.gameassist.util.profileAfterDelete
 import com.kinou.gameassist.util.shouldPushLiveProfileUpdate
 import com.kinou.gameassist.ui.screens.BugReportScreen
 import com.kinou.gameassist.ui.screens.CommunityScreen
@@ -335,6 +336,9 @@ class MainActivity : AppCompatActivity() {
                                 onDeleteProfile = { id ->
                                     lifecycleScope.launch {
                                         repository.deleteProfileAsync(id)
+                                        OverlayService.forgetDeletedProfile(this@MainActivity, id)
+                                        profileAfterDelete(repository.getAllProfilesAsync(), id, OverlayService.activeProfileIdFlow.value)
+                                            ?.let { OverlayService.updateLiveProfile(it) }
                                     }
                                 },
                                 onDuplicateProfile = { prof ->

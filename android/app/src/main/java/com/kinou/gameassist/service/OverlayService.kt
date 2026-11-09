@@ -72,6 +72,12 @@ class OverlayService : LifecycleService() {
         private val _liveProfileUpdateFlow = MutableSharedFlow<GameProfile>(replay = 0, extraBufferCapacity = 1)
         val liveProfileUpdateFlow: SharedFlow<GameProfile> = _liveProfileUpdateFlow.asSharedFlow()
 
+        /** A later profile imported with the same id is another profile: the restart must not pick it up. */
+        fun forgetDeletedProfile(context: Context, id: String) {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            if (prefs.getString(KEY_SERVICE_PROFILE, null) == id) prefs.edit().remove(KEY_SERVICE_PROFILE).apply()
+        }
+
         fun updateLiveProfile(profile: GameProfile) {
             _liveProfileUpdateFlow.tryEmit(profile)
         }

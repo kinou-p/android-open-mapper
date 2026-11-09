@@ -16,6 +16,13 @@ fun pickSelectedProfile(profiles: List<GameProfile>, selectedId: String?, runnin
         ?: profiles.firstOrNull()
 
 /**
+ * Profile the running overlay moves to when its own profile is deleted, so the app never shows
+ * another profile as active while the overlay still runs the deleted one. Null if it keeps its profile.
+ */
+fun profileAfterDelete(profiles: List<GameProfile>, deletedId: String, runningId: String?): GameProfile? =
+    if (runningId == deletedId) profiles.firstOrNull { it.id != deletedId } else null
+
+/**
  * Profile the overlay starts with: the one asked for, else the one it ran last. Android restarts a
  * killed sticky service with no intent, which used to silently switch the player to the CoD profile (#51).
  */

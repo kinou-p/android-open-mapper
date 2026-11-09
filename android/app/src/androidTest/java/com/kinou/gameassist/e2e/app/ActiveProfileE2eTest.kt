@@ -2,13 +2,22 @@ package com.kinou.gameassist.e2e.app
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.ui.test.hasAnySibling
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.core.content.ContextCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kinou.gameassist.MainActivity
+import com.kinou.gameassist.R
 import com.kinou.gameassist.data.repository.ProfileRepository
 import com.kinou.gameassist.e2e.Profiles
 import com.kinou.gameassist.e2e.waitFor
@@ -81,6 +90,41 @@ class ActiveProfileE2eTest {
 
         rule.waitUntil(10_000) { rule.onAllNodesWithText(custom.name).fetchSemanticsNodes().isNotEmpty() }
         rule.onAllNodesWithText(custom.name).onFirst().assertExists()
+    }
+
+    private fun deleteThroughTheProfileManager() {
+        rule.onAllNodesWithText(context.getString(R.string.nav_profiles)).onFirst().performClick()
+        rule.onNode(hasScrollAction()).performScrollToNode(hasText(custom.name))
+        val actions = context.getString(R.string.profile_actions)
+        rule.onNode((hasText(actions) or hasContentDescription(actions)) and hasAnySibling(hasText(custom.name))).performClick()
+        rule.onNodeWithText(context.getString(R.string.btn_delete)).performClick()
+        rule.onAllNodesWithText(context.getString(R.string.btn_delete)).onLast().performClick()
+    }
+
+    @Test
+    fun deletingTheProfileTheOverlayRunsMovesTheOverlayToAnotherOne() {
+        startOverlay(custom.id)
+        waitFor("the overlay to run the custom profile") { OverlayService.isServiceRunning && OverlayService.activeProfileIdFlow.value == custom.id }
+
+        deleteThroughTheProfileManager()
+
+        waitFor("the overlay to leave the deleted profile") {
+            OverlayService.activeProfileIdFlow.value.let { it != null && it != custom.id }
+        }
+    }
+
+    @Test
+    fun aDeletedProfileIsNotUsedWhenTheOverlayRestarts() {
+        startOverlay(custom.id)
+        waitFor("the overlay to run the custom profile") { OverlayService.activeProfileIdFlow.value == custom.id }
+        stopOverlay()
+
+        deleteThroughTheProfileManager()
+
+        waitFor("the deleted profile to be forgotten") {
+            context.getSharedPreferences(OverlayService.PREFS, Context.MODE_PRIVATE)
+                .getString(OverlayService.KEY_SERVICE_PROFILE, null) == null
+        }
     }
 
     @Test
